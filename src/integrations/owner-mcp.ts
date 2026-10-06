@@ -1,3 +1,4 @@
+import {homedir} from 'node:os';
 import {existsSync,readFileSync,statSync} from 'node:fs';
 import {join} from 'node:path';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
@@ -89,6 +90,13 @@ function jsonEntries(path:string):ServerEntry[]{
   try{parsed=JSON.parse(text(path)||'{}') as typeof parsed;}catch{return [];}
   return Object.entries(parsed.mcpServers??{}).filter(([,value])=>value&&typeof value==='object').map(([key,value])=>({key,command:typeof value.command==='string'?value.command:undefined,args:strings(value.args),url:typeof value.url==='string'?value.url:undefined,env:stringMap(value.env),disabled:value.disabled===true,
     incomplete:Boolean(value.headers&&typeof value.headers==='object'&&Object.keys(value.headers).length),type:typeof value.type==='string'?value.type:undefined}));
+}
+/** The owner's own "agent-driver" entry in this client's local config, however it was registered (Office's node entrypoint or the
+ * agent-office launcher): what Office's registration view and register step reconcile with instead of adding a second one. */
+export function officeServerEntry(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env):{command:string|undefined;args:string[]}|null{
+  const home=environment.HOME??homedir();
+  const entries=client==='codex'?codexEntries(text(join(environment.CODEX_HOME??join(home,'.codex'),'config.toml'))):jsonEntries(join(environment.CLAUDE_CONFIG_DIR??home,'.claude.json'));
+  const entry=entries.find(item=>item.key==='agent-driver');return entry?{command:entry.command,args:entry.args}:null;
 }
 const definition=(side:EnvironmentHome['side'])=>(entry:ServerEntry):ServerDefinition=>({id:identity(entry.key),side,disabled:entry.disabled,launch:launchOf(side,entry)});
 export function ownerMcpServers(environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment)):ServerDefinition[]{

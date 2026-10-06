@@ -67,3 +67,20 @@ test('runtime native setup activity SSE replays history and streams sanitized MC
   for(let i=0;i<4&&!/Codex MCP 등록 완료/u.test(text);i++)text+=decoder.decode((await reader.read()).value);assert.match(text,/Codex에 agent-office mcp 등록 요청/u);assert.match(text,/Codex MCP 등록 완료 · [0-9.]+초/u);assert.doesNotMatch(text,/\$ Codex/u);assert.doesNotMatch(text,new RegExp(secret));await reader.cancel();
   const page=await fetch('http://'+host+'/settings');const html=await page.text();assert.equal(page.status,200);assert.match(html,/연결 작업 기록/u);assert.match(html,/터미널 원문은 저장하지 않습니다/u);assert.match(html,/실제 업무 기록은/u);assert.doesNotMatch(html,/SETUP TAIL/u);
 });
+
+// Live 2026-10-06: the owner's Claude Code already listed agent-office through the launcher; Office showed "connection needed"
+// and its `mcp add` failed on the duplicate name. An existing Office entry counts as registered; another program's entry is a conflict.
+test('runtime contract an agent-driver entry the client already has is reconciled, not added twice',async t=>{
+  const x=await setup(t),env=environment(x.root),calls=[],runner={async run(request){calls.push(request);return {code:1,stdout:'',stderr:'MCP server agent-driver already exists'};}};
+  const controller=new McpRegistrationController(x.root,env,runner);
+  await writeFile(join(x.root,'.claude.json'),JSON.stringify({mcpServers:{'agent-driver':{type:'stdio',command:join(x.root,'.local','bin','agent-office'),args:['mcp']}}}));
+  await mkdir(join(x.root,'.codex'),{recursive:true});await writeFile(join(x.root,'.codex','config.toml'),`model = "fixture"\n\n[mcp_servers.agent-driver]\ncommand = ${JSON.stringify(controller.command)}\nargs = ${JSON.stringify([...controller.args])}\n`);
+  const view=await controller.view();
+  assert.equal(view.clients.find(item=>item.id==='claude').registration,'registered');assert.equal(view.clients.find(item=>item.id==='codex').registration,'registered');
+  await controller.register('claude');assert.equal(calls.length,0,'no second mcp add for an entry that is already Office');
+  assert.match(await readFile(join(x.root,'mcp-registrations.json'),'utf8'),/"claude"/u);
+  await writeFile(join(x.root,'.claude.json'),JSON.stringify({mcpServers:{'agent-driver':{type:'stdio',command:'/other/program',args:['serve']}}}));
+  const fresh=new McpRegistrationController(await (async()=>{const other=await setup(t);return other.root;})(),{...env,HOME:x.root},runner);
+  assert.equal((await fresh.view()).clients.find(item=>item.id==='claude').registration,'conflict');
+  await assert.rejects(fresh.register('claude'),/MCP_REGISTRATION_CONFLICT/);assert.equal(calls.length,0);
+});
