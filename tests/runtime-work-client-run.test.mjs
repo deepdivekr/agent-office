@@ -11,7 +11,7 @@ import {WorkRuntime} from '../dist/work/runtime.js';
 import {WorkSupervisor,supervisorStatus} from '../dist/work/supervisor.js';
 import {WorkResults} from '../dist/work/results.js';
 import {WorkDeliverySettings,deliverySettingsPath} from '../dist/work/delivery-settings.js';
-import {saveModelSettings,modelSettingsPath} from '../dist/onboarding/model-settings.js';
+import {saveModelSettings,readModelSettings,modelSettingsPath} from '../dist/onboarding/model-settings.js';
 import {enableClientRun,disableClientRun,pinWorkClient,workClientChoice,workFolder,clientRunEnvironment,clientRunArgs,clientRunEligible,defaultWorkClient} from '../dist/work/client-run.js';
 import {mkdirSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
@@ -378,6 +378,14 @@ test('runtime fixture a direction for a client-run Work goes to the client sessi
   assert.ok(!x.model.calls.slice(calls).some(call=>call.purpose==='correct'),'no replanning call');
   const directed=x.runs.at(-1);assert.match(directed.stdin,/The owner changed the instruction for this Work:\n- 사례를 중급 난이도로 올려줘/u);assert.match(directed.stdin,/did not change the Work/u);
   assert.ok(activity(x).some(row=>row.kind==='supervisor.direction'));
+  // Live 2026-10-06: a scheduled run took an earlier run's cleanup direction as its task and reported an empty folder.
+  // A new session gets earlier directions as history to weigh, not as the change to make now.
+  const runs=x.runs.length,stamp=new Date().toISOString();
+  x.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,config_hash,model_revision,timezone,current_run_only,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),x.config.project.id,x.work.work_id,x.store.intakeWork(x.config.project.id,x.work.work_id).revision,'queued',x.config.fingerprint,readModelSettings(modelSettingsPath(x.config))?.revision??0,null,0,stamp,stamp);
+  x.supervisor.tick();
+  const again=await settle(x);assert.equal(again.state,'succeeded',JSON.stringify(again));
+  const fresh=x.runs[runs];assert.match(fresh.stdin,/Directions the owner gave during earlier sessions of this Work[\s\S]*does not apply to this run:\n- 사례를 중급 난이도로 올려줘/u);
+  assert.doesNotMatch(fresh.stdin,/The owner changed the instruction for this Work|Later directions from the owner/u);
 });
 
 test('runtime fixture the result is what the latest turn made; older files in the folder stay out of it',async t=>{

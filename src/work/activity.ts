@@ -8,6 +8,8 @@ const activityMetadataSchema=z.object({
   stage_id:z.string().max(100).optional(),worker_id:z.string().max(100).optional(),tool_name:z.string().max(100).optional(),status:z.string().max(80).optional(),
   pack_family:z.string().max(100).optional(),route_kind:z.string().max(40).optional(),executor:z.string().max(160).optional(),
   engine:z.string().max(40).optional(),environment:z.string().max(80).optional(),reason:z.string().max(160).optional(),
+  /** For a stop without a code: the error text, so the owner sees what failed instead of a bare WORK_EXECUTION_FAILED. */
+  detail:z.string().max(300).optional(),
   validation:z.object({code:z.enum(['WORK_CLIENT_DECISION_OUTPUT_INVALID','WORK_CLIENT_DECISION_CORRECTION_FAILED']),output_sha256:z.string().regex(/^[a-f0-9]{64}$/),issues:z.array(z.object({path:z.string().max(100),code:z.string().max(60),message:z.string().max(180)}).strict()).max(8)}).strict().optional(),
   model_provider:z.string().max(60).optional(),model_name:z.string().max(200).optional(),model_effort:z.enum(['low','medium','high']).optional(),
   model_role:z.enum(['planner','worker','verifier','synthesis']).optional(),model_continuity:z.enum(['new_session','resumed_session','checkpoint_only']).optional(),
