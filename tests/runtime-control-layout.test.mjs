@@ -127,22 +127,14 @@ test('runtime fixture Control Center alignment and compact right actions hold in
     await rightEdge(page,'[data-browser=playwright] .cact button','[data-browser=playwright]');
     await rightEdge(page,'#browser-setup-refresh','#browser-setup');await rightEdge(page,'#step-1>.actions button','#step-1');await noOverflow(page);
     if([1280,375].includes(width))await page.screenshot({path:join(evidence,`browsers-${width}-${lang}-${theme}.png`),fullPage:true});
-    await page.locator('[data-step="2"]').click();await page.locator('#client-hermes').waitFor();await settled(page,'refresh-clients');
-    const ai=await alignedRows(page,'#clients .client',{equalHeight:true,leftNames:true});await compactButtons(page.locator('#clients .cact button'));
-    const aiSpacing=await statusActionSpacing(page,'#clients .client');
-    assert.equal(await page.locator('#clients .client-icon svg').count(),5);
-    assert.equal(await page.locator('#clients .client>p').count(),0);
+    await page.locator('[data-step="2"]').click();await page.waitForFunction(()=>!busy&&/확인|checked/iu.test(document.getElementById('catalog-state').textContent));
     const selectedCodexModel=await page.locator('#codex-model').inputValue(),selectedCodexEffort=await page.locator('#codex-reasoning').inputValue();
     assert.equal(selectedCodexModel,'gpt-6.1-sol','The requested first-run default remains visible even before account access is verified');
     assert.equal(selectedCodexEffort,'low');
     const catalogState=await page.locator('#catalog-state').textContent();
     if(lang==='en'){assert.doesNotMatch(catalogState,/[\uac00-\ud7a3]/u,'English AI settings must not retain Korean catalog status fragments');assert.match(catalogState,/new default Codex model is not in this account’s model list/u);}
     else{assert.match(catalogState,/확인한 모델/u);assert.match(catalogState,/새 기본 Codex 모델이 현재 목록에 없어요/u);}
-    await page.locator('#client-codex [data-manage-client=codex]').click();
-    await page.waitForFunction(()=>document.activeElement?.id==='codex-model');
-    assert.equal(await page.locator('#codex-model').inputValue(),selectedCodexModel,'Manage must focus the existing model setting without changing it');
-    assert.equal(await page.locator('#codex-reasoning').inputValue(),selectedCodexEffort);
-    await rightEdge(page,'#refresh-clients','#subscription-fields');await rightEdge(page,'#step-2>.actions button','#step-2');await noOverflow(page);
+    await rightEdge(page,'#step-2>.actions button','#step-2');await noOverflow(page);
     const models=await page.locator('#codex-model,#claude-model').evaluateAll(items=>items.map(e=>e.getBoundingClientRect().width));
     assert.ok(models.every(w=>Math.abs(w-models[0])<1),JSON.stringify(models));
     assert.equal(await page.locator('.terminal pre').evaluate(e=>getComputedStyle(e).textAlign),'start');
@@ -150,7 +142,7 @@ test('runtime fixture Control Center alignment and compact right actions hold in
     if([1280,375].includes(width))await page.screenshot({path:join(evidence,`ai-${width}-${lang}-${theme}.png`),fullPage:true});
     assert.equal(await readFile(f.paths.runtimeConfig,'utf8'),before);
     assert.ok(f.calls.every(call=>call==='browser:aside'),'Layout checks must not invoke models, change registration or start sign-in');
-    records.push({width,lang,theme,agents,optional,ai,buttons,agentSpacing,aiSpacing});await context.close();
+    records.push({width,lang,theme,agents,optional,buttons,agentSpacing});await context.close();
   }
   await writeFile(join(evidence,'layout-matrix.json'),JSON.stringify({evidence_level:'fixture_integration',status:'PASS',records},null,2)+'\n');
 });
@@ -189,15 +181,15 @@ test('runtime fixture client management opens actual settings without changing t
   for(const id of ['codex','claude','opencode','cursor','hermes']){f.statusOverrides.set(id,'ready');f.registered.add(id);}
   const browser=await chromium.launch({headless:true});t.after(()=>browser.close());const page=await browser.newPage({viewport:{width:375,height:900}});
   await page.addInitScript(()=>localStorage.setItem('office-lang','en'));await page.goto(f.url);
-  await page.locator('[data-step="2"]').click();await settled(page,'refresh-clients');
-  await page.getByRole('button',{name:'Manage Cursor',exact:true}).click();
+  await page.locator('[data-step="0"]').click();await page.locator('#mcp-clients .client[data-client=hermes]').waitFor();await settled(page,'refresh-mcp');
+  await page.getByRole('button',{name:'Manage Cursor CLI',exact:true}).click();
   await page.waitForFunction(()=>document.activeElement?.matches('#mcp-clients [data-client=cursor]'));
   await page.getByRole('button',{name:'Manage Codex',exact:true}).click();
   await page.waitForFunction(()=>document.activeElement?.id==='codex-model');
   assert.equal(await page.locator('#codex-model').inputValue(),'gpt-5.6-luna','Manage must retain the persisted model instead of restoring the first-run default');
   assert.equal(await page.locator('#codex-reasoning').inputValue(),'medium');
   await page.locator('#codex-model').selectOption('fixture-model');
-  await page.getByRole('button',{name:'Manage Codex',exact:true}).click();
+  await page.locator('[data-step="0"]').click();await page.getByRole('button',{name:'Manage Codex',exact:true}).click();
   await page.waitForFunction(()=>document.activeElement?.id==='codex-model');
   assert.equal(await page.locator('#codex-model').inputValue(),'fixture-model');
   assert.equal(await page.locator('#codex-reasoning').inputValue(),'medium');
@@ -212,9 +204,9 @@ test('runtime fixture client management opens actual settings without changing t
 
 test('runtime fixture fresh catalog refresh confirms listed 6.1 Sol/low, saves it, and invokes that exact CLI model',async t=>{
   const f=await fixture(t,{catalogModels:[{id:'gpt-6.1-sol',label:'GPT-6.1-Sol'},{id:'gpt-5.6-luna',label:'GPT-5.6-Luna'}]}),browser=await chromium.launch({headless:true});
-  t.after(()=>browser.close());const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));await page.goto(f.url);await page.locator('[data-step="2"]').click();await settled(page,'refresh-clients');
+  t.after(()=>browser.close());const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));await page.goto(f.url);await page.locator('[data-step="2"]').click();await page.waitForFunction(()=>!busy&&/확인|checked/iu.test(document.getElementById('catalog-state').textContent));
   assert.equal(await page.locator('#codex-model').inputValue(),'gpt-6.1-sol');assert.equal(await page.locator('#codex-reasoning').inputValue(),'low');
-  await page.locator('#refresh-clients').click();await settled(page,'refresh-clients');assert.equal(await page.locator('#codex-model').inputValue(),'gpt-6.1-sol');
+  await page.reload();await page.locator('[data-step="2"]').click();await page.waitForFunction(()=>!busy&&/확인|checked/iu.test(document.getElementById('catalog-state').textContent));assert.equal(await page.locator('#codex-model').inputValue(),'gpt-6.1-sol');
   await page.locator('#save-model').click();await page.locator('#notice').filter({hasText:"저장했어요."}).waitFor();
   const saved=readModelSettings(modelSettingsPath(f.config));assert.equal(saved.selection.client_models.codex,'gpt-6.1-sol');assert.equal(saved.selection.codex_reasoning_effort,'low');
   const requests=[],runner={async run(request){requests.push(request);return request.args.join(' ')==='login status'?{code:0,stdout:'Logged in using ChatGPT',stderr:''}:{code:0,stdout:JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{"ok":true}'}})+'\n',stderr:''};}};
@@ -225,7 +217,7 @@ test('runtime fixture fresh catalog refresh confirms listed 6.1 Sol/low, saves i
 
 test('runtime fixture a saved model absent from the account list stays visible and blocks only active Codex saves',async t=>{
   const f=await fixture(t,{savedCodexModel:'gpt-6-sol',savedCodexEffort:'high',catalogModels:[{id:'gpt-5.6-sol',label:'GPT-5.6-Sol'}]}),browser=await chromium.launch({headless:true});
-  t.after(()=>browser.close());const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));await page.goto(f.url);await page.locator('[data-step="2"]').click();await settled(page,'refresh-clients');
+  t.after(()=>browser.close());const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));await page.goto(f.url);await page.locator('[data-step="2"]').click();await page.waitForFunction(()=>!busy&&/확인|checked/iu.test(document.getElementById('catalog-state').textContent));
   assert.equal(await page.locator('#codex-model').inputValue(),'gpt-6-sol');assert.match(await page.locator('#catalog-state').textContent(),/저장한 Codex 모델이 현재 목록에 없어요/u);
   await page.locator('#save-model').click();await page.locator('#notice').filter({hasText:'다시 선택해 주세요.'}).waitFor();assert.equal(readModelSettings(modelSettingsPath(f.config)).selection.client_models.codex,'gpt-6-sol');
   await page.locator('#client').selectOption('claude');await page.locator('#save-model').click();await page.locator('#notice').filter({hasText:"저장했어요."}).waitFor();
@@ -236,7 +228,7 @@ test('runtime fixture a saved model absent from the account list stays visible a
 
 test('runtime fixture English catalog warning and unsupported-model save error stay in English',async t=>{
   const f=await fixture(t,{savedCodexModel:'gpt-6-sol',catalogModels:[{id:'gpt-5.6-sol',label:'GPT-5.6-Sol'}]}),browser=await chromium.launch({headless:true});
-  t.after(()=>browser.close());const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem('office-lang','en'));await page.goto(f.url);await page.locator('[data-step="2"]').click();await settled(page,'refresh-clients');
+  t.after(()=>browser.close());const page=await browser.newPage();await page.addInitScript(()=>localStorage.setItem('office-lang','en'));await page.goto(f.url);await page.locator('[data-step="2"]').click();await page.waitForFunction(()=>!busy&&/확인|checked/iu.test(document.getElementById('catalog-state').textContent));
   assert.equal(await page.locator('#codex-model').inputValue(),'gpt-6-sol');
   assert.match(await page.locator('#codex-model option:checked').textContent(),/Not in this account’s model list/u);
   assert.match(await page.locator('#catalog-state').textContent(),/The saved Codex model is not in this account’s model list/u);

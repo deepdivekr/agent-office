@@ -60,13 +60,13 @@ test('runtime fixture AI setup installs a missing client and refreshes its compl
   const context=await browser.newContext({viewport:{width:375,height:980}}),page=await context.newPage();
   await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
   await context.route('https://auth.openai.com/**',route=>route.fulfill({body:'<h1>Device login fixture</h1>',contentType:'text/html'}));
-  await page.goto(f.url);await page.locator('#refresh-mcp:enabled').waitFor();await page.locator('[data-step="2"]').click();await page.locator('#refresh-clients:enabled').waitFor();
-  const card=page.locator('#client-opencode');assert.equal(await card.locator('.cact button').count(),1);assert.equal(await card.locator('.cact button').textContent(),'Install');
+  await page.goto(f.url);await page.locator('#refresh-mcp:enabled').waitFor();
+  const card=page.locator('#mcp-clients [data-client=opencode]');assert.equal(await card.locator('.cact button').count(),1);assert.equal(await card.locator('.cact button').textContent(),'Install');
   const popupPromise=context.waitForEvent('page');await card.locator('.cact button').click();const popup=await popupPromise;await popup.waitForURL('https://auth.openai.com/codex/device');
-  await page.locator('#refresh-clients:enabled').waitFor();assert.deepEqual(f.calls,['install:opencode','login:opencode']);
+  await page.locator('#refresh-mcp:enabled').waitFor();assert.deepEqual(f.calls,['install:opencode','login:opencode']);
   assert.equal(await card.locator('.cact button').count(),1);assert.equal(await card.locator('.cact button').textContent(),'Sign in');
   f.signedIn.add('opencode');f.flows.set('opencode',{client_id:'opencode',state:'completed',reason:'fixture_approved',credentials_exposed:false});
-  await card.locator('[data-manage-client=opencode]').waitFor();assert.equal(await card.locator('.badge').textContent(),'Connected');
+  await card.locator('.login-action').waitFor({state:'detached'});assert.equal(await card.locator('.badge').textContent(),'Connection needed');
   assert.equal(await card.locator('.login-action').count(),0);assert.equal(await readFile(f.config.path,'utf8'),before,'Completing login does not save or switch models');
   assert.deepEqual(f.calls,['install:opencode','login:opencode']);await popup.close();
 });
