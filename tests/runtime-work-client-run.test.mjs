@@ -347,12 +347,13 @@ test('runtime fixture the client report decides completion; an external Work sti
   short.supervisor.start(short.work.work_id,short.work.revision,true);short.supervisor.activate();short.supervisor.tick();
   const review=await settle(short);assert.equal(review.state,'awaiting_review');assert.equal(review.reason,'WORK_CLIENT_REPORTED_INCOMPLETE');assert.equal(short.model.verifications,0);
   assert.ok(activity(short).some(row=>/images \(세 장만 만들었다\)/u.test(row.summary)));
-  // A Work whose request sends something outside keeps Office's own check, whatever the client reports.
+  // Live 2026-10-06: a Work whose own helper sends outside is also decided by the client's report; Office cannot see that send.
   const outside=await setup(t,{client:request=>{report(request,true);return codexTurn(request);}});
   const row=outside.store.hermesState.prepare('SELECT spec FROM office_intake WHERE work_id=?').get(outside.work.work_id);
   outside.store.hermesState.prepare('UPDATE office_intake SET spec=? WHERE work_id=?').run(JSON.stringify({...JSON.parse(row.spec),requested_effect:'external_effect_requested'}),outside.work.work_id);
   outside.supervisor.start(outside.work.work_id,outside.work.revision,true);outside.supervisor.activate();outside.supervisor.tick();
-  const verified=await settle(outside);assert.equal(verified.state,'succeeded',JSON.stringify(verified));assert.equal(outside.model.verifications,1);
+  const verified=await settle(outside);assert.equal(verified.state,'succeeded',JSON.stringify(verified));assert.equal(outside.model.verifications,0);
+  assert.ok(activity(outside).some(row=>/앱이 자기 도구로 했고, 그 보고로 완료 처리해요/u.test(row.summary)));
 });
 
 test('runtime fixture a turn without a completion report is asked for it once in the same session',async t=>{

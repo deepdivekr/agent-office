@@ -398,11 +398,13 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       input.activity('supervisor.client_run',`${clientName(client)} · 실행을 마쳤습니다. 만든 파일 ${files.length}개를 결과로 저장했습니다.`,meta({status:'succeeded'}));
     }
     input.guard();
-    let report=input.external_effect?null:clientCompletionReport(input.folder,input.checks);
+    // Live 2026-10-06: an imported Work whose own helper sends to Telegram looped in Office's check of "delivery confirmed" —
+    // Office cannot see the client's send. The client's report decides here too; Office verifies only what Office itself sends.
+    let report=clientCompletionReport(input.folder,input.checks);
     // Live 2026-10-04: a resume with nothing new ran no turn, found no report and fell back to Office's own check, which told
     // the owner "확인 필요" about a correct result. The client is asked for its report once, in the same session; nothing
     // else of the result changes, so the saved result and its receipts stay as they are.
-    if(!input.external_effect&&!report&&!askedReport&&session().confirmed&&session().session_id){
+    if(!report&&!askedReport&&session().confirmed&&session().session_id){
       askedReport=true;
       try{
         await runClient({client,model:input.model,effort:input.effort,servers:extra??[],folder:input.folder,session:{id:session().session_id!,resume:true},signal:input.signal,
@@ -413,7 +415,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
     }
     if(report){
       const missing=report.checks.filter(item=>!item.met);
-      input.activity('supervisor.verification',report.met?`${clientName(client)}가 완료 조건 ${report.checks.length}개를 모두 충족했다고 보고했어요. 외부로 보내는 일이 없는 업무라 그 보고로 완료 처리해요.`:`${clientName(client)}가 충족하지 못한 조건 ${missing.length}개를 보고했어요: ${missing.map(item=>`${item.id}${item.note?` (${item.note})`:''}`).join('; ')}`.slice(0,1000),meta({stage_id:'completion.verify',status:report.met?'verified':'not_verified'}));
+      input.activity('supervisor.verification',report.met?`${clientName(client)}가 완료 조건 ${report.checks.length}개를 모두 충족했다고 보고했어요. ${input.external_effect?'요청에 든 전송·제출은 앱이 자기 도구로 했고, 그 보고로 완료 처리해요.':'외부로 보내는 일이 없는 업무라 그 보고로 완료 처리해요.'}`:`${clientName(client)}가 충족하지 못한 조건 ${missing.length}개를 보고했어요: ${missing.map(item=>`${item.id}${item.note?` (${item.note})`:''}`).join('; ')}`.slice(0,1000),meta({stage_id:'completion.verify',status:report.met?'verified':'not_verified'}));
       return report.met?{status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})}
         :{status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_REPORTED_INCOMPLETE',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})};
     }
