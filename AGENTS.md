@@ -29,8 +29,9 @@ another CLI by itself is its own behaviour). Permissions default to everything a
 the client app; Office does not approve actions one by one. Office records the
 events, pauses between turns, hands a new direction to the same client session
 as it is (no Office replanning, owner 2026-10-04), schedules and delivers. A client run is complete when its client reports each
-completion condition met (COMPLETION.json, owner 2026-10-04); Office verifies
-independently only a Work that sends or submits outside. The host-tool
+completion condition met (COMPLETION.json, owner 2026-10-04) — also when the
+request's own send or submission is done by the client's tooling (2026-10-06);
+Office verifies independently only what Office itself sends. The host-tool
 executor is a fallback only. API keys are for Jev only. Execution-tool routing
 (Playwright to Aside) stays.
 
