@@ -284,7 +284,9 @@ function initialPrompt(input:ClientRunInput){
     `Also save DELIVERY.md in the Work folder: the message the owner receives (in the app, Telegram or chat), in the language of the request. Put only the content the request asks for, laid out for reading (for example each case's explanation under its heading); no file lists, no notes about conditions, process or checks. Office sends that text together with the pictures you made.`,
     `Request from the owner:\n${input.prompt}`,
     ...importedPlan(input),
-    ...(input.directions.length?[`Later directions from the owner (newest last; they change the request where they differ):\n${input.directions.map(item=>`- ${item.instruction}`).join('\n')}`]:[]),
+    // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as
+    // its task, found its own folder empty and reported nothing made. Directions are history for a new session.
+    ...(input.directions.length?[`Directions the owner gave during earlier sessions of this Work (oldest first; a later one supersedes an earlier one where they differ). One that changes what every run should produce still applies. One about an earlier session's own folder, files, checks or a one-time cleanup is finished and does not apply to this run:\n${input.directions.map(item=>`- ${item.instruction}`).join('\n')}`]:[]),
     `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}`,
     ...(Object.keys(input.context).length?[`What Office already settled with the owner:\n${JSON.stringify(input.context,null,1)}`]:[]),
     ...windowsInstructions(input.client).map(item=>`The owner's standing instructions for ${clientName(input.client)} on the Windows side of this computer (${item.file}); this run does not load them by itself. Follow them where they apply:\n${item.text}`),

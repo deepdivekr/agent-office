@@ -40,9 +40,12 @@ const shown=(path:string,place:EnvironmentHome)=>{const inside=path.startsWith(p
 
 let windowsProfileCache:string|null|undefined;
 /** The Windows user folder as a path this process can read, when it runs inside WSL. */
+const wslKernel=()=>{try{return /microsoft/iu.test(readFileSync('/proc/sys/kernel/osrelease','utf8'));}catch{return false;}};
 function windowsProfile(environment:NodeJS.ProcessEnv){
   if(environment.AGENT_OFFICE_WINDOWS_PROFILE!==undefined)return environment.AGENT_OFFICE_WINDOWS_PROFILE||null;
-  if(environment!==process.env||process.platform!=='linux'||!environment.WSL_DISTRO_NAME)return null;
+  // Live (2026-10-06): the MCP service a Hermes-started bridge spawns has no WSL_DISTRO_NAME, so the Windows side (Aside) was
+  // not found for the client; the kernel release says WSL as well.
+  if(environment!==process.env||process.platform!=='linux'||!(environment.WSL_DISTRO_NAME||environment.WSL_INTEROP||wslKernel()))return null;
   if(windowsProfileCache!==undefined)return windowsProfileCache;
   windowsProfileCache=null;
   try{
