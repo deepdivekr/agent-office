@@ -2,11 +2,12 @@ import {randomUUID,createHash} from 'node:crypto';
 import {existsSync,lstatSync,readFileSync} from 'node:fs';
 import {chmod,mkdir,rename,writeFile} from 'node:fs/promises';
 import {homedir,userInfo} from 'node:os';
-import {dirname,isAbsolute,join,resolve} from 'node:path';
+import {basename,dirname,isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {z} from 'zod';
 import {requireCondition} from '../core/contracts.js';
 import {configureHermes,hermesDoctor,hermesHome} from '../integrations/hermes.js';
+import {officeServerEntry} from '../integrations/owner-mcp.js';
 import {nativeProcessRunner,resolveSubscriptionClientExecutable,type SafeProcessRunner,type SubscriptionClientId} from '../integrations/subscription-auth.js';
 import {localConnectionPaths} from './connection.js';
 
@@ -85,12 +86,21 @@ export class McpRegistrationController{
         else if(id==='opencode'){registration=opencodeRegistration(this.environment,this.command,this.args);reason=registration;}
         else if(id==='hermes'){const doctor=hermesDoctor(hermesHome(this.environment));registration=doctor.agent_driver_mcp==='ready'?'registered':receipts.registrations[id]?.command_fingerprint===signature?'unknown':'not_registered';reason=doctor.agent_driver_mcp;}
         else if(receipts.registrations[id]?.command_fingerprint===signature){registration='registered';reason='registered_by_agent_driver';}
+        // Live 2026-10-06: the owner's Claude Code already listed agent-office (the launcher form); without a receipt Office showed
+        // "connection needed" and its `mcp add` failed on the duplicate name.
+        else{const found=this.existing(id);if(found==='office'){registration='registered';reason='existing_office_registration';}else if(found==='other'){registration='conflict';reason='existing_configuration_requires_review';}}
       }catch{registration='conflict';reason='existing_configuration_requires_review';}
       if(!present){registration='unavailable';reason=this.environment.WSL_DISTRO_NAME||this.environment.WSL_INTEROP?'wsl_native_client_not_found':'client_not_available';}
       clients.push({id,installed:present,registration,automatic:present,reason,restart_required:registration==='registered'});
     }
     const windows_bridge=windowsMcpBridge(this.environment);
     return {agent_driver:{installed:true,mcp_command:'agent-office mcp'},clients,registered_count:clients.filter(item=>item.registration==='registered').length,...(windows_bridge?{windows_bridge}:{}),credentials_exposed:false};
+  }
+  /** The client's own agent-driver entry: Office's (this entrypoint, or the agent-office launcher), another program's, or none. */
+  private existing(id:'codex'|'claude'):'office'|'other'|null{
+    const entry=officeServerEntry(id,this.environment);if(!entry)return null;
+    const same=(expected:readonly string[])=>JSON.stringify(entry.args)===JSON.stringify(expected);
+    return entry.command===this.command&&same(this.args)||entry.command!==undefined&&basename(entry.command)==='agent-office'&&same(['mcp'])?'office':'other';
   }
   async register(id:McpRegistrationClient){
     requireCondition(clientIds.includes(id),'MCP_CLIENT_INVALID');const present=installed(id,this.environment);requireCondition(present,'MCP_CLIENT_UNAVAILABLE');
@@ -102,8 +112,8 @@ export class McpRegistrationController{
       if(doctor.agent_driver_mcp==='misconfigured'&&receipts.registrations[id]?.command_fingerprint!==signature)throw Error('MCP_REGISTRATION_CONFLICT');
       await configureHermes({home:hermesHome(this.environment),command:this.command,args:[...this.args]});
     }else{
-      const executable=resolveSubscriptionClientExecutable(id,this.environment),result=await this.runner.run({executable,args:runnerArgs(id,this.command,this.args),timeout_ms:15_000});
-      requireCondition(result.code===0,'MCP_REGISTRATION_FAILED');
+      const found=this.existing(id);requireCondition(found!=='other','MCP_REGISTRATION_CONFLICT');
+      if(found!=='office'){const executable=resolveSubscriptionClientExecutable(id,this.environment),result=await this.runner.run({executable,args:runnerArgs(id,this.command,this.args),timeout_ms:15_000});requireCondition(result.code===0,'MCP_REGISTRATION_FAILED');}
     }
     receipts.registrations[id]={registered_at:new Date().toISOString(),command_fingerprint:signature};await writeReceipts(this.root,receipts);return this.view();
   }

@@ -885,3 +885,10 @@ Hermes가 띄운 MCP 서비스만 살아 있었다.
   바꿀 수 있어요."로. 1단계 제목은 "AI 앱 연결" 그대로.
 - 1단계의 "관리" 버튼은 모델 칸이 있는 앱(Codex·Claude Code)이면 3단계의 그 칸으로, 없으면 제자리 카드로 간다.
 - 테스트는 3단계 카드 대신 1단계 카드를 본다(설치→로그인 완료 뒤 1단계 카드는 "연결 필요" 배지와 MCP 연결 버튼, 관리 버튼은 등록 뒤).
+
+## Claude Code "연결 필요" 오판 (2026-10-06)
+
+주인이 WSL Claude Code에 다시 로그인한 뒤에도 1단계가 "연결 필요"를 보였고 연결 버튼은 `MCP_REGISTRATION_FAILED`로 끝났다. Office는 codex·claude의
+등록 여부를 자기 영수증(`mcp-registrations.json`의 command 지문)으로만 판단했는데, 주인의 Claude 설정에는 agent-office 런처(`~/.local/bin/agent-office mcp`)
+형태로 이미 등록돼 있어 영수증이 없었고, `claude mcp add`는 같은 이름이 있어 실패했다. 이제 클라이언트 설정의 `agent-driver` 항목을 읽어 Office의 것
+(이 진입점 또는 런처)이면 등록됨으로 보고 영수증만 쓰며, 다른 프로그램의 항목이면 충돌로 표시하고 덮어쓰지 않는다(테스트: 기존 항목 재사용·충돌 거부).
