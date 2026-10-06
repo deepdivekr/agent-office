@@ -892,3 +892,10 @@ Hermes가 띄운 MCP 서비스만 살아 있었다.
 등록 여부를 자기 영수증(`mcp-registrations.json`의 command 지문)으로만 판단했는데, 주인의 Claude 설정에는 agent-office 런처(`~/.local/bin/agent-office mcp`)
 형태로 이미 등록돼 있어 영수증이 없었고, `claude mcp add`는 같은 이름이 있어 실패했다. 이제 클라이언트 설정의 `agent-driver` 항목을 읽어 Office의 것
 (이 진입점 또는 런처)이면 등록됨으로 보고 영수증만 쓰며, 다른 프로그램의 항목이면 충돌로 표시하고 덮어쓰지 않는다(테스트: 기존 항목 재사용·충돌 거부).
+
+## Aside가 기본 브라우저 (2026-10-06)
+
+주인: "claude가 뉴스 수집을 크롬에서 playwright으로 하는 거 같은데… 메인 브라우징 툴 aside로 바꿔줘." ASTS 업무(Codex 실행)는 가져온 자동화의
+수집 단계(`asts_claude_chrome_collect.py`, Claude+Chrome 수집기)를 그대로 돌리고 있었다. 프롬프트의 Windows MCP 메모가 Aside를 "차단·로그인
+사이트용"으로만 적어서였다. 이제 Aside가 있으면 "이 실행의 브라우저"로 두고, 자동화의 단계가 스스로 브라우저를 열 때도 그 브라우징은 Aside로
+하고 나머지 단계는 유지하라고 적는다(테스트 문구 갱신). 돌고 있던 ASTS 실행에는 같은 내용의 지침을 보내 재개했다.
