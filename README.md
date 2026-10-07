@@ -2,7 +2,8 @@
 
 **Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own client and your own accounts. Agent Office is where you see their status, hear when one stops, change instructions and run again.
 
-![Scattered bots gathering onto one Agent Office board](docs/images/en/hero.svg)
+<p align="center"><img src="docs/images/en/hero.gif" width="560" alt="Work scattered across Codex, Claude Code and Hermes comes together on one Agent Office board: a stopped run is flagged and resumed, a new Work runs in Claude Code and its result is delivered"></p>
+<p align="center"><a href="docs/images/en/hero.mp4">Full-quality MP4</a> · <a href="docs/motion/hero">how it is made</a></p>
 
 Nothing fails silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 
