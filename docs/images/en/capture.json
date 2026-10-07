@@ -1,31 +1,30 @@
 {
-  "source_version": "0.3.1",
+  "source_version": "0.4.0",
   "ui_base_commit": "124d92d31a36e6085c55d87b2311f87f218669d8",
-  "captured_at": "2026-09-28T21:59:18.318Z",
+  "captured_at": "2026-10-07T07:21:00Z",
   "sample_data": true,
-  "live_task_run": false,
+  "live_task_run": true,
   "paid_model_calls": 0,
-  "viewport": {
-    "width": 1440,
-    "overview_height": 720,
-    "detail_height": 1000,
-    "settings_height": 1000
-  },
   "language": "en",
   "theme": "dark",
   "layout": "board",
   "screens": [
     "work-overview.png",
-    "work-detail.png",
-    "ai-connection.png"
+    "work-detail.png"
   ],
   "checks": [
-    "four queued/paused sample Works",
+    "one real client run completed and its completion criteria were reported met",
     "board view selected",
-    "dark media and rendered background verified",
-    "localized UI and sample records",
-    "pause/resume changes state",
-    "API key blank; no settings saved",
+    "dark theme",
+    "English capture contains no untranslated Korean",
     "no page errors"
-  ]
+  ],
+  "client": "Codex · gpt-6.1-sol · low (subscription)",
+  "task": "Summarize a made-up three-month sales log into report.md (no web access, nothing sent outside)",
+  "environment": "fresh isolated instance and a clean home with only the Codex sign-in; no personal skills, MCP servers or Works",
+  "viewport": {
+    "width": 1440,
+    "overview_height": 720,
+    "detail_height": 1000
+  }
 }
