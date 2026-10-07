@@ -23,7 +23,7 @@ test('coding answer keeps ordinary prose but masks credentials before persistenc
 });
 
 test('a public content link is kept while keys, key-shaped base64 and capability URLs are still masked',()=>{
-  for(const link of ['https://www.reddit.com/r/ASTSpaceMobile/comments/1wwdmyw/ast_spacemobile_asts_daily_discussion_thread/','https://x.com/AST_SpaceMobile/status/1790000000000000000','https://www.youtube.com/watch?v=dQw4w9WgXcQ'])
+  for(const link of ['https://www.reddit.com/r/AcmeSat/comments/1wwdmyw/ast_acmesat_acme_daily_discussion_thread/','https://x.com/AST_AcmeSat/status/1790000000000000000','https://www.youtube.com/watch?v=dQw4w9WgXcQ'])
     assert.equal(sanitizeCodingReply(`Read ${link} now`).text,`Read ${link} now`,link);
   const key=['wJalrXUtnFEMI','K7MDENG','bPxRfiCYEXAMPLEKEY'].join('/')+'abcd';
   const secrets=[key,'Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7dEf0h/Ij3kLm6n',

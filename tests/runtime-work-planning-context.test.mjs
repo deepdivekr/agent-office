@@ -10,7 +10,7 @@ import {loadHostConfig} from '../dist/interface/config.js';
 import {WorkSupervisor,supervisorStatus} from '../dist/work/supervisor.js';
 import {WORK_PLANNING_CONTEXT_INSTRUCTIONS,WORK_REPLANNING_INSTRUCTIONS,WORK_DEFINITION_INSTRUCTIONS,validateOrCorrectWorkProposal} from '../dist/work/runtime.js';
 
-const proposal={title:'ASTS source research',desired_outcome:'Read observed ASTS sources and provide a summary.',completion_checks:[{id:'sources',result:'Sources are retained',evidence:'Actual source receipts'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[],browser:{environment:'owned_headless'}};
+const proposal={title:'ACME source research',desired_outcome:'Read observed ACME sources and provide a summary.',completion_checks:[{id:'sources',result:'Sources are retained',evidence:'Actual source receipts'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[],browser:{environment:'owned_headless'}};
 const aside={id:'windows-host-aside',engine:'aside',environment:'host_foreground',platform:'win32',profile_ref:'registered-aside',executable:'/mnt/c/fixture/aside.exe'};
 const wait={action:'wait',stage_id:null,tool_name:null,arguments_json:null,summary:'The fixture stops before browser dispatch.',completed_checks:[],wait_reason:'configuration'};
 const noPlan=spec=>{const {plan,...raw}=spec;return raw;};
@@ -26,7 +26,7 @@ async function fixture(t,{replan=preferRegisteredAside,correction=null,initialBr
     if(instructions.startsWith('Revise this existing'))return replan(input);
     assert.ok(instructions.startsWith('Execute the registered Work'));return structuredClone(wait);
   }},api=new RuntimeApi(config,{swarmModel:model});
-  const work=await api.work.start({request_id:'planning-work',prompt:'Read ASTS sources.'}),supervisor=new WorkSupervisor(api.store,config,model,{api,auto_start:false,tick_ms:10}),run=randomUUID(),at=new Date().toISOString();
+  const work=await api.work.start({request_id:'planning-work',prompt:'Read ACME sources.'}),supervisor=new WorkSupervisor(api.store,config,model,{api,auto_start:false,tick_ms:10}),run=randomUUID(),at=new Date().toISOString();
   const observation={invocation:{request_id:'preserved-source',turn:0,stage_id:'source',tool_name:'office_browser_read',arguments:{url:'https://example.org/actual-source'},effect:'read_only',dispatched:true},receipt:{status:'succeeded',effect_state:'none',value:{title:'Observed source'},evidence_ids:['preserved-source'],retry_safe:true},observed_at:at};
   const checkpoint={format:1,work_id:work.work_id,run_id:run,binding:'a'.repeat(64),turn:1,pending:null,observations:[observation],summary:'Preserved source observation.'};
   api.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,checkpoint,config_hash,model_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(run,config.project.id,work.work_id,work.revision,'paused',JSON.stringify(checkpoint),config.fingerprint,0,at,at);

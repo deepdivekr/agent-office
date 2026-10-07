@@ -670,6 +670,9 @@ const RULES:Array<[string,string]>=[
 ['^지시 (\\d+) · (.+)$','Instruction $1 · $2'],['^프로젝트 (.+) · 세션 (.+) · 모델 (.+) · (.+)$','Project $1 · session $2 · model $3 · $4'],
 ['^다음 단계: (.+)$','Next stage: $1'],['^대상: (.+)$','Target: $1'],['^원본: (.+)$','Source: $1'],['^승인 경계: (.+)$','Approval boundary: $1'],['^근거: (.+)$','Evidence: $1'],['^단계: (.+)$','Step: $1'],['^미확인: (.+)$','Unknown: $1'],
 ['^Jev 추천 없음 · (.+)$','No Jev suggestions · $1'],['^가져온 계획 · (.+)$','Imported plan · $1'],
+['^(Codex|Claude Code)가 완료 조건 (\\d+)개를 모두 충족했다고 보고했어요\\. 외부로 보내는 일이 없는 업무라 그 보고로 완료 처리해요\\.$','$1 reported all $2 completion criteria met. Nothing is sent outside, so its report completes the Work.'],
+['^(Codex|Claude Code)가 완료 조건 (\\d+)개를 모두 충족했다고 보고했어요\\. 요청에 든 전송·제출은 앱이 자기 도구로 했고, 그 보고로 완료 처리해요\\.$','$1 reported all $2 completion criteria met. It sent or submitted what the request asked with its own tools, so its report completes the Work.'],
+['^(Codex|Claude Code)가 충족하지 못한 조건 (\\d+)개를 보고했어요: (.+)$','$1 reported $2 unmet completion criteria: $3'],
 ];
 export const controlCenterCopy=buildCopyCatalog({...EN,...extraSourceCopy});
 export const i18nScript=`(()=>{const EN=${JSON.stringify(controlCenterCopy.en)},KO=${JSON.stringify(controlCenterCopy.ko)},RULES=${JSON.stringify(RULES.map(([pattern,replacement])=>[pattern,plainEnglish(replacement!)]))}.map(([p,r])=>[new RegExp(p,'u'),r]),FLAGS=${JSON.stringify(flagSvgs)};

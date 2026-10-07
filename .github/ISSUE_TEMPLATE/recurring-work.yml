@@ -1,0 +1,63 @@
+name: 맡기고 싶은 반복 업무 / Recurring work you want to hand off
+description: 어떤 반복 업무를 AI에게 맡기고 싶은지 알려 주세요. Tell us which recurring work you want your AI to take on.
+title: "[업무 / Work] "
+labels: ["recurring-work"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        매번 직접 시키고 있거나, 자동화해 뒀는데 자주 멈추는 업무를 적어 주세요. 계정·비밀번호·회사 내부 정보는 적지 마세요.
+        Describe work you keep prompting by hand, or automation that keeps breaking. Do not include credentials or private company data.
+  - type: textarea
+    id: work
+    attributes:
+      label: 어떤 업무인가요? / What is the work?
+      description: 한두 문장이면 충분해요. One or two sentences are enough.
+      placeholder: 예) 매일 아침 관심 분야 뉴스를 모아 요약해서 받고 싶다. / e.g. Every morning, collect and summarise news on a topic I follow.
+    validations:
+      required: true
+  - type: checkboxes
+    id: kind
+    attributes:
+      label: 업무 종류 / Kind of work
+      description: 해당하는 것을 모두 골라 주세요. Pick all that apply.
+      options:
+        - label: 정보 모니터링·요약 (뉴스, 공지, 가격 등) / Monitoring and summaries (news, notices, prices)
+        - label: 웹사이트 입력·제출 (보고서, 양식 등) / Filling in or submitting on a website (reports, forms)
+        - label: 데이터 수집·정리 (표, 파일, 대시보드) / Collecting and organising data (sheets, files, dashboards)
+        - label: 조사·리서치 / Research
+        - label: 코드·저장소 관리 / Code and repository chores
+        - label: 기타 / Other
+  - type: input
+    id: cadence
+    attributes:
+      label: 얼마나 자주? / How often?
+      placeholder: 예) 매일 오전 9시, 매주 월요일 / e.g. daily at 9:00, every Monday
+  - type: checkboxes
+    id: ai
+    attributes:
+      label: 쓰고 있는 AI 구독 / AI subscriptions you use
+      options:
+        - label: Codex (ChatGPT)
+        - label: Claude Code
+        - label: 아직 없음 / None yet
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: 실행 환경 / Where it would run
+      options:
+        - label: Windows 11 + WSL2
+        - label: Ubuntu
+        - label: macOS
+        - label: 기타 / Other
+  - type: textarea
+    id: today
+    attributes:
+      label: 지금은 어떻게 하고 있나요? / How do you do it today?
+      description: 직접 하는지, 스크립트·다른 도구를 쓰는지, 어디서 막히는지 알려 주세요. By hand, a script or another tool, and where it breaks.
+  - type: checkboxes
+    id: pilot
+    attributes:
+      label: 함께 세팅해 보기 / Set it up together
+      options:
+        - label: 이 업무를 Agent Office로 옮기는 과정을 함께 해 볼 의향이 있어요 (화상 통화 몇 차례). I'd be open to a few calls to set this up together.

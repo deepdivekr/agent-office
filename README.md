@@ -1,33 +1,32 @@
 # Agent Office
 
-**A local MCP server that helps AI agents run work on your computer and resume after interruptions.**
+**Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own client and your own accounts. Agent Office is where you see their status, hear when one stops, change instructions and run again.
+
+![Scattered bots gathering onto one Agent Office board](docs/images/en/hero.svg)
+
+Nothing fails silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 
 **English** · [한국어](README.ko.md) · [v0.4.0 release notes](docs/releases/v0.4.0.md)
 
-Connect it to Codex, Claude Code, Cursor, OpenCode, Hermes, or another MCP client.
+It is also a local MCP server, so Codex, Claude Code, Cursor, OpenCode, Hermes or another MCP client can hand it work.
 Install and run it as `agent-office`. The old `agent-driver` command remains a compatibility alias.
 
 ## A look inside
 
-**Work board** — submit a request and see work grouped by status.
+**Work board** — describe the work in one line and follow it by status.
 
 ![Agent Office Work board in dark mode](docs/images/en/work-overview.png)
 
 <details>
-<summary>Work details and AI connection</summary>
+<summary>Work detail</summary>
 
-**Work detail** — run, pause, resume or update instructions; inspect actual logs and result files.
+**Work detail** — the app's own run as it happened, the completion check it reported, and the result files.
 
-![Work detail and controls](docs/images/en/work-detail.png)
-
-**AI connection** — choose a subscription client, API provider or compatible local endpoint.
-
-![AI connection settings](docs/images/en/ai-connection.png)
+![Work detail with a finished run](docs/images/en/work-detail.png)
 
 </details>
 
-v0.3.1 interface in English and dark mode, with isolated sample work.
-These screenshots show setup and queued work, not completed live-agent runs.
+A real run of a made-up sample task (summarise a three-month sales log into `report.md`) with Codex on a fresh install. No web access, nothing sent outside.
 
 ## Supported environments
 
@@ -65,7 +64,7 @@ Connect your tools once, then submit a Work from the board. See [From request to
 
 1. **Clients** — check installation and login, then register MCP.
 2. **Execution** — use the default browser or connect an optional executor.
-3. **AI** — choose a subscription CLI or API. Compatible local models are also supported.
+3. **AI** — choose the app that runs your work (Codex or Claude Code) and its default model.
 4. **Delivery (optional)** — save Telegram, Slack or Discord destinations. Results always remain available in the app.
 5. **First Work** — enter instructions, a completion condition and result destinations. Leave the condition blank for AI to derive it. The detail opens immediately; guided mode asks for your choices first.
 
@@ -174,7 +173,6 @@ Changed pages or environments require fresh checks. Repeat runs are not guarante
 
 Each Work runs on the AI app chosen when it was started (Codex or Claude Code, with a model and reasoning effort), using that app's own settings, skills and MCP servers.
 That app keeps the Work for its whole life: when its sign-in or allowance runs out, the Work waits; it never moves to another app.
-**Subscription usage never automatically falls back to a paid API.**
 
 Use **Import** to connect existing work. Supported Hermes and remote OpenClaw connections keep the original runtime, schedule, and messenger delivery.
 Importing alone does not start a duplicate bot or activate a new schedule. Monitoring and control require the original runtime connection, not just a code folder.

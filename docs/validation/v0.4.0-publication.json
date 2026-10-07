@@ -42,7 +42,7 @@
   "actual_work": {
     "evidence_level": "user_environment",
     "node_official_source": "PASS: one UI start, two historical release dates, independent source/TXT/hash verification, app result",
-    "asts": "awaiting_review: intervention/handoff/resume observed, material evidence unresolved; not a successful completion"
+    "acme": "awaiting_review: intervention/handoff/resume observed, material evidence unresolved; not a successful completion"
   },
   "retained_limits": [
     "Live Telegram/Slack/Discord receipt not tested; provider-response substitutes do not certify a real messenger account.",

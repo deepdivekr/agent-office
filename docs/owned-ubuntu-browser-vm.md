@@ -32,4 +32,4 @@ guest는 `Xvfb + Openbox + Chromium + x11vnc`를 시작한다. 사람의 사이�
 
 이것은 **작업 환경 격리**다. shared folder와 사용자 UI 간섭을 없애지만, 악성 guest 탈출·동일 호스트 사용자·QEMU/브라우저 취약점까지 막는 고보안 sandbox라고 주장하지 않는다. 고위험 사이트에는 별도 물리 host 또는 별도 보안 VM, egress proxy/allowlist, 업데이트된 guest image가 필요하다.
 
-이 host에서는 current-user KVM 권한과 QEMU 도구를 확인했고, agent-driver 전용 Ubuntu guest의 Chromium/CDP 연결과 Stack & Sky 로그인 게이트까지 읽기 전용으로 관측했다. 이는 폼 경로·독립 readback·외부 제출이 검증됐다는 뜻이 아니다. 최초 인증과 그 뒤의 폼 관측은 계속 별도 gate다.
+이 host에서는 current-user KVM 권한과 QEMU 도구를 확인했고, agent-driver 전용 Ubuntu guest의 Chromium/CDP 연결과 보고 사이트 로그인 게이트까지 읽기 전용으로 관측했다. 이는 폼 경로·독립 readback·외부 제출이 검증됐다는 뜻이 아니다. 최초 인증과 그 뒤의 폼 관측은 계속 별도 gate다.

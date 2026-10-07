@@ -18,7 +18,7 @@ import {randomUUID} from 'node:crypto';
 
 // Owner direction 2026-10-03: the client's own agent runs the Work with the owner's settings and full permissions;
 // Office streams its events, keeps its session, takes the files it made as the result and verifies them.
-const proposal={title:'파생상품 사례 이미지',desired_outcome:'사례 이미지와 해설을 만든다',completion_checks:[{id:'images',result:'사례 이미지 파일과 해설이 있다',evidence:'업무 폴더의 파일'}],assumptions:[],route:{kind:'workflow',pack_family:null},requested_effect:'draft_only',recurrence:{kind:'once',rule:null},questions:[]};
+const proposal={title:'시세 차트 사례 이미지',desired_outcome:'사례 이미지와 해설을 만든다',completion_checks:[{id:'images',result:'사례 이미지 파일과 해설이 있다',evidence:'업무 폴더의 파일'}],assumptions:[],route:{kind:'workflow',pack_family:null},requested_effect:'draft_only',recurrence:{kind:'once',rule:null},questions:[]};
 function fixture(options={}){const calls=[];let verifications=0;return {calls,get verifications(){return verifications;},async call(purpose,instructions,input){
   calls.push({purpose,status:'accepted',provider:'fixture',model:'fixture',duration_ms:0});
   if(instructions.startsWith('Define one durable')||instructions.startsWith('Revise this existing'))return options.proposal??proposal;
@@ -38,7 +38,7 @@ async function setup(t,options={}){
   const root=await mkdtemp(join(tmpdir(),'work-client-run-')),host=join(root,'host.json');
   await writeFile(host,JSON.stringify({schema_version:1,project_id:'client-run-test',caller_ref:'owner',account_ref:'owner',worktree:root,data_dir:join(root,'data'),environment:'production',packs:{sources:[],targets:[],models:'off'},swarm:{enabled:true,model_data_approved:true}}));
   const config=loadHostConfig(host),store=new PackStore(config.dbPath);store.registerProject(config.project);
-  const model=fixture(options),runtime=new WorkRuntime(store,config,model),work=await runtime.start({request_id:'client-run',prompt:'파생상품 사례 이미지와 짧은 해설을 만들어줘',...(options.choice?{client:options.choice}:{})});
+  const model=fixture(options),runtime=new WorkRuntime(store,config,model),work=await runtime.start({request_id:'client-run',prompt:'시세 차트 사례 이미지와 짧은 해설을 만들어줘',...(options.choice?{client:options.choice}:{})});
   const runs=[],looks=[],asks=[];enableClientRun({runner:{run:request=>{
     // The image readback is a separate call of the client: it answers with descriptions and is not a Work turn.
     if(request.args.includes('-i')||/Describe each image below/u.test(request.stdin??'')){looks.push(request);const names=request.args.includes('-i')?request.args.filter((value,index)=>request.args[index-1]==='-i').map(path=>path.split('/').pop()):[...(request.stdin.match(/^- (.+)$/gmu)??[])].map(line=>line.slice(2));
@@ -78,7 +78,7 @@ test('runtime fixture a Work runs on Codex with the owner settings and full perm
   assert.deepEqual(clientRunArgs({id:'codex',model:null,effort:null},folder,null,true).slice(3,5),['-c','mcp_servers.agent-driver.disabled_tools=["runtime_work_start","runtime_work_execute","runtime_work_control"]'],'a run cannot start Works through Office');
   assert.equal(run.executable,'/fake/codex');assert.equal(run.cwd,folder);assert.equal(run.keep_stdout,false);
   assert.equal(run.env.OPENAI_API_KEY,undefined,'an API key would bill a paid API');assert.equal(run.env.HOME,process.env.HOME);
-  assert.match(run.stdin,/파생상품 사례 이미지와 짧은 해설을 만들어줘/u);assert.match(run.stdin,/images: 사례 이미지 파일과 해설이 있다/u);
+  assert.match(run.stdin,/시세 차트 사례 이미지와 짧은 해설을 만들어줘/u);assert.match(run.stdin,/images: 사례 이미지 파일과 해설이 있다/u);
   const rows=activity(x);
   assert.ok(rows.some(row=>row.kind==='tool.result'&&row.summary==='shell · exit 0 · echo hi > a.txt'&&row.metadata.status==='succeeded'&&row.metadata.model_provider==='codex'));
   assert.ok(rows.some(row=>row.kind==='tool.result'&&row.summary==='file_change · add explanations.md'));
@@ -156,10 +156,10 @@ test('runtime fixture the verifier sees the Office delivery selection of a clien
 });
 
 test('runtime fixture an imported Work gives the client its own steps and tools, and a request that sends by itself is not told to keep the result',async t=>{
-  // Live 2026-10-03: the imported ASTS Work ran without its runbook and commands, and its own Telegram helper was held back by the Office note.
+  // Live 2026-10-03: the imported ACME Work ran without its runbook and commands, and its own Telegram helper was held back by the Office note.
   const plan={format:1,revision:1,source:'pasted_import',source_id:'imp-1',source_digest:'a'.repeat(64),provenance:'unverified_external',import_mode:'migrate',steps:[
-    {id:'load_runbook',goal:'Read the runbook and seen state.',depends_on:[],effect:'read_only',tool_hints:['C:\\Users\\owner\\projects\\asts\\docs\\runbook.md'],evidence_ids:[]},
-    {id:'deliver',goal:'Send the new items through the helper.',depends_on:['load_runbook'],effect:'external_write',tool_hints:['py -3.12 scripts\\asts_monitor.py'],evidence_ids:[]}]};
+    {id:'load_runbook',goal:'Read the runbook and seen state.',depends_on:[],effect:'read_only',tool_hints:['C:\\Users\\owner\\projects\\acme\\docs\\runbook.md'],evidence_ids:[]},
+    {id:'deliver',goal:'Send the new items through the helper.',depends_on:['load_runbook'],effect:'external_write',tool_hints:['py -3.12 scripts\\acme_monitor.py'],evidence_ids:[]}]};
   const x=await setup(t,{client:request=>codexTurn(request)});
   // The plan's source and provenance are host-owned (an import writes them), never taken from the planner: set them as an import would.
   const row=x.store.hermesState.prepare('SELECT spec FROM office_intake WHERE work_id=?').get(x.work.work_id);
@@ -167,7 +167,7 @@ test('runtime fixture an imported Work gives the client its own steps and tools,
   x.supervisor.start(x.work.work_id,x.work.revision,true);x.supervisor.activate();x.supervisor.tick();
   const end=await settle(x);assert.equal(end.state,'succeeded',JSON.stringify(end));
   const stdin=x.runs[0].stdin;
-  assert.match(stdin,/The owner's own automation, as imported into Office[\s\S]*- load_runbook \(read_only\): Read the runbook and seen state\.\n  uses: C:\\Users\\owner\\projects\\asts\\docs\\runbook\.md\n- deliver \(external_write\)[\s\S]*uses: py -3\.12 scripts\\asts_monitor\.py/u);
+  assert.match(stdin,/The owner's own automation, as imported into Office[\s\S]*- load_runbook \(read_only\): Read the runbook and seen state\.\n  uses: C:\\Users\\owner\\projects\\acme\\docs\\runbook\.md\n- deliver \(external_write\)[\s\S]*uses: py -3\.12 scripts\\acme_monitor\.py/u);
   assert.match(stdin,/The request itself includes sending or submitting something[\s\S]*do that part as the request says/u);assert.doesNotMatch(stdin,/Do not send the result anywhere/u);
   const plain=await setup(t,{client:request=>codexTurn(request)});
   plain.supervisor.start(plain.work.work_id,plain.work.revision,true);plain.supervisor.activate();plain.supervisor.tick();await settle(plain);
@@ -310,7 +310,7 @@ test('runtime fixture the owner receives the client DELIVERY.md, not the verific
 
 test('runtime fixture the saved record fits one readback page whole and the readback covers it',async t=>{
   // Live 2026-10-03: a check on the delivery text stayed unresolved because the one readback page ended mid-way.
-  const x=await setup(t,{client:request=>{writeFileSync(join(request.cwd,'explanations-long.md'),Array.from({length:120},(_,i)=>`## 사례 ${i+1}\n파생상품 해설 문장이 이어집니다. 증거금과 레버리지, 만기와 시간가치를 쉬운 말로 설명합니다. 번호 ${i+1}.`).join('\n\n'));return codexTurn(request);}});
+  const x=await setup(t,{client:request=>{writeFileSync(join(request.cwd,'explanations-long.md'),Array.from({length:120},(_,i)=>`## 사례 ${i+1}\n시세 차트 해설 문장이 이어집니다. 증거금과 레버리지, 만기와 시간가치를 쉬운 말로 설명합니다. 번호 ${i+1}.`).join('\n\n'));return codexTurn(request);}});
   x.supervisor.start(x.work.work_id,x.work.revision,true);x.supervisor.activate();x.supervisor.tick();
   const end=await settle(x);assert.equal(end.state,'succeeded',JSON.stringify(end));
   const checkpoint=JSON.parse(x.store.hermesState.prepare('SELECT checkpoint FROM office_supervisor WHERE run_id=?').get(end.run_id).checkpoint),pages=checkpoint.observations.filter(item=>item.invocation.tool_name==='office_result_read');
