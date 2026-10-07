@@ -31,4 +31,4 @@ Task Pack은 특정 사이트 자동화 스크립트가 아니라, 자연어 업
 - independent readback: UI 성공 문구가 아닌 서버/목록/상세의 별도 확인
 - approval channel adapter: Runtime 밖에서 user identity와 token message를 검증
 
-Reference operation-report Pack은 이 구조를 synthetic site에서 검증한다. 실제 Stack & Sky selector, 계정, Telegram credential은 core나 공개 문서에 포함하지 않는다.
+Reference operation-report Pack은 이 구조를 synthetic site에서 검증한다. 실제 보고 사이트 selector, 계정, Telegram credential은 core나 공개 문서에 포함하지 않는다.

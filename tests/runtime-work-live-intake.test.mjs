@@ -17,7 +17,7 @@ import {changeWorkLifecycle,readWorkLifecycle} from '../dist/work/lifecycle.js';
 import {startControlCenter,controlCenterReloadBlockedReason} from '../dist/observability/control-center.js';
 
 const question={id:'format',prompt:'Choose the output',options:[{id:'summary',label:'Summary',meaning:'Text summary'},{id:'cards',label:'Cards',meaning:'Card draft'}],recommended_id:'summary',required:false};
-const proposal=(extra={})=>({title:'ASTS article research',desired_outcome:'Read public sources about ASTS and provide a sourced summary',completion_checks:[{id:'evidence',result:'A sourced summary is available',evidence:'Observed source and saved result receipts'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[],...extra});
+const proposal=(extra={})=>({title:'ACME article research',desired_outcome:'Read public sources about ACME and provide a sourced summary',completion_checks:[{id:'evidence',result:'A sourced summary is available',evidence:'Observed source and saved result receipts'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[],...extra});
 const wait={action:'wait',stage_id:null,tool_name:null,arguments_json:null,summary:'The fixture intentionally waits for configuration; no result is claimed.',completed_checks:[],wait_reason:'configuration'};
 function model({definition=proposal(),gate=null,offline=false,guided=false}={}){
   return {offline,calls:[],inputs:[],async call(purpose,instructions,input){
@@ -42,7 +42,7 @@ async function fixture(t,options={}){
 async function settle(x,id){for(let i=0;i<100;i++){const value=supervisorStatus(x.store,x.config.project.id,id);if(value&&!['queued','running'].includes(value.state))return value;await delay(25);}assert.fail('fixture supervisor did not settle');}
 
 test('runtime contract live intake fields are HTTP-only and MCP registration schemas remain strict',()=>{
-  const start={request_id:'strict-intake',prompt:'Research ASTS'};
+  const start={request_id:'strict-intake',prompt:'Research ACME'};
   assert.equal(workStartActionSchema.parse({...start,execute:true,cost_acknowledged:true}).execute,true);
   assert.equal(workStartActionSchema.parse(start).execute,false);
   assert.throws(()=>workStartSchema.parse({...start,execute:true}));
@@ -56,21 +56,21 @@ test('runtime contract live intake fields are HTTP-only and MCP registration sch
 });
 
 test('runtime fixture plain HTTP registration retains ready Work without admitting a run',async t=>{
-  const x=await fixture(t),{response,data}=await x.post('work/start',{request_id:'register',prompt:'Research ASTS'});
+  const x=await fixture(t),{response,data}=await x.post('work/start',{request_id:'register',prompt:'Research ACME'});
   assert.equal(response.status,200);assert.equal(data.definition_status,'ready');assert.equal(data.admission.requested,false);
   assert.equal(supervisorStatus(x.store,x.config.project.id,data.work_id),null);assert.equal(x.store.officeRuns(x.config.project.id,data.work_id).length,0);
   assert.ok(workTail(x.store,x.config.project.id,data.work_id).some(row=>row.kind==='definition.finished'));
 });
 
 test('runtime fixture explicit start requires allowance confirmation before registration or model use',async t=>{
-  const x=await fixture(t),{response,data}=await x.post('work/start',{request_id:'no-cost',prompt:'Research ASTS',execute:true});
+  const x=await fixture(t),{response,data}=await x.post('work/start',{request_id:'no-cost',prompt:'Research ACME',execute:true});
   assert.equal(response.status,409);assert.equal(data.error,'WORK_MODEL_USAGE_CONSENT_REQUIRED');assert.equal(x.ai.calls.length,0);
   assert.equal(x.store.hermesState.prepare('SELECT COUNT(*) AS n FROM office_intake').get().n,0);
 });
 
 test('runtime fixture NDJSON exposes real durable analysis before its held model finishes, then admits only the current run',async t=>{
   let release;const gate=new Promise(resolve=>release=resolve),ai=model({gate,definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})}),x=await fixture(t,{model:ai});x.closers.push(()=>release());
-  const response=await fetch(x.cc.url+'work/start',{method:'POST',headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'live-start',prompt:'Research ASTS daily',execute:true,cost_acknowledged:true})});
+  const response=await fetch(x.cc.url+'work/start',{method:'POST',headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'live-start',prompt:'Research ACME daily',execute:true,cost_acknowledged:true})});
   assert.equal(response.status,200);const reader=response.body.getReader(),first=new TextDecoder().decode((await reader.read()).value),registered=JSON.parse(first.trim());
   assert.equal(registered.type,'registered');const id=registered.work.work_id;assert.equal(x.store.intakeWork(x.config.project.id,id).status,'defining');
   const during=await x.detail(id);assert.equal(during.execution.basis,'definition_lease');assert.ok(during.activity.some(row=>row.kind==='definition.started'));
@@ -81,12 +81,12 @@ test('runtime fixture NDJSON exposes real durable analysis before its held model
   const actualResult=workTail(x.store,x.config.project.id,id).find(row=>row.kind==='supervisor.result');assert.equal(actualResult.metadata.status,run.state);assert.equal(actualResult.metadata.reason,run.reason);
   assert.equal(x.store.hermesState.prepare('SELECT COUNT(*) AS n FROM office_work_schedule WHERE work_id=?').get(id).n,0);
   assert.equal(ai.inputs.filter(call=>call.instructions.startsWith('Normalize the user')).length,0);
-  const repeated=await x.post('work/start',{request_id:'live-start',prompt:'Research ASTS daily',execute:true,cost_acknowledged:true});assert.equal(repeated.data.admission.deduplicated,true);assert.equal(repeated.data.admission.run_id,run.run_id);
+  const repeated=await x.post('work/start',{request_id:'live-start',prompt:'Research ACME daily',execute:true,cost_acknowledged:true});assert.equal(repeated.data.admission.deduplicated,true);assert.equal(repeated.data.admission.run_id,run.run_id);
   assert.equal(x.store.hermesState.prepare('SELECT COUNT(*) AS n FROM office_supervisor WHERE work_id=?').get(id).n,1);
 });
 
 test('runtime fixture guided work waits for answers, rejects stale answers, and explicitly admits after ready',async t=>{
-  const x=await fixture(t,{model:model({guided:true})}),first=await x.post('work/start',{request_id:'guided-live',prompt:'Research ASTS',intake_mode:'guided',execute:true,cost_acknowledged:true});
+  const x=await fixture(t,{model:model({guided:true})}),first=await x.post('work/start',{request_id:'guided-live',prompt:'Research ACME',intake_mode:'guided',execute:true,cost_acknowledged:true});
   assert.equal(first.data.definition_status,'awaiting_details');assert.equal(first.data.admission.accepted,false);assert.equal(supervisorStatus(x.store,x.config.project.id,first.data.work_id),null);
   const answer={work_id:first.data.work_id,revision:first.data.revision,answers:{format:'summary'},execute:true,cost_acknowledged:true};
   const denied=await x.post('work/answer',{...answer,cost_acknowledged:false});assert.equal(denied.response.status,409);assert.equal(x.store.intakeWork(x.config.project.id,answer.work_id).revision,answer.revision);
@@ -96,14 +96,14 @@ test('runtime fixture guided work waits for answers, rejects stale answers, and 
 });
 
 test('runtime fixture unavailable analysis persists Work and typed waiting activity without inventing an execution',async t=>{
-  const x=await fixture(t,{model:model({offline:true})}),result=await x.post('work/start',{request_id:'offline',prompt:'Research ASTS',execute:true,cost_acknowledged:true});
+  const x=await fixture(t,{model:model({offline:true})}),result=await x.post('work/start',{request_id:'offline',prompt:'Research ACME',execute:true,cost_acknowledged:true});
   assert.equal(result.response.status,200);assert.equal(result.data.definition_status,'needs_model');assert.equal(result.data.admission.accepted,false);
   const tail=workTail(x.store,x.config.project.id,result.data.work_id);assert.ok(tail.some(row=>row.kind==='definition.failed'&&row.metadata.reason==='MODEL_OR_DEFINITION_UNAVAILABLE'));assert.ok(tail.some(row=>row.kind==='dispatch.waiting'));
   assert.equal(supervisorStatus(x.store,x.config.project.id,result.data.work_id),null);
 });
 
 test('runtime fixture approved Start survives unavailable definition and retry admits its original run exactly once',async t=>{
-  const ai=model({offline:true}),x=await fixture(t,{model:ai}),first=await x.post('work/start',{request_id:'retry-approved',prompt:'Research ASTS',execute:true,cost_acknowledged:true});
+  const ai=model({offline:true}),x=await fixture(t,{model:ai}),first=await x.post('work/start',{request_id:'retry-approved',prompt:'Research ACME',execute:true,cost_acknowledged:true});
   assert.equal(first.data.definition_status,'needs_model');assert.equal(first.data.admission.accepted,false);
   assert.equal(workTail(x.store,x.config.project.id,first.data.work_id).filter(row=>row.kind==='dispatch.requested').length,1);
   ai.offline=false;const retry=await x.post('work/define',{work_id:first.data.work_id});
@@ -114,13 +114,13 @@ test('runtime fixture approved Start survives unavailable definition and retry a
 });
 
 test('runtime fixture definition-only retry stays passive for HTTP and MCP intake',async t=>{
-  const ai=model({offline:true}),x=await fixture(t,{model:ai}),http=await x.post('work/start',{request_id:'retry-passive-http',prompt:'Research ASTS'}),mcp=await x.runtime.start({request_id:'retry-passive-mcp',prompt:'Research ASTS'});
+  const ai=model({offline:true}),x=await fixture(t,{model:ai}),http=await x.post('work/start',{request_id:'retry-passive-http',prompt:'Research ACME'}),mcp=await x.runtime.start({request_id:'retry-passive-mcp',prompt:'Research ACME'});
   assert.equal(http.data.definition_status,'needs_model');assert.equal(mcp.definition_status,'needs_model');ai.offline=false;
   for(const id of [http.data.work_id,mcp.work_id]){const retry=await x.post('work/define',{work_id:id});assert.equal(retry.response.status,200);assert.equal(retry.data.definition_status,'ready');assert.equal(retry.data.admission.requested,false);assert.equal(supervisorStatus(x.store,x.config.project.id,id),null);}
 });
 
 test('runtime fixture retry preserves pause and disconnect boundaries despite an earlier approved Start',async t=>{
-  const ai=model({offline:true}),x=await fixture(t,{model:ai}),paused=await x.post('work/start',{request_id:'retry-paused',prompt:'Research ASTS',execute:true,cost_acknowledged:true}),disconnected=await x.post('work/start',{request_id:'retry-disconnected',prompt:'Research ASTS',execute:true,cost_acknowledged:true});
+  const ai=model({offline:true}),x=await fixture(t,{model:ai}),paused=await x.post('work/start',{request_id:'retry-paused',prompt:'Research ACME',execute:true,cost_acknowledged:true}),disconnected=await x.post('work/start',{request_id:'retry-disconnected',prompt:'Research ACME',execute:true,cost_acknowledged:true});
   const pause=await x.post('work/pause',{work_id:paused.data.work_id,revision:paused.data.revision,paused:true});assert.equal(pause.response.status,200);
   const life=readWorkLifecycle(x.store,x.config.project.id,disconnected.data.work_id);changeWorkLifecycle(x.store,x.config.project.id,{work_id:disconnected.data.work_id,revision:life.revision,work_revision:life.work_revision,action:'disconnect',confirmed:true});
   ai.offline=false;const retry=await x.post('work/define',{work_id:paused.data.work_id});assert.equal(retry.response.status,200);assert.equal(retry.data.admission.accepted,false);assert.equal(retry.data.admission.reason,'WORK_PAUSED');
@@ -131,7 +131,7 @@ test('runtime fixture retry preserves pause and disconnect boundaries despite an
 test('runtime fixture answer consent survives unavailable redefinition while passive answers do not authorize execution',async t=>{
   const ai=model({guided:true}),x=await fixture(t,{model:ai});
   for(const execute of [true,false]){
-    const first=await x.post('work/start',{request_id:execute?'retry-answer-approved':'retry-answer-passive',prompt:'Research ASTS',intake_mode:'guided',execute:false});assert.equal(first.data.definition_status,'awaiting_details');
+    const first=await x.post('work/start',{request_id:execute?'retry-answer-approved':'retry-answer-passive',prompt:'Research ACME',intake_mode:'guided',execute:false});assert.equal(first.data.definition_status,'awaiting_details');
     ai.offline=true;const answer=await x.post('work/answer',{work_id:first.data.work_id,revision:first.data.revision,answers:{format:'summary'},execute,cost_acknowledged:execute});assert.equal(answer.response.status,200);assert.equal(answer.data.definition_status,'needs_model');assert.equal(answer.data.admission.requested,execute);
     ai.offline=false;const retry=await x.post('work/define',{work_id:first.data.work_id});assert.equal(retry.response.status,200);assert.equal(retry.data.definition_status,'ready');assert.equal(retry.data.admission.requested,execute);
     if(execute){assert.equal(retry.data.admission.accepted,true);await settle(x,first.data.work_id);}else assert.equal(supervisorStatus(x.store,x.config.project.id,first.data.work_id),null);
@@ -140,7 +140,7 @@ test('runtime fixture answer consent survives unavailable redefinition while pas
 
 test('runtime fixture pause during real analysis preserves its lease and unique revisions but blocks the next execution',async t=>{
   let release;const gate=new Promise(resolve=>release=resolve),x=await fixture(t,{model:model({gate})});x.closers.push(()=>release());
-  const response=await fetch(x.cc.url+'work/start',{method:'POST',headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'pause-analysis',prompt:'Research ASTS',execute:true,cost_acknowledged:true})}),reader=response.body.getReader();
+  const response=await fetch(x.cc.url+'work/start',{method:'POST',headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'pause-analysis',prompt:'Research ACME',execute:true,cost_acknowledged:true})}),reader=response.body.getReader();
   const registered=JSON.parse(new TextDecoder().decode((await reader.read()).value).trim()),id=registered.work.work_id,before=x.store.intakeWork(x.config.project.id,id),hash=x.config.fingerprint;
   const paused=await x.post('work/pause',{work_id:id,revision:before.revision,paused:true});assert.equal(paused.response.status,200);assert.equal(paused.data.revision,1);
   const lease=x.store.hermesState.prepare('SELECT define_owner,define_lease_until_ms FROM office_intake WHERE work_id=?').get(id);assert.ok(lease.define_owner);assert.ok(lease.define_lease_until_ms>Date.now());
@@ -155,7 +155,7 @@ test('runtime fixture pause during real analysis preserves its lease and unique 
 
 test('runtime fixture early explicit resume preserves the live definition and the original start admits exactly one current run',async t=>{
   let release;const gate=new Promise(resolve=>release=resolve),x=await fixture(t,{model:model({gate})});x.closers.push(()=>release());
-  const response=await fetch(x.cc.url+'work/start',{method:'POST',headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'early-resume-analysis',prompt:'Research ASTS',execute:true,cost_acknowledged:true})}),reader=response.body.getReader(),registered=JSON.parse(new TextDecoder().decode((await reader.read()).value).trim()),id=registered.work.work_id;
+  const response=await fetch(x.cc.url+'work/start',{method:'POST',headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'early-resume-analysis',prompt:'Research ACME',execute:true,cost_acknowledged:true})}),reader=response.body.getReader(),registered=JSON.parse(new TextDecoder().decode((await reader.read()).value).trim()),id=registered.work.work_id;
   const paused=await x.post('work/pause',{work_id:id,revision:0,paused:true}),lease=x.store.hermesState.prepare('SELECT define_owner,define_lease_until_ms FROM office_intake WHERE work_id=?').get(id);
   const resumed=await x.post('work/pause',{work_id:id,revision:paused.data.revision,paused:false,execute:true,cost_acknowledged:true});assert.equal(resumed.response.status,200);assert.equal(resumed.data.admission.accepted,false);assert.equal(resumed.data.admission.state,'defining');assert.equal(resumed.data.admission.reason,'WORK_DEFINITION_IN_PROGRESS');assert.equal(resumed.data.revision,2);assert.equal(supervisorStatus(x.store,x.config.project.id,id),null);
   assert.deepEqual(x.store.hermesState.prepare('SELECT define_owner,define_lease_until_ms FROM office_intake WHERE work_id=?').get(id),lease);
@@ -164,7 +164,7 @@ test('runtime fixture early explicit resume preserves the live definition and th
 });
 
 test('runtime fixture resume allowance and stale revisions are checked before mutation while omitted execute retains passive pause compatibility',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-compat',prompt:'Research ASTS'});
+  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-compat',prompt:'Research ACME'});
   const contradictory=await x.post('work/pause',{work_id:work.work_id,revision:work.revision,paused:true,execute:true,cost_acknowledged:true});assert.equal(contradictory.response.status,409);assert.equal(contradictory.data.error,'WORK_RESUME_ACTION_REQUIRED');assert.equal(x.store.intakeWork(x.config.project.id,work.work_id).revision,work.revision);
   const paused=await x.post('work/pause',{work_id:work.work_id,revision:work.revision,paused:true});assert.equal(paused.data.scope,'future_dispatch');
   const unapproved=await x.post('work/pause',{work_id:work.work_id,revision:paused.data.revision,paused:false,execute:true});assert.equal(unapproved.response.status,409);assert.equal(unapproved.data.error,'WORK_MODEL_USAGE_CONSENT_REQUIRED');assert.equal(x.store.intakeWork(x.config.project.id,work.work_id).paused,true);assert.equal(x.store.intakeWork(x.config.project.id,work.work_id).revision,paused.data.revision);
@@ -173,14 +173,14 @@ test('runtime fixture resume allowance and stale revisions are checked before mu
 });
 
 test('runtime fixture explicit resume preserves configuration fences and reports the exact rejected current run',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-config',prompt:'Research ASTS'}),paused=x.store.setIntakePaused(x.config.project.id,work.work_id,work.revision,true),raw=JSON.parse(await readFile(x.path,'utf8'));raw.packs.confidence=.85;await writeFile(x.path,JSON.stringify(raw));
+  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-config',prompt:'Research ACME'}),paused=x.store.setIntakePaused(x.config.project.id,work.work_id,work.revision,true),raw=JSON.parse(await readFile(x.path,'utf8'));raw.packs.confidence=.85;await writeFile(x.path,JSON.stringify(raw));
   const current=loadHostConfig(x.path);assert.equal(current.packs.models,'off');assert.equal(current.packs.confidence,.85);assert.notEqual(current.fingerprint,x.config.fingerprint);
   const resumed=await x.post('work/pause',{work_id:work.work_id,revision:paused.revision,paused:false,execute:true,cost_acknowledged:true});assert.equal(resumed.response.status,200);assert.equal(resumed.data.admission.accepted,false);assert.equal(resumed.data.admission.reason,'CONFIG_CHANGED');assert.equal(supervisorStatus(x.store,x.config.project.id,work.work_id),null);assert.equal(x.ai.inputs.filter(call=>call.instructions.startsWith('Execute the registered Work')).length,0);
   assert.ok(workTail(x.store,x.config.project.id,work.work_id).some(row=>row.kind==='dispatch.rejected'&&row.metadata.reason==='CONFIG_CHANGED'));
 });
 
 test('runtime fixture explicit resume rejects an invalid unapproved model configuration as unavailable rather than a valid fingerprint change',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-invalid-config',prompt:'Research ASTS'}),paused=x.store.setIntakePaused(x.config.project.id,work.work_id,work.revision,true),raw=JSON.parse(await readFile(x.path,'utf8'));raw.packs.models='jev';await writeFile(x.path,JSON.stringify(raw));
+  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-invalid-config',prompt:'Research ACME'}),paused=x.store.setIntakePaused(x.config.project.id,work.work_id,work.revision,true),raw=JSON.parse(await readFile(x.path,'utf8'));raw.packs.models='jev';await writeFile(x.path,JSON.stringify(raw));
   assert.throws(()=>loadHostConfig(x.path),/MODEL_DATA_APPROVAL_REQUIRED/u);
   const resumed=await x.post('work/pause',{work_id:work.work_id,revision:paused.revision,paused:false,execute:true,cost_acknowledged:true});assert.equal(resumed.response.status,200);assert.equal(resumed.data.admission.accepted,false);assert.equal(resumed.data.admission.reason,'CONFIG_UNAVAILABLE');assert.equal(supervisorStatus(x.store,x.config.project.id,work.work_id),null);assert.equal(x.ai.inputs.filter(call=>call.instructions.startsWith('Execute the registered Work')).length,0);
   assert.ok(workTail(x.store,x.config.project.id,work.work_id).some(row=>row.kind==='dispatch.rejected'&&row.metadata.reason==='CONFIG_UNAVAILABLE'));
@@ -192,18 +192,18 @@ test('runtime fixture explicit resume never starts an attached original bot or i
 });
 
 test('runtime fixture explicit resume does not replace or replay an existing uncertain external effect',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-uncertain',prompt:'Research ASTS'}),paused=x.store.setIntakePaused(x.config.project.id,work.work_id,work.revision,true),run_id=randomUUID(),at=new Date().toISOString(),checkpoint=JSON.stringify({format:1,work_id:work.work_id,run_id,binding:'a'.repeat(64),turn:0,pending:{request_id:'prior-write',turn:0,stage_id:'write',tool_name:'runtime_windows_step',arguments:{},effect:'external_write',dispatched:true},observations:[],summary:'Uncertain prior external effect'});
+  const x=await fixture(t),work=await x.runtime.start({request_id:'resume-uncertain',prompt:'Research ACME'}),paused=x.store.setIntakePaused(x.config.project.id,work.work_id,work.revision,true),run_id=randomUUID(),at=new Date().toISOString(),checkpoint=JSON.stringify({format:1,work_id:work.work_id,run_id,binding:'a'.repeat(64),turn:0,pending:{request_id:'prior-write',turn:0,stage_id:'write',tool_name:'runtime_windows_step',arguments:{},effect:'external_write',dispatched:true},observations:[],summary:'Uncertain prior external effect'});
   x.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,checkpoint,config_hash,model_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(run_id,x.config.project.id,work.work_id,paused.revision,'reconciliation_required',checkpoint,x.config.fingerprint,0,at,at);
   const resumed=await x.post('work/pause',{work_id:work.work_id,revision:paused.revision,paused:false,execute:true,cost_acknowledged:true});assert.equal(resumed.response.status,200);assert.equal(resumed.data.admission.accepted,false);assert.equal(resumed.data.admission.deduplicated,true);assert.equal(resumed.data.admission.state,'reconciliation_required');assert.equal(resumed.data.admission.run_id,run_id);assert.equal(x.store.hermesState.prepare('SELECT checkpoint FROM office_supervisor WHERE run_id=?').get(run_id).checkpoint,checkpoint);assert.equal(x.store.hermesState.prepare('SELECT COUNT(*) AS n FROM office_supervisor WHERE work_id=?').get(work.work_id).n,1);assert.equal(x.ai.inputs.filter(call=>call.instructions.startsWith('Execute the registered Work')).length,0);
 });
 
 test('runtime fixture explicit resume during registration-only analysis reports waiting without promising an absent auto-start callback',async t=>{
-  let release;const gate=new Promise(resolve=>release=resolve),x=await fixture(t,{model:model({gate})});x.closers.push(()=>release());const registration=x.runtime.start({request_id:'registered-analysis-resume',prompt:'Research ASTS'}),work=x.store.intakeWorks(x.config.project.id)[0],paused=await x.post('work/pause',{work_id:work.id,revision:work.revision,paused:true});
+  let release;const gate=new Promise(resolve=>release=resolve),x=await fixture(t,{model:model({gate})});x.closers.push(()=>release());const registration=x.runtime.start({request_id:'registered-analysis-resume',prompt:'Research ACME'}),work=x.store.intakeWorks(x.config.project.id)[0],paused=await x.post('work/pause',{work_id:work.id,revision:work.revision,paused:true});
   const resumed=await x.post('work/pause',{work_id:work.id,revision:paused.data.revision,paused:false,execute:true,cost_acknowledged:true});assert.equal(resumed.response.status,200);assert.equal(resumed.data.admission.state,'defining');assert.equal(resumed.data.admission.accepted,false);assert.equal(resumed.data.admission.reason,'WORK_DEFINITION_IN_PROGRESS');release();const ready=await registration;assert.equal(ready.definition_status,'ready');assert.equal(ready.paused,false);assert.equal(supervisorStatus(x.store,x.config.project.id,work.id),null);assert.equal(x.ai.inputs.filter(call=>call.instructions.startsWith('Execute the registered Work')).length,0);
 });
 
 test('runtime fixture separately opted-in recurring admission still prepares its approved schedule',async t=>{
-  const x=await fixture(t,{model:model({definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})})}),work=await x.runtime.start({request_id:'recurring-explicit',prompt:'Research ASTS daily'});
+  const x=await fixture(t,{model:model({definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})})}),work=await x.runtime.start({request_id:'recurring-explicit',prompt:'Research ACME daily'});
   const admitted=await x.post('work/execute',{work_id:work.work_id,revision:work.revision,cost_acknowledged:true,current_run_only:false,timezone:'UTC'});assert.equal(admitted.response.status,202);assert.equal(admitted.data.accepted,true);
   const run=await settle(x,work.work_id);assert.equal(run.current_run_only,false);assert.equal(x.store.hermesState.prepare('SELECT state FROM office_work_schedule WHERE work_id=?').get(work.work_id).state,'enabled');
   assert.equal(x.ai.inputs.filter(call=>call.instructions.startsWith('Normalize the user')).length,1);
@@ -211,7 +211,7 @@ test('runtime fixture separately opted-in recurring admission still prepares its
 
 test('runtime fixture HTTP execute and direct supervisor omit schedule opt-in and run only the current cycle',async t=>{
   for(const entry of ['http','supervisor']){
-    const x=await fixture(t,{model:model({definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})})}),work=await x.runtime.start({request_id:'recurring-default-'+entry,prompt:'Research ASTS daily'});
+    const x=await fixture(t,{model:model({definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})})}),work=await x.runtime.start({request_id:'recurring-default-'+entry,prompt:'Research ACME daily'});
     if(entry==='http'){const admitted=await x.post('work/execute',{work_id:work.work_id,revision:work.revision,cost_acknowledged:true,timezone:'UTC'});assert.equal(admitted.response.status,202);assert.equal(admitted.data.current_run_only,true);}
     else{const supervisor=new WorkSupervisor(x.store,x.config,x.ai);x.closers.push(()=>supervisor.close());assert.equal(supervisor.start(work.work_id,work.revision,true,'UTC').current_run_only,true);}
     const run=await settle(x,work.work_id);assert.equal(run.current_run_only,true);assert.equal(x.store.hermesState.prepare('SELECT COUNT(*) AS n FROM office_work_schedule WHERE work_id=?').get(work.work_id).n,0);assert.equal(x.ai.inputs.filter(call=>call.instructions.startsWith('Normalize the user')).length,0);
@@ -219,7 +219,7 @@ test('runtime fixture HTTP execute and direct supervisor omit schedule opt-in an
 });
 
 test('runtime fixture saved browser config drift disables start and persists the exact rejection without removing the fence',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'config-drift',prompt:'Research ASTS'}),raw=JSON.parse(await readFile(x.path,'utf8'));
+  const x=await fixture(t),work=await x.runtime.start({request_id:'config-drift',prompt:'Research ACME'}),raw=JSON.parse(await readFile(x.path,'utf8'));
   raw.browser_executors={targets:[{id:'playwright',engine:'playwright',environment:'owned_headless',profile_ref:'default',platform:process.platform}]};await writeFile(x.path,JSON.stringify(raw));
   const before=await x.detail(work.work_id);assert.equal(before.execution_action.can_execute,false);assert.equal(before.execution_action.reason,'CONFIG_CHANGED');
   const result=await x.post('work/execute',{work_id:work.work_id,revision:work.revision,cost_acknowledged:true,current_run_only:true});assert.equal(result.response.status,409);assert.equal(result.data.error,'CONFIG_CHANGED');
@@ -228,7 +228,7 @@ test('runtime fixture saved browser config drift disables start and persists the
 });
 
 test('runtime contract reload gates preserve queued work and uncertain or malformed durable effects',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'reload-checkpoints',prompt:'Research ASTS'}),s=new WorkSupervisor(x.store,x.config,x.ai,{auto_start:false});x.closers.push(()=>s.close());
+  const x=await fixture(t),work=await x.runtime.start({request_id:'reload-checkpoints',prompt:'Research ACME'}),s=new WorkSupervisor(x.store,x.config,x.ai,{auto_start:false});x.closers.push(()=>s.close());
   const started=s.start(work.work_id,work.revision,true,undefined,true);assert.equal(controlCenterReloadBlockedReason(x.store,x.config.project.id),'WORK_EXECUTION_ACTIVE');
   x.store.hermesState.prepare("UPDATE office_supervisor SET state='paused',checkpoint=? WHERE run_id=?").run(JSON.stringify({pending:{dispatched:true,effect:'external_write'}}),started.run_id);assert.equal(controlCenterReloadBlockedReason(x.store,x.config.project.id),'WORK_RECONCILIATION_REQUIRED');
   x.store.hermesState.prepare('UPDATE office_supervisor SET checkpoint=? WHERE run_id=?').run('{malformed',started.run_id);assert.equal(controlCenterReloadBlockedReason(x.store,x.config.project.id),'WORK_RECONCILIATION_REQUIRED');
@@ -236,7 +236,7 @@ test('runtime contract reload gates preserve queued work and uncertain or malfor
 });
 
 test('runtime fixture reload callback runs only after accepted response and fresh-listener mutations stay fenced during apply',async t=>{
-  let called=0,state='idle';const x=await fixture(t,{onReload:async()=>{called++;state='reloading';},reloadStatus:()=>({state,reason:null})}),work=await x.runtime.start({request_id:'reload-idle',prompt:'Research ASTS'});
+  let called=0,state='idle';const x=await fixture(t,{onReload:async()=>{called++;state='reloading';},reloadStatus:()=>({state,reason:null})}),work=await x.runtime.start({request_id:'reload-idle',prompt:'Research ACME'});
   const before=await x.detail(work.work_id);assert.equal(before.runtime_reload_available,true);
   const denied=await fetch(x.cc.url+'work/reconnect',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});assert.equal(denied.status,403);assert.equal(called,0);
   const accepted=await x.post('work/reconnect',{work_id:work.work_id});assert.equal(accepted.response.status,202);assert.equal(accepted.data.execution_started,false);
@@ -250,7 +250,7 @@ test('runtime fixture reload callback runs only after accepted response and fres
 
 test('runtime fixture disconnected pending analysis still blocks reload after its durable lease expires',async t=>{
   let release;const gate=new Promise(resolve=>release=resolve),x=await fixture(t,{model:model({gate}),onReload:async()=>assert.fail('reload must not interrupt analysis')}),abort=new AbortController();x.closers.push(()=>release());
-  const response=await fetch(x.cc.url+'work/start',{method:'POST',signal:abort.signal,headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'disconnected-analysis',prompt:'Research ASTS',execute:true,cost_acknowledged:true})});
+  const response=await fetch(x.cc.url+'work/start',{method:'POST',signal:abort.signal,headers:{...x.headers,accept:'application/x-ndjson'},body:JSON.stringify({request_id:'disconnected-analysis',prompt:'Research ACME',execute:true,cost_acknowledged:true})});
   const reader=response.body.getReader(),registered=JSON.parse(new TextDecoder().decode((await reader.read()).value).trim());abort.abort();await reader.cancel().catch(()=>{});
   x.store.hermesState.prepare('UPDATE office_intake SET define_lease_until_ms=0 WHERE work_id=?').run(registered.work.work_id);
   const blocked=await x.post('work/reconnect',{});assert.equal(blocked.response.status,409);assert.equal(blocked.data.error,'MANAGEMENT_ACTION_IN_PROGRESS');
@@ -258,7 +258,7 @@ test('runtime fixture disconnected pending analysis still blocks reload after it
 });
 
 test('runtime contract public source activity is bounded, credential-free and distinct from planned routing',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'activity-meta',prompt:'Research ASTS'}),at=new Date().toISOString();
+  const x=await fixture(t),work=await x.runtime.start({request_id:'activity-meta',prompt:'Research ACME'}),at=new Date().toISOString();
   workActivity(x.store,x.config.project.id,work.work_id,'source.observed','Actual observation',{worker_id:'real-worker',tool_name:'office_browser_read',source:{url:'https://example.org/article?token=do-not-expose',title:'Observed',observed_at:at}});
   workActivity(x.store,x.config.project.id,work.work_id,'definition.route','Planned route only',{route_kind:'pack',pack_family:'research.search',status:'planned'});
   workActivity(x.store,x.config.project.id,work.work_id,'unsafe.metadata','No arguments allowed',{arguments:{password:'secret'}});
@@ -267,19 +267,19 @@ test('runtime contract public source activity is bounded, credential-free and di
 });
 
 test('runtime fixture topic-only public search uses the real routed DOM contract, records observed links and rejects secrets and private targets',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'topic-only',prompt:'Research ASTS articles'}),events=[],observed_at=new Date().toISOString();let current='';
+  const x=await fixture(t),work=await x.runtime.start({request_id:'topic-only',prompt:'Research ACME articles'}),events=[],observed_at=new Date().toISOString();let current='';
   const toolkit=new WorkExecutionTools(x.store,x.config,{call:async()=>assert.fail('browser search must use its router')},work.work_id,randomUUID(),work.spec,work.prompt,()=>{},x.ai,{browserFactory:target=>({target,probe:async()=>events.push('probe'),open:async url=>{current=url;events.push('open');},navigate:async url=>{current=url;events.push('navigate');},observe:async()=>({url:current,title:current.startsWith('https://www.google.com/search')?'Observed search':'Observed article',text:'Actual fixture DOM only',links:[{text:'Article',url:'https://example.org/observed-article'},{text:'Private',url:'https://127.0.0.1/private'},{text:'Secret',url:'https://example.org/?token=private'},{text:'Private hostname',url:'https://vault.internal/private'},{text:'Session credential',url:'https://example.org/?session_id=private'}],observed_at}),extract:async()=>[],scroll:async()=>{},close:async()=>{}})});x.closers.push(()=>toolkit.close());
   assert.equal(toolkit.catalog().find(tool=>tool.name==='office_web_search').effect,'read_only');assert.deepEqual((await toolkit.execute('office_browser_links',{},'empty')).urls,[]);
   for(const query of ['apikey_abcdefghijklmnopqrstuvwxyz','http://127.0.0.1/private','Bearer abcdefghijklmnopqrstuvwxyz','https://app.localhost/private','https://2130706433/private','https://public.example/?access_token=private','https://public.example/#secret=private','https://user:password@public.example/','https://public.example/?session_id=private','https://public.example/?auth=private','cookie=private'])await assert.rejects(toolkit.execute('office_web_search',{query},'forbidden'));
-  assert.deepEqual(events,[]);await assert.rejects(toolkit.execute('office_web_search',{query:'ASTS',url:'https://arbitrary.invalid'},'bad-shape'));
-  const result=await toolkit.execute('office_web_search',{query:'ASTS latest articles'},'search');assert.equal(new URL(result.requested_url).origin,'https://www.bing.com','No foreground browser is registered, so the host default is the provider that answers a background browser.');assert.equal(new URL(result.requested_url).pathname,'/search');assert.equal(new URL(result.requested_url).searchParams.get('q'),'ASTS latest articles');assert.equal(result.provenance,'live_browser_dom');assert.equal(result.text,'Actual fixture DOM only');
+  assert.deepEqual(events,[]);await assert.rejects(toolkit.execute('office_web_search',{query:'ACME',url:'https://arbitrary.invalid'},'bad-shape'));
+  const result=await toolkit.execute('office_web_search',{query:'ACME latest articles'},'search');assert.equal(new URL(result.requested_url).origin,'https://www.bing.com','No foreground browser is registered, so the host default is the provider that answers a background browser.');assert.equal(new URL(result.requested_url).pathname,'/search');assert.equal(new URL(result.requested_url).searchParams.get('q'),'ACME latest articles');assert.equal(result.provenance,'live_browser_dom');assert.equal(result.text,'Actual fixture DOM only');
   const links=await toolkit.execute('office_browser_links',{},'links');assert.ok(links.urls.includes('https://example.org/observed-article'));assert.ok(!links.urls.includes('https://127.0.0.1/private'));assert.ok(!links.urls.includes('https://example.org/?token=private'));assert.ok(!links.urls.includes('https://vault.internal/private'));assert.ok(!links.urls.includes('https://example.org/?session_id=private'));
   assert.equal(toolkit.validate('office_browser_read',{url:'https://example.org/never-observed'},'proposed').url,'https://example.org/never-observed','A public https page may be opened as a recorded model proposal.');await assert.rejects(toolkit.execute('office_browser_read',{url:'http://example.org/never-observed'},'invented'),/BROWSER_URL_NOT_OBSERVED/u);await toolkit.execute('office_browser_read',{url:'https://example.org/observed-article'},'observed');
   const sources=workTail(x.store,x.config.project.id,work.work_id).filter(row=>row.kind==='source.observed');assert.equal(sources.length,2);assert.equal(sources[0].metadata.source.observed_at,observed_at);assert.equal(sources[0].metadata.tool_name,'office_web_search');assert.equal(sources[1].metadata.tool_name,'office_browser_read');assert.equal((await toolkit.receipt('office_web_search',result,'search')).effect_state,'none');
 });
 
 test('runtime fixture readiness rebind fences already-authorized due schedules until fresh configuration is ready',async t=>{
-  const x=await fixture(t,{model:model({definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})})}),work=await x.runtime.start({request_id:'due-after-apply',prompt:'Research ASTS daily'});await x.cc.close();
+  const x=await fixture(t,{model:model({definition:proposal({recurrence:{kind:'recurring',rule:'Daily at 20:00 UTC'}})})}),work=await x.runtime.start({request_id:'due-after-apply',prompt:'Research ACME daily'});await x.cc.close();
   const previous=new WorkSupervisor(x.store,x.config,x.ai,{auto_start:false}),at=new Date().toISOString();x.closers.push(()=>previous.close());
   x.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,config_hash,model_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),x.config.project.id,work.work_id,work.revision,'failed',x.config.fingerprint,0,at,at);
   // Advance a genuinely authorized past daily schedule. Setting only next_run_ms
@@ -295,8 +295,8 @@ test('runtime fixture readiness rebind fences already-authorized due schedules u
 });
 
 test('runtime fixture browser continuity restores only exact observed links from this Work/run successful read-only receipts',async t=>{
-  const x=await fixture(t),work=await x.runtime.start({request_id:'restored-browser-urls',prompt:'Research ASTS'}),run=randomUUID(),observed_at=new Date().toISOString(),value={url:'https://www.google.com/search?q=ASTS',title:'Actual search',text:'Actual source list',links:[{text:'Article',url:'https://example.org/observed'},{text:'Private',url:'https://127.0.0.1/private'},{text:'Token',url:'https://example.org/?access_token=private'}],observed_at,requested_url:'https://www.google.com/search?q=ASTS',provenance:'live_browser_dom',effect:'read_only'};
-  const receipt={status:'succeeded',value,evidence_ids:['observed-search'],effect_state:'none',retry_safe:true},invocation={request_id:'observed-search',turn:0,stage_id:'search',tool_name:'office_web_search',arguments:{query:'ASTS'},effect:'read_only',dispatched:true},checkpoint={format:1,work_id:work.work_id,run_id:run,binding:'a'.repeat(64),turn:1,pending:null,observations:[{invocation,receipt,observed_at}],summary:'Observed only'};
+  const x=await fixture(t),work=await x.runtime.start({request_id:'restored-browser-urls',prompt:'Research ACME'}),run=randomUUID(),observed_at=new Date().toISOString(),value={url:'https://www.google.com/search?q=ACME',title:'Actual search',text:'Actual source list',links:[{text:'Article',url:'https://example.org/observed'},{text:'Private',url:'https://127.0.0.1/private'},{text:'Token',url:'https://example.org/?access_token=private'}],observed_at,requested_url:'https://www.google.com/search?q=ACME',provenance:'live_browser_dom',effect:'read_only'};
+  const receipt={status:'succeeded',value,evidence_ids:['observed-search'],effect_state:'none',retry_safe:true},invocation={request_id:'observed-search',turn:0,stage_id:'search',tool_name:'office_web_search',arguments:{query:'ACME'},effect:'read_only',dispatched:true},checkpoint={format:1,work_id:work.work_id,run_id:run,binding:'a'.repeat(64),turn:1,pending:null,observations:[{invocation,receipt,observed_at}],summary:'Observed only'};
   x.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,checkpoint,config_hash,model_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(run,x.config.project.id,work.work_id,work.revision,'paused',JSON.stringify(checkpoint),x.config.fingerprint,0,observed_at,observed_at);
   const create=runId=>new WorkExecutionTools(x.store,x.config,{call:async()=>assert.fail('URL inventory never executes an API')},work.work_id,runId,work.spec,work.prompt,()=>{},x.ai),same=create(run);x.closers.push(()=>same.close());
   const inventory=await same.execute('office_browser_links',{},'restored');assert.ok(inventory.urls.includes(value.url));assert.ok(inventory.urls.includes('https://example.org/observed'));assert.ok(!inventory.urls.includes('https://127.0.0.1/private'));assert.ok(!inventory.urls.includes('https://example.org/?access_token=private'));

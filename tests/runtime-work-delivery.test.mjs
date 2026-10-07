@@ -164,7 +164,7 @@ test('telegram sends the result pictures after the text, one sendPhoto each, and
   const calls=[];const transport=async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify(/sendPhoto$/u.test(url)?{ok:true,result:{message_id:43,chat:{id:-1001234567890}}}:{ok:true,result:{message_id:42,chat:{id:-1001234567890}}}),{status:200});};
   const connector=createDeliveryConnector(telegram,transport);
   const png=Buffer.from([0x89,0x50,0x4e,0x47,1,2,3]);
-  const outcome=await connector.send({result:{id:'r1',work_title:'파생상품 사례',summary:'5세트',text:'해설 본문',artifacts:[],sources:[]},target_alias:'updates',idempotency_key:'k1',images:[{name:'01_레버리지.png',media_type:'image/png',bytes:png},{name:'02_증거금.png',media_type:'image/png',bytes:png}]});
+  const outcome=await connector.send({result:{id:'r1',work_title:'시세 차트 사례',summary:'5세트',text:'해설 본문',artifacts:[],sources:[]},target_alias:'updates',idempotency_key:'k1',images:[{name:'01_레버리지.png',media_type:'image/png',bytes:png},{name:'02_증거금.png',media_type:'image/png',bytes:png}]});
   assert.equal(outcome.status,'delivered');assert.match(outcome.receipt_id,/:photos:2\/2$/u);
   assert.match(calls[0].url,/sendMessage$/u);assert.match(calls[1].url,/sendPhoto$/u);assert.match(calls[2].url,/sendPhoto$/u);
   assert.ok(calls[1].options.body instanceof FormData);assert.equal(calls[1].options.body.get('caption'),'01_레버리지.png');assert.equal(calls[1].options.redirect,'error');
@@ -174,7 +174,7 @@ test('telegram sends the result pictures after the text, one sendPhoto each, and
 // Live 2026-10-03: the owner's Telegram got file lists and check notes instead of the five explanations they asked for.
 test('a result that carries the owner message is delivered as that message only',async()=>{
   const {deliveryContent}=await import('../dist/work/delivery-connectors.js');
-  const result={id:'r-2',work_title:'파생상품 교육자료',source_status:'succeeded',work_completion_verified:true,summary:'case-1.png 과 해설을 만들었습니다. 파일: a, b, c. 완료조건 충족.',text:'Files made in this run (Work folder):\n- a.png\n- b.txt',delivery_text:'## 1. 레버리지\n증거금 10%로 …\n\n## 2. 추가 증거금\n하루 1% 변동이 …',artifacts:[{id:'a'}]};
-  assert.equal(deliveryContent(result),'파생상품 교육자료\n[완료] 검증을 통과했습니다.\n\n## 1. 레버리지\n증거금 10%로 …\n\n## 2. 추가 증거금\n하루 1% 변동이 …\n\nWork result r-2');
+  const result={id:'r-2',work_title:'시세 차트 교육자료',source_status:'succeeded',work_completion_verified:true,summary:'case-1.png 과 해설을 만들었습니다. 파일: a, b, c. 완료조건 충족.',text:'Files made in this run (Work folder):\n- a.png\n- b.txt',delivery_text:'## 1. 레버리지\n증거금 10%로 …\n\n## 2. 추가 증거금\n하루 1% 변동이 …',artifacts:[{id:'a'}]};
+  assert.equal(deliveryContent(result),'시세 차트 교육자료\n[완료] 검증을 통과했습니다.\n\n## 1. 레버리지\n증거금 10%로 …\n\n## 2. 추가 증거금\n하루 1% 변동이 …\n\nWork result r-2');
   const long={...result,delivery_text:'가'.repeat(5000)},cut=deliveryContent(long);assert.ok([...cut].length<=4000);assert.match(cut,/전체 내용은 앱에서/u);assert.doesNotMatch(cut,/Files made/u);
 });

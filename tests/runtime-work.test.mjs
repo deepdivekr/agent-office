@@ -42,15 +42,15 @@ test('the planner gets its earlier questions with the answers; an option can ask
   const guided=await x.api.call('runtime_work_start',{request_id:'guided-stock',prompt:'종목 반응을 매일 알려줘',intake_mode:'guided'});
   assert.equal(guided.questions[0].options[0].detail,'종목명 또는 티커','The hint for the typed value reaches the UI.');
   assert.equal(inputs[0].input.answered_questions,undefined);assert.match(JSON.stringify(inputs[0].input.host_execution_facts),/sets detail to a short hint/u);
-  const answered=await x.api.call('runtime_work_answer',{work_id:guided.work_id,revision:guided.revision,answers:{stocks:'one: ASTS'}});
+  const answered=await x.api.call('runtime_work_answer',{work_id:guided.work_id,revision:guided.revision,answers:{stocks:'one: ACME'}});
   assert.equal(answered.status,'ready');
-  assert.deepEqual(inputs[1].input.answered_questions,[{id:'stocks',question:'어느 종목을 추적할까요?',answer:{chosen:'한 종목',meaning:'한 종목만 추적한다',typed:'ASTS'}}]);
+  assert.deepEqual(inputs[1].input.answered_questions,[{id:'stocks',question:'어느 종목을 추적할까요?',answer:{chosen:'한 종목',meaning:'한 종목만 추적한다',typed:'ACME'}}]);
   const plain=await x.api.call('runtime_work_start',{request_id:'guided-stock-2',prompt:'종목 반응을 매주 알려줘',intake_mode:'guided'});
   await x.api.call('runtime_work_answer',{work_id:plain.work_id,revision:plain.revision,answers:{stocks:'holdings'}});
   assert.deepEqual(inputs.at(-1).input.answered_questions[0].answer,{chosen:'보유 종목 전체',meaning:'등록된 보유 종목을 모두 추적한다'});
   const custom=await x.api.call('runtime_work_start',{request_id:'guided-stock-3',prompt:'종목 반응을 매월 알려줘',intake_mode:'guided'});
-  await x.api.call('runtime_work_answer',{work_id:custom.work_id,revision:custom.revision,answers:{stocks:'RKLB와 ASTS 둘 다'}});
-  assert.deepEqual(inputs.at(-1).input.answered_questions[0].answer,{typed:'RKLB와 ASTS 둘 다'});
+  await x.api.call('runtime_work_answer',{work_id:custom.work_id,revision:custom.revision,answers:{stocks:'RKLB와 ACME 둘 다'}});
+  assert.deepEqual(inputs.at(-1).input.answered_questions[0].answer,{typed:'RKLB와 ACME 둘 다'});
 });
 // Owner direction 2026-10-02: the intake planner keeps one conversation per Work.
 test('every intake round of a Work goes to the same planner session; another Work gets its own',async t=>{
