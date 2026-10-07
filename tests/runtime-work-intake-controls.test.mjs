@@ -18,6 +18,8 @@ test('runtime fixture intake chooses the AI with pills, the model from a short l
   const page=await browser.newPage({viewport:{width:1280,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));
   await page.route('**/settings/models',route=>route.fulfill({json:models}));
+  // Same starting point on every machine: no installed default app is pinned, so the owner's saved defaults fill the choice.
+  await page.route('**/work/client-default',route=>route.fulfill({json:{client:null}}));
   let started=null;await page.route('**/work/start',route=>{started=JSON.parse(route.request().postData());route.fulfill({status:409,json:{error:'FIXTURE_STOP'}});});
   await page.goto(server.url);await page.locator('#work-client + .segsel label',{hasText:'Codex'}).waitFor();
   // Without an installed default app the host adds "your default app" first; the pills are the choice either way. Pick Codex explicitly so the model list fills on any machine.
@@ -26,7 +28,7 @@ test('runtime fixture intake chooses the AI with pills, the model from a short l
   assert.equal(await page.locator('#work-effort + .segsel').count(),0,'effort is not a pill row');
   const range=page.locator('#work-effort-range'),ticks=page.locator('#work-effort-ticks span');
   assert.equal(await range.getAttribute('max'),'4');assert.deepEqual(await ticks.allTextContents(),['앱 기본값','low','medium','high','xhigh']);
-  assert.equal(await range.inputValue(),'0');assert.equal(await page.locator('#work-effort').inputValue(),'');
+  assert.equal(await range.inputValue(),String(await page.locator('#work-effort').evaluate(s=>s.selectedIndex)),'the slider starts where the saved default is');
   await range.fill('3');
   assert.equal(await page.locator('#work-effort').inputValue(),'high','the slider writes the hidden select');
   assert.equal(await page.locator('#work-effort-ticks span[data-on]').textContent(),'high');
