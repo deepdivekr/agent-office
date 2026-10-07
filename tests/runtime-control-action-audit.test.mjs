@@ -192,23 +192,3 @@ test('runtime fixture site-login UI enables only configured actions, dispatches 
   assert.equal(await x.page.getByRole('button',{name:'재시도 허용',exact:true}).isDisabled(),true);
 });
 
-test('runtime fixture site-login defaults to a connected Windows Aside while preserving an explicit VM choice',async t=>{
-  const x=await setup(t,{calls:[],async call(){return spec;}});
-  await x.page.route('**/connections/status',r=>r.fulfill({json:{
-    sites:[{site:'x.com',label:'X',state:'ready',handoff:false,profiles:{
-      'fixture-vm':{site:'x.com',state:'ready',handoff:false},
-      'fixture-aside':{site:'x.com',state:'needs_login',handoff:false},
-    }}],
-    targets:[
-      {id:'fixture-vm',environment:'ubuntu',engine:'playwright',label:'Ubuntu · Playwright',availability:'ready'},
-      {id:'fixture-aside',environment:'windows',engine:'aside',label:'Windows · Aside',availability:'ready'},
-      {id:'',environment:'windows_vm',engine:null,label:'Windows VM',availability:'unsupported'},
-    ],vm_state:'running',busy:false,
-  }}));
-  await x.page.goto(x.server.url+'connections');
-  const choice=x.page.locator('[data-site="x.com"]').getByRole('combobox',{name:'로그인 브라우저'});await choice.waitFor();
-  assert.equal(await choice.inputValue(),'fixture-aside','A connected Aside wins even when the VM has an older ready observation');
-  await choice.selectOption('fixture-vm');
-  await x.page.evaluate(()=>refresh());
-  assert.equal(await choice.inputValue(),'fixture-vm','An explicit user choice remains selected');
-});

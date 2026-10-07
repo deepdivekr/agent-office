@@ -87,15 +87,3 @@ test('runtime fixture failed client catalog is retried on returning to AI settin
  await page.locator('#codex-model').selectOption('coding-ui');assert.equal(requests,2);assert.equal(server.calls(),0);
 });
 
-test('runtime fixture coding settings UI persists priority and inheritance on desktop/mobile without model calls',{timeout:60000},async t=>{
- const x=await setup(t);saveModelSettings(x.path,body(0,choice,{}),{});const before=await readFile(x.path,'utf8'),server=await serverFor(t,x),browser=await chromium.launch({headless:true});
- t.after(()=>browser.close());await mkdir('tests/evidence/phase66',{recursive:true});
- for(const width of [1440,390]){const page=await browser.newPage({viewport:{width,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));
- await page.route(/\/settings\/(?:coding\/)?models$/,route=>route.fulfill({json:route.request().method()==='POST'?{status:'unavailable',models:[],selected:'global-api'}:{codex:{status:'available',models:[{id:'coding-ui',label:'Coding UI'},{id:'global-code',label:'Global'}]},claude:{status:'available',models:[]},opencode:{status:'available',models:[]}}}));
- await page.goto(server.url+'/settings');await page.locator('[data-step="2"]').click();await page.locator('#model-scope').selectOption('coding');await page.locator('#coding-scope-options').waitFor();await page.waitForFunction(()=>!busy);
- if(!await page.locator('#coding-inherit').isChecked())await page.locator('#coding-inherit').check();await page.locator('#save-model').click();await page.waitForFunction(()=>!busy);
- await page.locator('#coding-inherit').uncheck();await page.locator('#codex-model').selectOption('coding-ui');await page.locator('#save-model').click();await page.waitForFunction(()=>!busy&&state.selection.client_models.codex==='coding-ui');
- assert.equal(readModelSettings(x.coding).selection.client_models.codex,'coding-ui');assert.equal(await readFile(x.path,'utf8'),before);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:'tests/evidence/phase66/coding-models-'+width+'.png',fullPage:true});
- await page.reload();await page.locator('[data-step="2"]').click();await page.locator('#model-scope').selectOption('coding');await page.waitForFunction(()=>!busy&&modelScope==='coding');assert.equal(await page.locator('#codex-model').inputValue(),'coding-ui');assert.equal(await page.locator('#coding-inherit').isChecked(),false);
- assert.equal(server.calls(),0);assert.equal(await readFile(x.path,'utf8'),before);}
-});

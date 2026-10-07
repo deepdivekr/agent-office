@@ -84,15 +84,13 @@ function uiData(){return {
   targets:[
     {id:'aside',environment:'windows',engine:'aside',label:'Windows · Aside',availability:'ready',profile_preserved:true,session_mode:'external',can_enable_profile:false},
     {id:'playwright',environment:'owned_headless',engine:'playwright',label:'WSL · Playwright',availability:'profile_setup_required',profile_preserved:false,session_mode:'isolated',can_enable_profile:true,reason:'AUTH_PERSISTENT_PROFILE_REQUIRED'},
-    {id:'ubuntu',environment:'ubuntu',engine:'playwright',label:'Ubuntu VM · Playwright',availability:'stopped',profile_preserved:true,session_mode:'external',can_enable_profile:false},
-    {id:'windows-vm',environment:'windows_vm',engine:'playwright',label:'Windows VM · Playwright',availability:'unsupported',profile_preserved:false,session_mode:null,can_enable_profile:false},
   ],configuration_revision:'a'.repeat(64),restart_required:false,runtime_reload_available:true,vm_state:'stopped',busy:false,
 };}
 
 async function uiFixture(t,{width=1280,language='ko',restricted=false,finishRace=false,heldGuest=false}={}){
   const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width,height:1000}}),data=uiData(),posts=[],errors=[];let pendingMode=null;
-  if(heldGuest)data.sites[0].profiles.ubuntu={state:'unknown',handoff:true,updated_at:'2026-09-30T00:00:00.000Z'};
+  if(heldGuest)data.sites[0].profiles.playwright={state:'unknown',handoff:true,updated_at:'2026-09-30T00:00:00.000Z'};
   if(restricted){data.sites[0].site='x.com';data.sites[0].label='X';data.sites[0].state='login_limited';data.sites[0].automatic_verification=true;data.sites[0].profiles.aside.state='login_limited';}
   page.on('pageerror',error=>errors.push(error.message));
   await page.addInitScript(language=>localStorage.setItem('office-lang',language),language);
@@ -118,12 +116,12 @@ async function uiFixture(t,{width=1280,language='ko',restricted=false,finishRace
 
 test('runtime fixture prelogin exposes an existing guest login hold without clearing it',async t=>{
   const {page,posts,errors}=await uiFixture(t,{heldGuest:true}),card=page.locator('[data-site="google.com"]');
-  assert.equal(await card.getByRole('combobox').inputValue(),'ubuntu');
+  assert.equal(await card.getByRole('combobox').inputValue(),'playwright');
   assert.equal(await card.getByRole('button',{name:'로그인 마침',exact:true}).isEnabled(),true);
   assert.deepEqual(posts,[]);
   await card.getByRole('button',{name:'로그인 마침',exact:true}).click();
   await page.getByRole('status').filter({hasText:'로그인 대기를 해제했어요.'}).waitFor();
-  assert.equal(posts[0].path,'/connections/finish/google.com/ubuntu');
+  assert.equal(posts[0].path,'/connections/finish/google.com/playwright');
   assert.deepEqual(errors,[]);
 });
 
@@ -164,7 +162,7 @@ test('runtime fixture restricted site offers explicit same-environment recheck w
   const {page,posts,errors}=await uiFixture(t,{restricted:true}),card=page.locator('[data-site="x.com"]');
   assert.equal(await card.getByRole('button',{name:'로그인 창 열기',exact:true}).isDisabled(),true);
   assert.equal(await card.getByRole('button',{name:'재시도 허용',exact:true}).isDisabled(),true);
-  await card.locator('.browser-choice').selectOption('ubuntu');
+  await card.locator('.browser-choice').selectOption('playwright');
   await page.waitForFunction(()=>!document.querySelector('[data-site="x.com"]').textContent.includes('직접 다시 확인'));
   await card.locator('.browser-choice').selectOption('aside');
   await card.getByRole('button',{name:'직접 다시 확인',exact:true}).click();
@@ -190,8 +188,7 @@ test('runtime fixture a raced finish never claims the human hold was released',a
 
 for(const width of [1280,375])for(const language of ['ko','en'])test(`runtime fixture prelogin ${language} ${width}px shows supported environments and closed explanations`,async t=>{
   const {page,posts,errors}=await uiFixture(t,{width,language});
-  assert.equal(await page.locator('#site-target option').count(),4);
-  assert.equal(await page.locator('#site-target option[value="windows-vm"]').evaluate(option=>option.disabled),true);
+  assert.equal(await page.locator('#site-target option').count(),2,'VM targets are no longer offered');
   assert.equal(await page.locator('#site-target').inputValue(),'aside');
   assert.equal(await page.locator('#prelogin-help').getAttribute('open'),null);
   assert.equal(await page.locator('.site details').getAttribute('open'),null);
