@@ -609,7 +609,6 @@ const EN:Record<string,string>={
 'Codex 모델':'Codex model','Claude Code 모델':'Claude Code model','OpenCode 모델':'OpenCode model','클라이언트 기본값':'Client default','모델 목록은 연결된 앱에서 확인합니다. 기본값은 앱 업데이트를 따릅니다.':'Model lists come from the connected apps. Defaults follow app updates.',
 '공급자':'Provider','OpenAI 호환 서버':'OpenAI-compatible server','추론 강도':'Reasoning effort','API 주소':'API base URL','모델':'Model','모델 선택':'Choose a model','현재 모델 목록 새로고침':'Refresh model list','목록에 없는 모델 ID':'Model ID not in the list','직접 입력 시 목록 선택보다 우선':'Overrides the list when filled','API 키':'API key','키 입력':'Enter key',
 'API 사용 요금을 확인했습니다.':'I understand API usage is billed.','저장된 키 관리':'Manage saved keys','저장된 API 키 삭제':'Delete saved API key',
-'구독 한도를 소진해도 유료 API로 자동 전환하지 않습니다.':'Subscription limits never trigger an automatic switch to a paid API.',
 '업무 목록을 읽지 못했습니다.':'Could not load the work list.',
 '업무 내용을 선택한 AI로 보내 정의·계획하도록 허용':'Allow sending work content to the selected AI to define and plan it',
 '업무 내용과 가져온 자료의 요약을 선택한 AI에 보냅니다. 끄면 업무는 저장되지만 분석과 실행은 하지 않습니다.':'Sends the Work text and a summary of imported material to your selected AI. When off, Works are saved but not analyzed or run.',
@@ -673,7 +672,7 @@ const RULES:Array<[string,string]>=[
 ];
 export const controlCenterCopy=buildCopyCatalog({...EN,...extraSourceCopy});
 export const i18nScript=`(()=>{const EN=${JSON.stringify(controlCenterCopy.en)},KO=${JSON.stringify(controlCenterCopy.ko)},RULES=${JSON.stringify(RULES.map(([pattern,replacement])=>[pattern,plainEnglish(replacement!)]))}.map(([p,r])=>[new RegExp(p,'u'),r]),FLAGS=${JSON.stringify(flagSvgs)};
-let lang='en';try{lang=localStorage.getItem('office-lang')==='ko'?'ko':'en'}catch{}
+let lang='en';try{const saved=localStorage.getItem('office-lang');lang=saved==='ko'||saved==='en'?saved:(/^ko\b/iu.test(navigator.language||'')?'ko':'en')}catch{}
 document.documentElement.lang=lang;window.officeLang=lang;
 const one=(t,depth=0)=>{if(typeof t!=='string'||!t||depth>=8)return null;const dictionary=lang==='en'?EN:KO;if(Object.hasOwn(dictionary,t))return dictionary[t];if(!/[\\uAC00-\\uD7A3]/u.test(t))return null;const named=/^(Playwright|Aside|Neo|BrowserOS Neo|Codex|Claude Code|OpenCode|Cursor|Cursor CLI|Hermes): (.+)$/u.exec(t);if(named){const result=one(named[2],depth+1);if(result!==null)return named[1]+': '+result}if(lang==='en'){if(t.startsWith('현재 확인: '))return 'Checked: '+(one(t.slice(7),depth+1)??t.slice(7));for(const [re,r] of RULES)if(re.test(t)){const out=t.replace(re,(...args)=>r.replace(/\\$(\\d+)/gu,(_,index)=>{const value=args[Number(index)];return typeof value==='string'?(one(value,depth+1)??value):''}));return out.split(' · ').map(p=>Object.hasOwn(EN,p)?EN[p]:p!==out?(one(p,depth+1)??p):p).join(' · ')}}else{const check=/^(Playwright|Aside|Neo|BrowserOS Neo) 연결 점검 (시작|통과) · ([\\d.]+)초$/u.exec(t);if(check)return check[1]+' 연결 확인 '+(check[2]==='통과'?'완료':'시작')+' · '+check[3]+'초';if(/^(Playwright|Aside|Neo|BrowserOS Neo) 연결 점검 시작$/u.test(t))return t.replace('연결 점검','연결 확인');const label=/^(완료 조건|확인된 완료 조건|실행기)([ :·].+)$/u.exec(t);if(label)return ({'완료 조건':'완료 기준','확인된 완료 조건':'확인된 완료 기준','실행기':'실행 도구'})[label[1]]+label[2]}if(t.includes(' · ')){const parts=t.split(' · '),mapped=parts.map(p=>one(p,depth+1)??p);if(mapped.some((p,i)=>p!==parts[i]))return mapped.join(' · ')}return null};
 window.officeText=t=>one(t)??t;
