@@ -124,6 +124,7 @@ const EN:Record<string,string>={
 'AI 응답 수신':'AI response received',
 '담당 AI':'AI','설정한 기본 앱':'Your default app','앱 기본값':'App default','이 업무를 맡을 AI':'The AI that runs this Work',
 'AI는 앱에서 직접 쓸 때와 같은 권한으로 실행합니다.':'The AI runs with the same permissions as when you use the app yourself.',
+'업무 내용은 선택한 AI에 보내 분석하고 실행합니다.':'The work text goes to the AI you chose, which analyzes and runs it.',
 '같은 세션을 이어서 실행합니다.':'Continuing in the same session.',
 '사용자 설정 그대로 업무 폴더에서 실행을 시작합니다.':'Starting in the Work folder with your own settings.',
 '실행을 마치고 만든 파일을 결과로 저장했습니다.':'Finished; the files it made are saved as the result.',

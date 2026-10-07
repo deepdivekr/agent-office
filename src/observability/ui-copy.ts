@@ -97,6 +97,7 @@ export const reviewedCopy: Record<string, readonly [string, string]> = {
   '업무 접수': ['업무 시작', 'Start work'],
   '업무를 시작하면 선택한 AI의 사용량이 듭니다.': ['업무를 시작하면 선택한 AI의 사용량이 차감돼요.', 'Starting work uses your selected AI allowance.'],
   'AI는 앱에서 직접 쓸 때와 같은 권한으로 실행합니다.': ['AI는 앱에서 직접 쓸 때와 같은 권한으로 실행해요.', 'The AI runs with the same permissions as when you use the app yourself.'],
+  '업무 내용은 선택한 AI에 보내 분석하고 실행합니다.': ['업무 내용은 선택한 AI에 보내 분석하고 실행해요.', 'The work text goes to the AI you chose, which analyzes and runs it.'],
   '요청을 저장했습니다. 실제 분석과 실행 기록을 확인하는 중…': ['요청을 저장했어요. 분석과 실행이 시작되는지 확인하고 있어요.', 'Request saved. Checking for analysis and execution events…'],
   '업무 내용을 AI에 보내도록 허용해 주세요. 허용하면 AI가 업무를 분석합니다.': ['업무를 분석하려면 내용을 AI에 보내야 해요. 전송을 허용해 주세요.', 'AI needs your work instructions to analyze them. Allow sending this content to your AI.'],
   '선택 후 시작': ['선택하고 시작', 'Choose and start'],

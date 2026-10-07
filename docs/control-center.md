@@ -32,7 +32,7 @@ agent-driver run trace 스토리보드와 같은 디자인 언어를 쓴다. 어
 
 ## 업무 내용의 AI 전송 동의
 
-한 줄 업무 정의와 가져오기 분석은 `swarm`·`packs`·`coding`의 `model_data_approved` 중 하나, 또는 로컬 설정의 `work.model_data_approved`가 켜져 있어야 모델을 호출한다. 관제센터 AI 단계의 동의 체크박스는 `~/.agent-driver/runtime-config.json`에 `{"work":{"model_data_approved":true,"approved_at":"…"}}`를 기록한다. 값은 호출마다 파일에서 다시 읽고 config fingerprint에는 포함하지 않는다. 동의가 없으면 업무는 `needs_model`, 사유 `MODEL_DATA_APPROVAL_REQUIRED`로 저장되고 상세 화면에서 허용 후 재시도할 수 있다. 호스트가 직접 관리하는 설정 파일은 이 화면에서 바꾸지 않는다.
+한 줄 업무 정의와 가져오기 분석은 `swarm`·`packs`·`coding`의 `model_data_approved` 중 하나, 또는 로컬 설정의 `work.model_data_approved`가 켜져 있어야 모델을 호출한다. 소유자가 관제센터 업무 보드에서 **업무 시작**을 누르면(접수 폼에 업무 내용이 선택한 AI로 간다고 적혀 있다) 그 자체가 동의이며, 처음 한 번 `~/.agent-driver/runtime-config.json`에 `{"work":{"model_data_approved":true,"approved_at":"…"}}`를 기록한다. 관제센터 AI 단계의 체크박스는 같은 값을 보여 주고 끄는(철회) 용도로 남는다. MCP로 들어온 등록·실행 요청은 이 기록이 없으면 그대로 멈춘다. 값은 호출마다 파일에서 다시 읽고 config fingerprint에는 포함하지 않는다. 동의가 없으면 업무는 `needs_model`, 사유 `MODEL_DATA_APPROVAL_REQUIRED`로 저장되고 상세 화면에서 허용 후 재시도할 수 있다. 호스트가 직접 관리하는 설정 파일은 이 화면에서 바꾸지 않는다.
 
 ## 로컬 제어와 안전
 
