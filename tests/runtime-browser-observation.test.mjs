@@ -56,7 +56,7 @@ test('runtime native browser observation excludes non-rendered or accessibility-
 });
 
 test('runtime native browser observation uses rendered anchor text and exact observed hrefs without evaluating injection-like labels',async t=>{
-  const literal='" ); globalThis.injected = true; // </script><img src=x onerror=globalThis.injected=true>',href='https://example.test/article?q=%22%3Cscript%3E&topic=AST%20SpaceMobile';
+  const literal='" ); globalThis.injected = true; // </script><img src=x onerror=globalThis.injected=true>',href='https://example.test/article?q=%22%3Cscript%3E&topic=AST%20AcmeSat';
   const x=await fixture(t,`
     <a id="rendered-label" href="${escaped(href)}"><span>자료 source 한글</span><span hidden>HIDDEN CHILD DECOY</span><span style="display:none">ANOTHER DECOY</span></a>
     <a href="/literal">${escaped(literal)}</a>
@@ -95,12 +95,12 @@ test('runtime native browser observation applies existing schema bounds after ex
 
 test('runtime native browser observation does not manufacture search evidence from forty hidden links on a complete short page',async t=>{
   const decoys=Array.from({length:40},()=>'<a style="display:none" href="https://example.test/unrelated-result">Hidden unrelated result</a>').join('');
-  const x=await fixture(t,`<header>Public search header</header>${decoys}<footer>Privacy and terms</footer>`,'AST SpaceMobile search');
+  const x=await fixture(t,`<header>Public search header</header>${decoys}<footer>Privacy and terms</footer>`,'AST AcmeSat search');
   assert.equal(await x.page.evaluate(()=>document.readyState),'complete');
   assert.equal(await x.page.locator('a').count(),40);
   assert.equal(await x.page.locator('a').first().evaluate(a=>a.getClientRects().length),0);
   const result=await x.observe();
-  assert.equal(result.title,'AST SpaceMobile search');
+  assert.equal(result.title,'AST AcmeSat search');
   assert.deepEqual(result.links,[]);
   assert.equal(result.text,'Public search header\nPrivacy and terms');
   assert.doesNotMatch(result.text,/Hidden unrelated result/u);
