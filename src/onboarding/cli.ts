@@ -1,5 +1,6 @@
 import {approveNonInterferingConnection,connectionRoot,readLocalConnection} from './connection.js';
 import {ensureControlService,openControlUrl} from './control-service.js';
+import {shortControlUrl} from './control-address.js';
 import {requireCondition} from '../core/contracts.js';
 import {appendSetupActivity} from './setup-activity.js';
 
@@ -18,7 +19,7 @@ export async function runOnboardingCli(args:readonly string[]){
     // work right after install instead of failing until one more click (clean-install check, 2026-10-01).
     if(!readLocalConnection(root)){await approveNonInterferingConnection(root);await appendSetupActivity(root,'runtime','success','기본 실행 모드로 이 컴퓨터를 연결했습니다. 화면과 파일은 건드리지 않습니다.');}
     const opened=await openControlUrl(service.url);
-    console.log(JSON.stringify({status:'control_center_ready',url:service.url+'settings',browser_opened:opened,pid:service.pid,reused:service.reused,mcp_command:'agent-office mcp',connection:readLocalConnection(rootFrom(args.slice(1)))?'connected':'awaiting_local_approval'}));return true;
+    console.log(JSON.stringify({status:'control_center_ready',url:service.url+'settings',address:shortControlUrl(service.url).replace(/\/[a-f0-9]{48}\/$/u,'/'),browser_opened:opened,pid:service.pid,reused:service.reused,mcp_command:'agent-office mcp',connection:readLocalConnection(rootFrom(args.slice(1)))?'connected':'awaiting_local_approval'}));return true;
   }
   if(args[0]==='connection'){
     requireCondition(args[1]==='status','UNKNOWN_CONNECTION_COMMAND');const state=readLocalConnection(rootFrom(args.slice(2)));console.log(JSON.stringify(state===null?{status:'not_connected'}:{status:'connected',mode:state.mode,mcp_command:state.mcp.command,jev:state.jev.status}));return true;

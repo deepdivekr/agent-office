@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {prepareLocalConnection} from './connection.js';
 import {loadHostConfig,type HostConfig} from '../interface/config.js';
+import {shortControlUrl} from './control-address.js';
 import type {ControlCenterServer} from '../observability/control-center.js';
 
 export function validControlUrl(value:unknown):value is string{try{const url=new URL(String(value));return url.protocol==='http:'&&url.hostname==='127.0.0.1'&&Boolean(url.port)&&/^\/[a-f0-9]{48}\/$/u.test(url.pathname)&&!url.username&&!url.password&&!url.search&&!url.hash;}catch{return false;}}
@@ -36,7 +37,8 @@ export async function startHostReachableControlCenter(config:HostConfig,previous
   if(previous&&!validControlUrl(previous.href))throw Error('CONTROL_CENTER_URL_INVALID');
   const startControlCenter=start??(await import('../observability/control-center.js')).startControlCenter;
   for(let attempt=0;attempt<3;attempt++){
-    const service=await startControlCenter(config,{...hooks,...(previous?{...(attempt===0?{port:Number(previous.port)}:{}),capability_token:previous.pathname.slice(1,-1)}:{})});
+    // The first attempt takes the default port (or any free one); a port Windows cannot reach is retried on a fresh one. The capability stays.
+    const service=await startControlCenter(config,{...hooks,...(attempt>0?{port:0}:{}),...(previous?{capability_token:previous.pathname.slice(1,-1)}:{})});
     try{if(await probe(service.url))return service;}catch(error){await service.close();throw error;}
     await service.close();
   }
@@ -127,7 +129,7 @@ export async function startManagedControlService(configPath:string,previous?:URL
 }
 export async function openControlUrl(url:string){
   if(!validControlUrl(url))throw Error('CONTROL_CENTER_URL_INVALID');
-  const target=url+'settings',windows=process.platform==='win32'||Boolean(process.env.WSL_INTEROP||process.env.WSL_DISTRO_NAME),executable=windows?'powershell.exe':process.platform==='darwin'?'open':'xdg-open';
+  const target=shortControlUrl(url,'settings'),windows=process.platform==='win32'||Boolean(process.env.WSL_INTEROP||process.env.WSL_DISTRO_NAME),executable=windows?'powershell.exe':process.platform==='darwin'?'open':'xdg-open';
   const args=windows?['-NoProfile','-NonInteractive','-Command',`Start-Process -FilePath '${target}'`]:[target];
   return new Promise<boolean>(resolve=>{const child=spawn(executable,args,{stdio:'ignore',windowsHide:true,shell:false});const timer=setTimeout(()=>{child.kill();resolve(false);},5000);child.once('error',()=>{clearTimeout(timer);resolve(false);});child.once('exit',code=>{clearTimeout(timer);resolve(code===0);});});
 }
