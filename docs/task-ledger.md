@@ -84,7 +84,7 @@
 | RQ-864 | Implement a common explicit Work disconnect/remove contract and visible detail control; fence future Office dispatch, resume, scheduling and original-runtime commands while preserving results and handling active or uncertain execution honestly. |
 | RQ-865 | Confirm the eight non-coding basic Pack families and create one clearly titled real-use Work per family using actual public sites or local file tasks, with precise outcome checks and no invented execution, automatic schedules, external submissions or messages. |
 | RQ-866 | Verify lifecycle guards, board/detail/SSE controls, real installed cleanup and example registration; run required quick/boundary/ledger checks without soak, update usage/verification records and use protected publication. |
-| RQ-867 | Diagnose the preserved ASTS research failure without attributing it to an unobserved model; default first-run Codex subscription model selection to Sol/high, preserve saved and explicit user choices and subscription-to-paid-API safety, and verify invocation evidence. |
+| RQ-867 | Diagnose the preserved ACME research failure without attributing it to an unobserved model; default first-run Codex subscription model selection to Sol/high, preserve saved and explicit user choices and subscription-to-paid-API safety, and verify invocation evidence. |
 | RQ-868 | Expose actual Windows host, Ubuntu guest and Windows guest login readiness without pretending a missing guest transport is connected; bind auth per profile, use verified logged-in social browser candidates, and enable registered cross-environment read-only technical failover without login/challenge/effect bypass. |
 | RQ-869 | Provide explicit environment-specific site pre-login and persistent owned profiles shared across Work/Swarm/Pack restarts; release idle memory, preserve profile isolation and credential boundaries, and verify restart plus localized settings without promising permanent authentication or traffic-block removal. |
 
@@ -92,10 +92,10 @@
 
 | ID | Requirement |
 |---|---|
-| RQ-858 | Diagnose the actual submitted ASTS Work against installed runtime, saved definition, admission, process and activity state without duplicating private tasks. |
+| RQ-858 | Diagnose the actual submitted ACME Work against installed runtime, saved definition, admission, process and activity state without duplicating private tasks. |
 | RQ-859 | Make the human Start work action durably register, immediately open the Work detail and admit its current run without a second Run action; preserve cost consent, revisions, original-runtime authority and uncertain-effect boundaries. |
 | RQ-860 | Surface actual bounded Work analysis, Pack/executor/source selection, current operation and readable execution summaries in live localized progress; move pause/instruction/resume to stage-click modals, without simulated progress or hidden failures. |
-| RQ-861 | Verify desktop/mobile UI and affected contracts, exercise the user's read-only ASTS Work through the installed runtime, preserve state and record actual versus fixture evidence. |
+| RQ-861 | Verify desktop/mobile UI and affected contracts, exercise the user's read-only ACME Work through the installed runtime, preserve state and record actual versus fixture evidence. |
 | RQ-862 | Run proportionate quick/public-boundary/ledger checks without soak; apply the verified local candidate and record failures, issue disposition and remaining publication limits. |
 
 ## Phase 104
