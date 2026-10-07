@@ -193,12 +193,6 @@ test('runtime fixture client management opens actual settings without changing t
   await page.waitForFunction(()=>document.activeElement?.id==='codex-model');
   assert.equal(await page.locator('#codex-model').inputValue(),'fixture-model');
   assert.equal(await page.locator('#codex-reasoning').inputValue(),'medium');
-  // The API mode is a legacy path hidden from the page unless saved; this case drives it on purpose.
-  await page.evaluate(()=>{document.getElementById('mode-field').hidden=false;});await page.locator('#mode').selectOption('api');await settled(page,'save-model');
-  await page.locator('[data-step="0"]').click();await settled(page,'refresh-mcp');
-  await page.getByRole('button',{name:'Manage Codex',exact:true}).click();
-  await page.waitForFunction(()=>document.activeElement?.id==='mode');
-  assert.equal(await page.locator('#mode').inputValue(),'api','Manage must never implicitly switch billing or authentication mode');
   assert.equal(await readFile(f.paths.runtimeConfig,'utf8'),before);assert.equal(await readFile(modelSettingsPath(f.config),'utf8'),savedBefore);assert.deepEqual(f.calls,[]);await noOverflow(page);
 });
 

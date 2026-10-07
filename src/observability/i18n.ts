@@ -602,7 +602,6 @@ const EN:Record<string,string>={
 '전용 작업 환경':'Dedicated work environment','로컬 실행 승인':'Approve local runtime','승인 필요':'Approval needed','연결됨':'Connected',
 '설정 대상':'Settings scope','전역 · 기본 AI':'Global · default AI','코딩 업무 전용':'Coding work only','전역 AI 설정 사용':'Use global AI settings',
 '해제하면 코딩에는 아래 설정을 우선 적용합니다. 이미 연결한 코딩 세션과 실행 중인 작업은 기존 모델을 그대로 씁니다.':'When unchecked, the settings below take priority for coding. Sessions already connected and work in progress keep their model.',
-'코드 작업은 Codex·Claude CLI가 합니다. API는 계획과 조언에만 쓰이고, 공급자와 주소가 같으면 전역 API 키를 함께 씁니다.':'Codex or Claude CLI does the code work. The API is used only for planning and advice, and shares the global API key when provider and address match.',
 '코딩 전용 설정입니다. 전역 설정은 바뀌지 않습니다.':'Coding settings only. Global settings stay unchanged.','전역 AI 설정입니다.':'Global AI settings.',
 'AI 연결':'Connect AI','사용 중인 구독이나 API 키를 선택하세요. 업무마다 접수할 때 고른 앱이 끝까지 맡고, 다른 앱으로 넘기지 않습니다.':'Choose the subscription or API key you use. Each Work stays with the app chosen when you started it and never moves to another app.',
 '연결 방식':'Connection','구독 사용':'Subscription','API 키 사용':'API key','우선 사용할 클라이언트':'Preferred client','연결 상태 확인':'Check connections',

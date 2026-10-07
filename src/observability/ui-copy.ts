@@ -165,7 +165,6 @@ export const reviewedCopy: Record<string, readonly [string, string]> = {
   '정리안을 따로 승인한 후 이동 허용': ['정리안을 확인한 뒤 파일 이동 허용', 'Allow file moves after approving the plan'],
   '이 정리안 승인하고 이동': ['승인하고 파일 이동', 'Approve and move files'],
   '이 폴더 접근 허용': ['폴더 접근 허용', 'Allow folder access'],
-  '코드 작업은 Codex·Claude CLI가 합니다. API는 계획과 조언에만 쓰이고, 공급자와 주소가 같으면 전역 API 키를 함께 씁니다.': ['코드는 Codex·Claude CLI가 수정해요. API는 계획과 조언에만 써요. 공급자와 주소가 같으면 기본 API 키를 함께 사용해요.', 'Codex or Claude CLI edits code. The API is used only for planning and advice. The default API key is shared when the provider and address match.'],
   '상위 에이전트 조언': ['다음 작업 제안', 'Suggested next steps'],
   '코딩은 Codex가 합니다. 다른 AI의 조언은 따로 표시합니다. 새 지시를 보내야 다음 작업을 시작합니다.': ['코딩은 Codex가 맡아요. 다른 AI의 제안은 따로 보여 드려요. 새 지시를 보내면 다음 작업을 시작해요.', 'Codex does the coding. Suggestions from another AI are shown separately. Send a new instruction to start the next task.'],
   '프로젝트와 세션을 연결해 Work 시작': ['세션 연결', 'Connect session'],
