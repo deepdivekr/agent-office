@@ -1,8 +1,10 @@
 # Agent Office
 
-**Hand recurring work to the AI you already use — Codex or Claude Code — once. Agent Office runs it on your computer when it is due and reports back with the result.**
+**Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own client and your own accounts. Agent Office is where you see their status, hear when one stops, change instructions and run again.
 
-No re-prompting every time, and no silent failures: when a run stops, it shows up in *Needs you* and, if you connected one, in your messenger. Everything runs on your own subscription, accounts and computer.
+![Scattered bots gathering onto one Agent Office board](docs/images/en/hero.svg)
+
+Nothing fails silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 
 **English** · [한국어](README.ko.md) · [v0.4.0 release notes](docs/releases/v0.4.0.md)
 
