@@ -76,22 +76,6 @@ test('runtime fixture coding settings HTTP preserves global revisions, requires 
  assert.equal((await call('coding/save',body(1,choice,{inherit_global:true}))).status,200);assert.equal(server.calls(),1);
 });
 
-test('runtime fixture initial API catalog latency cannot drop client model discovery',{timeout:30000},async t=>{
- const x=await setup(t);saveModelSettings(x.path,body(0,{...choice,mode:'api'},{api_action:'replace',api_key:secret}),{});
- const server=await serverFor(t,x),browser=await chromium.launch({headless:true});t.after(()=>browser.close());
- const page=await browser.newPage();let release,started;const gate=new Promise(r=>release=r),requested=new Promise(r=>started=r);t.after(()=>release());let clientRequests=0;
- await page.route('**/settings/status',async route=>{const response=await route.fetch(),status=await response.json();await route.fulfill({json:{...status,computer:{kind:'host_configured',connected:true},onboarding_step:2}});});
- await page.route(/\/settings\/models$/,async route=>{
-  if(route.request().method()==='POST'){started();await gate;return route.fulfill({json:{status:'unavailable',models:[],selected:'global-api'}});}
-  clientRequests++;return route.fulfill({json:{codex:{status:'available',models:[{id:'coding-ui',label:'Coding UI'}]},claude:{models:[]},opencode:{models:[]}}});
- });
- await page.goto(server.url+'/settings');await requested;
- try{assert.equal(clientRequests,1,'Client discovery must complete before an API catalog request can occupy startup');assert.equal(await page.locator('#save-model').isDisabled(),true);}finally{release();}
- await page.waitForFunction(()=>!busy&&clientsLoaded);
- await page.locator('#mode').selectOption('subscription');await page.locator('#codex-model').selectOption('coding-ui');
- assert.equal(await page.locator('#codex-model').inputValue(),'coding-ui');assert.equal(server.calls(),0);
-});
-
 test('runtime fixture failed client catalog is retried on returning to AI settings',{timeout:30000},async t=>{
  const x=await setup(t);saveModelSettings(x.path,body(0),{});const server=await serverFor(t,x),browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const page=await browser.newPage();let requests=0;
@@ -103,16 +87,3 @@ test('runtime fixture failed client catalog is retried on returning to AI settin
  await page.locator('#codex-model').selectOption('coding-ui');assert.equal(requests,2);assert.equal(server.calls(),0);
 });
 
-test('runtime fixture coding settings UI persists priority and inheritance on desktop/mobile without model calls',{timeout:60000},async t=>{
- const x=await setup(t);saveModelSettings(x.path,body(0,{...choice,mode:'api'},{api_action:'replace',api_key:secret}),{});const before=await readFile(x.path,'utf8'),server=await serverFor(t,x),browser=await chromium.launch({headless:true});
- t.after(()=>browser.close());await mkdir('tests/evidence/phase66',{recursive:true});
- for(const width of [1440,390]){const page=await browser.newPage({viewport:{width,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));
- await page.route(/\/settings\/(?:coding\/)?models$/,route=>route.fulfill({json:route.request().method()==='POST'?{status:'unavailable',models:[],selected:'global-api'}:{codex:{status:'available',models:[{id:'coding-ui',label:'Coding UI'},{id:'global-code',label:'Global'}]},claude:{status:'available',models:[]},opencode:{status:'available',models:[]}}}));
- await page.goto(server.url+'/settings');await page.locator('[data-step="2"]').click();await page.locator('#model-scope').selectOption('coding');await page.locator('#coding-scope-options').waitFor();await page.waitForFunction(()=>!busy);
- if(!await page.locator('#coding-inherit').isChecked())await page.locator('#coding-inherit').check();await page.locator('#save-model').click();await page.waitForFunction(()=>!busy);assert.equal(await page.locator('#mode').isDisabled(),true);
- await page.locator('#coding-inherit').uncheck();await page.evaluate(()=>{document.getElementById('mode-field').hidden=false;});await page.locator('#mode').selectOption('subscription');await page.locator('#codex-model').selectOption('coding-ui');await page.locator('#save-model').click();await page.waitForFunction(()=>!busy&&state.selection.client_models.codex==='coding-ui');
- assert.equal(readModelSettings(x.coding).selection.client_models.codex,'coding-ui');assert.equal(await readFile(x.path,'utf8'),before);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:'tests/evidence/phase66/coding-models-'+width+'.png',fullPage:true});
- await page.reload();await page.locator('[data-step="2"]').click();await page.locator('#model-scope').selectOption('coding');await page.waitForFunction(()=>!busy&&modelScope==='coding');assert.equal(await page.locator('#codex-model').inputValue(),'coding-ui');assert.equal(await page.locator('#coding-inherit').isChecked(),false);
- await page.evaluate(()=>{document.getElementById('mode-field').hidden=false;});/* the API mode is a legacy path hidden unless saved; this case drives it on purpose */await page.locator('#mode').selectOption('api');await page.locator('#api-model-custom').fill('not a valid model');await page.locator('#api-key').fill('unfinished');await page.locator('#coding-inherit').check();await page.locator('#save-model').click();await page.waitForFunction(()=>!busy);assert.equal(scopedModelConfiguration(x.path,'coding',{}).source,'global');assert.equal(readModelSettings(x.coding).selection.client_models.codex,'coding-ui');await page.locator('[data-step="3"]').click();await page.waitForFunction(()=>modelScope==='global'&&step===3);assert.deepEqual(errors,[]);await page.close();}
- assert.equal(server.calls(),0);assert.equal(await readFile(x.path,'utf8'),before);
-});

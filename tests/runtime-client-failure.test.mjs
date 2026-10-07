@@ -92,9 +92,9 @@ test('an expired client is reported as unavailable without asking another client
   await assert.rejects(model.call('correct','Choose.',{work_id:'work-3'},schema),/STRUCTURED_MODEL_UNAVAILABLE/u);
   assert.equal(calls.some(call=>call.executable==='/fixture/claude'),false);
 });
-test('current model catalogs are bounded, key-safe, and distinguish exact Claude Sonnet 5.5 from provider aliases',async()=>{
+test('current model catalogs are bounded, key-safe, and list the documented Claude models by name',async()=>{
   const seen=[];const catalog=await apiModelCatalog('openrouter',key,'',async(url,options)=>{seen.push({url,auth:options.headers.Authorization});return new Response(JSON.stringify({data:[{id:'provider/new-model',name:'New model'},{id:'invalid model'}]}),{status:200});});
   assert.equal(catalog.status,'available');assert.deepEqual(catalog.models,[{id:'provider/new-model',label:'New model'}]);assert.equal(seen[0].url,'https://openrouter.ai/api/v1/models');assert.equal(seen[0].auth,'Bearer '+key);assert.doesNotMatch(JSON.stringify(catalog),new RegExp(key));
-  const claude=claudeModelCatalog();assert.deepEqual(claude.models.map(item=>item.id),['claude-sonnet-5-5','sonnet','opus','haiku']);
-  assert.match(claude.models[0].label,/5\.5/u);assert.doesNotMatch(claude.models.find(item=>item.id==='sonnet').label,/5\.5/u);
+  const claude=claudeModelCatalog();assert.deepEqual(claude.models.map(item=>item.id),['claude-opus-5-5','claude-sonnet-5-5','claude-haiku-4-5-20251001']);
+  assert.deepEqual(claude.models.map(item=>item.label),['Claude Opus 5.5','Claude Sonnet 5.5','Claude Haiku 4.5']);
 });

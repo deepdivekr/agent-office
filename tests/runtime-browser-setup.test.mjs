@@ -68,7 +68,7 @@ test('runtime fixture browser setup desktop/mobile buttons check download consen
     const page=await browser.newPage({viewport:{width,height:980}});const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));await page.goto(s.url);
     await page.getByRole('heading',{name:"브라우저와 로그인 환경",exact:true}).waitFor();await page.locator('[data-browser=playwright]').waitFor();assert.equal(probes,0);
     await page.getByRole('button',{name:'Playwright 연결 확인',exact:true}).click();await page.getByRole('button',{name:'전용 브라우저 다운로드',exact:true}).waitFor();await page.getByRole('button',{name:'전용 브라우저 다운로드',exact:true}).click();await page.locator('[data-browser=playwright] .badge').filter({hasText:'준비됨'}).waitFor();assert.equal(installs,1);
-    await page.getByText('다른 브라우저 연결 · 선택',{exact:true}).click();await page.getByRole('button',{name:'Aside 연결 확인',exact:true}).click();await page.getByRole('button',{name:'Aside 연결 등록',exact:true}).waitFor();
+    await page.getByText('내 브라우저 연결 (Aside · BrowserOS Neo) · 선택',{exact:true}).click();await page.getByRole('button',{name:'Aside 연결 확인',exact:true}).click();await page.getByRole('button',{name:'Aside 연결 등록',exact:true}).waitFor();
     assert.match(await page.locator('[data-browser=aside] .browser-feedback').textContent(),/화면·프로필 사용을 허용/u);
     assert.equal(JSON.parse(await readFile(x.paths.runtimeConfig,'utf8')).browser_executors,undefined,'Checking is not authorization');
     await page.getByRole('button',{name:'Aside 연결 등록',exact:true}).click();await page.locator('#browser-setup-notice').filter({hasText:'MCP를 다시 연결'}).waitFor();assert.equal(await page.getByRole('button',{name:'Aside 연결 등록',exact:true}).count(),0);

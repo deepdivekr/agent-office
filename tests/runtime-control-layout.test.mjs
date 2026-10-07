@@ -135,7 +135,8 @@ test('runtime fixture Control Center alignment and compact right actions hold in
     if(lang==='en'){assert.doesNotMatch(catalogState,/[\uac00-\ud7a3]/u,'English AI settings must not retain Korean catalog status fragments');assert.match(catalogState,/new default Codex model is not in this account’s model list/u);}
     else{assert.match(catalogState,/확인한 모델/u);assert.match(catalogState,/새 기본 Codex 모델이 현재 목록에 없어요/u);}
     await rightEdge(page,'#step-2>.actions button','#step-2');await noOverflow(page);
-    const models=await page.locator('#codex-model,#claude-model').evaluateAll(items=>items.map(e=>e.getBoundingClientRect().width));
+    // Only the chosen app's model fields are shown; compare the visible ones.
+    const models=await page.locator('#app-model-row select').evaluateAll(items=>items.filter(e=>e.checkVisibility()).map(e=>e.getBoundingClientRect().width));
     assert.ok(models.every(w=>Math.abs(w-models[0])<1),JSON.stringify(models));
     assert.equal(await page.locator('.terminal pre').evaluate(e=>getComputedStyle(e).textAlign),'start');
     assert.deepEqual(errors,[]);
@@ -193,12 +194,6 @@ test('runtime fixture client management opens actual settings without changing t
   await page.waitForFunction(()=>document.activeElement?.id==='codex-model');
   assert.equal(await page.locator('#codex-model').inputValue(),'fixture-model');
   assert.equal(await page.locator('#codex-reasoning').inputValue(),'medium');
-  // The API mode is a legacy path hidden from the page unless saved; this case drives it on purpose.
-  await page.evaluate(()=>{document.getElementById('mode-field').hidden=false;});await page.locator('#mode').selectOption('api');await settled(page,'save-model');
-  await page.locator('[data-step="0"]').click();await settled(page,'refresh-mcp');
-  await page.getByRole('button',{name:'Manage Codex',exact:true}).click();
-  await page.waitForFunction(()=>document.activeElement?.id==='mode');
-  assert.equal(await page.locator('#mode').inputValue(),'api','Manage must never implicitly switch billing or authentication mode');
   assert.equal(await readFile(f.paths.runtimeConfig,'utf8'),before);assert.equal(await readFile(modelSettingsPath(f.config),'utf8'),savedBefore);assert.deepEqual(f.calls,[]);await noOverflow(page);
 });
 

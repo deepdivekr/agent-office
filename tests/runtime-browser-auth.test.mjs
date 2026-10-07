@@ -81,7 +81,7 @@ test('runtime contract auth preflight remains active when no VM or persistent br
   const server=await startControlCenter(x.config);t.after(()=>server.close());const status=await (await fetch(server.url+'connections/status')).json();assert.equal(status.profile_preserved,false);assert.equal(status.vnc,null);assert.ok(status.sites.every(site=>site.state==='unchecked'));
 });
 
-test('site login choices keep Windows, Ubuntu VM, and unsupported Windows VM profiles distinct',async t=>{
+test('site login choices keep Windows separate from VM profiles, which stay out of the picker',async t=>{
   const x=await setup(t);requireSiteAuth(x.api.store,x.config,['https://x.com/search']);
   const windows={id:'windows-neo',engine:'neo',environment:'host_foreground',platform:'win32',profile_ref:'windows-user',endpoint:'http://127.0.0.1:9010/mcp',priority:80};
   const windowsVm={id:'windows-vm',engine:'playwright',environment:'windows_vm',platform:'win32',profile_ref:'guest',priority:50};
@@ -103,8 +103,8 @@ test('site login choices keep Windows, Ubuntu VM, and unsupported Windows VM pro
   const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
   const page=await koPage(browser);await page.goto(server.url+'connections');
   const choices=page.locator('#sites .site').first().locator('.browser-choice option');await choices.first().waitFor({state:'attached'});
-  assert.equal(await choices.count(),status.targets.length);assert.match((await choices.allTextContents()).join(' '),/Windows VM.*미지원/u);
-  assert.equal(await page.locator('#sites .site').first().locator('.browser-choice option[value="windows-vm"]').isDisabled(),true);
+  assert.equal(await choices.count(),status.targets.filter(item=>!['ubuntu','windows_vm'].includes(item.environment)).length,'VM profiles stay in the API but are not offered as login choices');
+  assert.equal(await page.locator('#sites .site').first().locator('.browser-choice option[value="windows-vm"]').count(),0);
   const response=await fetch(server.url+'connections/open/x.com/windows-vm',{method:'POST',headers:{Origin:new URL(server.url).origin,'X-Agent-Driver':'human-connection'}});
   assert.equal(response.status,409);assert.equal((await response.json()).error,'AUTH_BROWSER_TRANSPORT_UNAVAILABLE');
   setSiteAuth(x.api.store,x.config,'x.com','login_limited');
