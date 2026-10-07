@@ -38,9 +38,10 @@ test('runtime contract renamed repository preserves installation identity and RE
     assert.ok(text.includes('~/.agent-office'));
     assert.ok(text.includes('cd agent-office'));
     assert.doesNotMatch(text,/deepdivekr\/agent-driver/u);
-    const screenshots=[...text.matchAll(/!\[[^\]]*\]\((docs\/images\/[^)]+)\)/gu)].map(match=>match[1]);
-    assert.equal(screenshots.length,3,'one animated hero SVG and two live-run screenshots');
-    assert.equal(screenshots.filter(s=>s.endsWith('.svg')).length,1);
+    const hero=[...text.matchAll(/<img src="(docs\/images\/[^"]+\.gif)"/gu)].map(match=>match[1]);
+    assert.equal(hero.length,1,'one animated hero at the top');
+    const screenshots=[...hero,...[...text.matchAll(/!\[[^\]]*\]\((docs\/images\/[^)]+)\)/gu)].map(match=>match[1])];
+    assert.equal(screenshots.length,3,'one animated hero and two live-run screenshots');
     const english=path==='README.md';
     assert.ok(screenshots.every(s=>english?s.startsWith('docs/images/en/'):!s.startsWith('docs/images/en/')),'README screenshots must match its language');
     const localized=JSON.parse(await readFile(english?'docs/images/en/capture.json':'docs/images/capture.json','utf8'));
@@ -54,7 +55,8 @@ test('runtime contract renamed repository preserves installation identity and RE
     assert.equal(localized.paid_model_calls,0);
     for(const screenshot of screenshots){
       const bytes=await readFile(screenshot);
-      if(screenshot.endsWith('.svg')){const svg=bytes.toString('utf8');assert.match(svg,/^<svg /u);assert.doesNotMatch(svg,/<script/iu,'README SVG stays script-free');assert.match(svg,/@keyframes/u,'the hero is an animation');assert.ok(bytes.length<40_000,'Keep the hero SVG light');continue;}
+      if(screenshot.endsWith('.gif')){assert.equal(bytes.subarray(0,6).toString('latin1'),'GIF89a');assert.ok(bytes.includes(Buffer.from('NETSCAPE2.0')),'the hero loops');assert.ok(bytes.length<6_000_000,'Keep the hero GIF under 6 MB');
+        const mp4=await readFile(screenshot.replace(/\.gif$/u,'.mp4'));assert.equal(mp4.subarray(4,8).toString('latin1'),'ftyp','a full-quality MP4 sits next to the GIF');assert.ok(text.includes(screenshot.replace(/\.gif$/u,'.mp4')),'the README links the MP4');continue;}
       assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
       assert.ok(bytes.length<300_000,'Keep README screenshots light');
     }

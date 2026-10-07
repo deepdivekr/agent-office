@@ -1,0 +1,205 @@
+{
+  "scene": "scene.js",
+  "meta": {
+    "name": "agent-office",
+    "tagline": [
+      "Bots and recurring work scattered across AI apps, on one screen.",
+      "Each app still runs its own work. Status, stops and changes live here."
+    ],
+    "counterLabel": "",
+    "headerRight": "v0.4.0",
+    "footerLeft": "github.com/deepdivekr/agent-office",
+    "footerRight": "example work · simulated",
+    "clients": {
+      "codex": {
+        "title": "codex",
+        "label": "terminal",
+        "color": "cool",
+        "chip": "Codex"
+      },
+      "claude": {
+        "title": "claude code",
+        "label": "terminal",
+        "color": "alt",
+        "chip": "Claude Code"
+      },
+      "hermes": {
+        "title": "hermes · telegram",
+        "label": "bot",
+        "color": "teal",
+        "chip": "Hermes"
+      }
+    },
+    "jobs": [
+      {
+        "id": "fx",
+        "client": "codex",
+        "title": "FX rate log",
+        "sched": "daily 07:00"
+      },
+      {
+        "id": "rel",
+        "client": "codex",
+        "title": "Release notes draft",
+        "sched": "Fri 18:00"
+      },
+      {
+        "id": "cs",
+        "client": "claude",
+        "title": "Sort support inbox",
+        "sched": "hourly"
+      },
+      {
+        "id": "paper",
+        "client": "claude",
+        "title": "New paper alerts",
+        "sched": "daily 09:00"
+      },
+      {
+        "id": "used",
+        "client": "hermes",
+        "title": "Used listings alert",
+        "sched": "every 30 min"
+      },
+      {
+        "id": "week",
+        "client": "hermes",
+        "title": "Weekly report",
+        "sched": "Mon 08:00"
+      },
+      {
+        "id": "price",
+        "client": "claude",
+        "title": "Competitor price table",
+        "sched": "weekly Mon",
+        "result": "1 table · 3 rows"
+      }
+    ],
+    "logs": {
+      "codex": "07:00 ok · 1 rate logged",
+      "claude": "09:00 ok · 2 new papers",
+      "claudeWork": [
+        "reading 3 price pages…",
+        "building the table…",
+        "ok · 1 table · 3 rows"
+      ],
+      "hermesRun": "checking every 30 min…",
+      "hermesFail": "401 · login expired",
+      "hermesResume": "resuming the same session",
+      "hermesOk": "ok · 2 new listings"
+    },
+    "lanes": [
+      "Needs you",
+      "Running",
+      "Queued",
+      "Closed work"
+    ],
+    "address": "office.localhost:4600",
+    "boardLabel": "control center",
+    "unconnected": [
+      "not connected",
+      "to see what stopped, you open each app one by one"
+    ],
+    "command": "agent-office connect",
+    "commandOut": "control_center_ready · office.localhost:4600",
+    "intake": {
+      "placeholder": "What should this Work do? One line.",
+      "prompt": "Tabulate 3 competitors' prices every Monday",
+      "pills": [
+        "Codex",
+        "Claude Code"
+      ],
+      "effortLabel": "Reasoning",
+      "ticks": [
+        "default",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "pick": 3,
+      "button": "Start work"
+    },
+    "strip": {
+      "title": "Messenger alerts",
+      "empty": "no alerts",
+      "from": "Telegram",
+      "alert": "1 Work stopped · Used listings alert · login needed",
+      "deliverTitle": "Deliver results",
+      "deliver": [
+        "This app",
+        "Telegram",
+        "Slack"
+      ],
+      "delivered": "Competitor price table · delivered",
+      "stats": [
+        {
+          "n": 3,
+          "label": "apps"
+        },
+        {
+          "n": 7,
+          "label": "Works"
+        },
+        {
+          "n": 0,
+          "label": "need you"
+        }
+      ]
+    },
+    "drawer": {
+      "rows": [
+        [
+          "Status",
+          "Login needed"
+        ],
+        [
+          "Cause",
+          "Session expired · 401"
+        ],
+        [
+          "Next",
+          "Sign in, then resume the same session"
+        ]
+      ],
+      "button": "Sign in and resume"
+    },
+    "runsHere": "each app still runs its own work",
+    "cardStatus": {
+      "run": "running",
+      "ok": "done",
+      "queue": "waiting for next run",
+      "fail": "stopped · login needed"
+    }
+  },
+  "shots": [
+    {
+      "name": "scattered",
+      "kind": "scattered",
+      "sec": 7,
+      "intro": 2.2
+    },
+    {
+      "name": "connect",
+      "kind": "connect",
+      "sec": 7.5,
+      "intro": 2.2
+    },
+    {
+      "name": "stopped",
+      "kind": "stopped",
+      "sec": 8.5
+    },
+    {
+      "name": "new-work",
+      "kind": "newwork",
+      "sec": 9,
+      "intro": 2.6
+    },
+    {
+      "name": "one-screen",
+      "kind": "payoff",
+      "sec": 7
+    }
+  ]
+}

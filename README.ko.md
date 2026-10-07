@@ -2,7 +2,8 @@
 
 **Codex, Claude Code, 헤르메스, 스크립트… 여러 클라이언트에 흩어진 봇과 자동화를 한 화면에서 관리합니다.** 실행은 각 클라이언트와 내 계정이 그대로 맡고, 상태 확인·멈춤 알림·지침 수정·다시 실행은 Agent Office에서 합니다.
 
-![흩어진 봇이 Agent Office 보드 한 곳으로 모이는 모습](docs/images/hero.svg)
+<p align="center"><img src="docs/images/hero.gif" width="560" alt="Codex, Claude Code, 헤르메스에 흩어진 업무가 Agent Office 보드 한 곳에 모이고, 멈춘 업무는 알림 후 같은 세션으로 이어서 실행되며, 새 업무는 Claude Code에서 실행돼 결과가 전달되는 모습"></p>
+<p align="center"><a href="docs/images/hero.mp4">고화질 MP4</a> · <a href="docs/motion/hero">만드는 방법</a></p>
 
 멈추면 조용히 넘어가지 않습니다. 멈춘 업무는 *확인 필요*에 올라오고, 메신저를 연결했다면 알림이 갑니다. 새 반복 업무는 한 줄로 맡기면 정해진 때에 실행됩니다.
 
