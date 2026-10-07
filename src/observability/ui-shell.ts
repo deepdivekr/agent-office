@@ -108,5 +108,19 @@ new MutationObserver(render).observe(sel,{childList:true,subtree:true,attributes
 const scan=root=>{for(const sel of (root.querySelectorAll?root.querySelectorAll('select[data-seg]'):[]))segment(sel);};
 const start=()=>{scan(document);new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1){if(n.matches&&n.matches('select[data-seg]'))segment(n);scan(n);}}).observe(document.body,{childList:true,subtree:true});};
 if(document.body)start();else document.addEventListener('DOMContentLoaded',start);})();`;
-export const uiCss=baseUiCss+pressFeedbackCss+segmentCss;
-export const themeScript=themeOnlyScript+'\n'+pressFeedbackScript+'\n'+segmentScript;
+/** Ordered few-option selects marked data-slider render as a slider with tick labels; the select stays the value source. */
+export const sliderCss=`.sldr{display:grid;gap:2px;min-height:32px;align-content:center;min-width:200px}.sldr input[type=range]{width:100%;margin:0;height:16px;accent-color:var(--accent,#b26a00)}.sldr input[type=range]:disabled{opacity:.5}.sldr .ticks{position:relative;height:14px;font-size:11px;line-height:14px;color:var(--dim)}.sldr .ticks span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;cursor:pointer}.sldr .ticks span:first-child{transform:none}.sldr .ticks span:last-child{left:auto!important;right:0;transform:none}.sldr .ticks span[data-on]{color:var(--ink,inherit);font-weight:600}`;
+export const sliderScript=`(()=>{// <select data-slider>는 눈금 라벨이 붙은 슬라이더로 보여 준다. select는 숨긴 채 값의 원본으로 두어 .value/.onchange/테스트가 그대로 동작한다.
+const desc=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value');
+function slider(sel){if(sel.dataset.sliderReady)return;sel.dataset.sliderReady='1';const box=document.createElement('div');box.className='sldr';const range=document.createElement('input');range.type='range';range.min='0';range.step='1';if(sel.id)range.id=sel.id+'-range';const ticks=document.createElement('div');ticks.className='ticks';if(sel.id)ticks.id=sel.id+'-ticks';box.append(range,ticks);sel.after(box);sel.classList.add('segsel-src');sel.setAttribute('aria-hidden','true');sel.tabIndex=-1;
+const label=sel.id&&document.querySelector('label[for="'+sel.id+'"]');if(label){if(!label.id)label.id=sel.id+'-label';range.setAttribute('aria-labelledby',label.id);}
+const render=()=>{if(sel.nextElementSibling!==box)sel.after(box);const opts=[...sel.options],index=Math.max(0,opts.findIndex(o=>o.selected));box.hidden=sel.hidden;range.max=String(Math.max(0,opts.length-1));range.value=String(index);range.disabled=sel.disabled;range.setAttribute('aria-valuetext',opts[index]?opts[index].textContent:'');
+ticks.replaceChildren(...opts.map((o,i)=>{const s=document.createElement('span');s.textContent=o.textContent;s.style.left=(100*i/Math.max(1,opts.length-1))+'%';if(i===index)s.dataset.on='1';s.addEventListener('click',()=>{if(sel.disabled||o.disabled)return;desc.set.call(sel,o.value);sel.dispatchEvent(new Event('change',{bubbles:true}));render();});return s;}));};
+range.addEventListener('input',()=>{const o=sel.options[Number(range.value)];if(!o)return;desc.set.call(sel,o.value);sel.dispatchEvent(new Event('change',{bubbles:true}));render();});
+Object.defineProperty(sel,'value',{configurable:true,get(){return desc.get.call(sel);},set(v){desc.set.call(sel,v);render();}});
+new MutationObserver(render).observe(sel,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled','hidden','selected']});render();}
+const scan=root=>{for(const sel of (root.querySelectorAll?root.querySelectorAll('select[data-slider]'):[]))slider(sel);};
+const start=()=>{scan(document);new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1){if(n.matches&&n.matches('select[data-slider]'))slider(n);scan(n);}}).observe(document.body,{childList:true,subtree:true});};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();})();`;
+export const uiCss=baseUiCss+pressFeedbackCss+segmentCss+sliderCss;
+export const themeScript=themeOnlyScript+'\n'+pressFeedbackScript+'\n'+segmentScript+'\n'+sliderScript;

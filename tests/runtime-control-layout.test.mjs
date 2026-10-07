@@ -136,7 +136,7 @@ test('runtime fixture Control Center alignment and compact right actions hold in
     else{assert.match(catalogState,/확인한 모델/u);assert.match(catalogState,/새 기본 Codex 모델이 현재 목록에 없어요/u);}
     await rightEdge(page,'#step-2>.actions button','#step-2');await noOverflow(page);
     // Only the chosen app's model fields are shown; compare the visible ones.
-    const models=await page.locator('#app-model-row select').evaluateAll(items=>items.filter(e=>e.checkVisibility()).map(e=>e.getBoundingClientRect().width));
+    const models=await page.locator('#app-model-row select').evaluateAll(items=>items.filter(e=>e.checkVisibility()&&!e.classList.contains('segsel-src')).map(e=>e.getBoundingClientRect().width));
     assert.ok(models.every(w=>Math.abs(w-models[0])<1),JSON.stringify(models));
     assert.equal(await page.locator('.terminal pre').evaluate(e=>getComputedStyle(e).textAlign),'start');
     assert.deepEqual(errors,[]);

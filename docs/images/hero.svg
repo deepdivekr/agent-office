@@ -2,12 +2,12 @@
 <title>여러 AI 클라이언트에 흩어진 봇과 자동화를 Agent Office 한 화면에서 관리</title>
 <style>.t{fill:#e6e9ee} .d{fill:#9aa3ad} .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001s!important;} }
-.k0{animation:k0 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k0{0%,14%{transform:translate(0,0)} 30%,95%{transform:translate(472px,16px)} 100%{transform:translate(0,0)}}
-.k1{animation:k1 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k1{0%,16%{transform:translate(0,0)} 32%,95%{transform:translate(483px,16px)} 100%{transform:translate(0,0)}}
-.k2{animation:k2 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k2{0%,18%{transform:translate(0,0)} 34%,95%{transform:translate(347px,-94px)} 100%{transform:translate(0,0)}}
-.k3{animation:k3 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k3{0%,20%{transform:translate(0,0)} 36%,95%{transform:translate(608px,-94px)} 100%{transform:translate(0,0)}}
-.k4{animation:k4 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k4{0%,22%{transform:translate(0,0)} 38%,95%{transform:translate(472px,-164px)} 100%{transform:translate(0,0)}}
-.k5{animation:k5 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k5{0%,24%{transform:translate(0,0)} 40%,95%{transform:translate(608px,-164px)} 100%{transform:translate(0,0)}}
+.k0{animation:k0 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k0{0%,14%{transform:translate(0,0)} 30%,95%{transform:translate(469px,20px)} 100%{transform:translate(0,0)}}
+.k1{animation:k1 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k1{0%,16%{transform:translate(0,0)} 32%,95%{transform:translate(480px,20px)} 100%{transform:translate(0,0)}}
+.k2{animation:k2 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k2{0%,18%{transform:translate(0,0)} 34%,95%{transform:translate(344px,-90px)} 100%{transform:translate(0,0)}}
+.k3{animation:k3 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k3{0%,20%{transform:translate(0,0)} 36%,95%{transform:translate(605px,-90px)} 100%{transform:translate(0,0)}}
+.k4{animation:k4 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k4{0%,22%{transform:translate(0,0)} 38%,95%{transform:translate(469px,-162px)} 100%{transform:translate(0,0)}}
+.k5{animation:k5 10s cubic-bezier(.4,0,.2,1) infinite} @keyframes k5{0%,24%{transform:translate(0,0)} 40%,95%{transform:translate(605px,-162px)} 100%{transform:translate(0,0)}}
 .cap1{animation:cap1 10s infinite} @keyframes cap1{0%{opacity:0} 4%,24%{opacity:1} 32%,100%{opacity:0}}
 .cap2{animation:cap2 10s infinite} @keyframes cap2{0%,38%{opacity:0} 46%,62%{opacity:1} 68%,100%{opacity:0}}
 .cap3{animation:cap3 10s infinite} @keyframes cap3{0%,70%{opacity:0} 76%,95%{opacity:1} 100%{opacity:0}}
