@@ -39,7 +39,7 @@ test('runtime contract renamed repository preserves installation identity and RE
     assert.ok(text.includes('cd agent-office'));
     assert.doesNotMatch(text,/deepdivekr\/agent-driver/u);
     const screenshots=[...text.matchAll(/!\[[^\]]*\]\((docs\/images\/[^)]+)\)/gu)].map(match=>match[1]);
-    assert.equal(screenshots.length,3);
+    assert.equal(screenshots.length,2);
     const english=path==='README.md';
     assert.ok(screenshots.every(s=>english?s.startsWith('docs/images/en/'):!s.startsWith('docs/images/en/')),'README screenshots must match its language');
     const localized=JSON.parse(await readFile(english?'docs/images/en/capture.json':'docs/images/capture.json','utf8'));
@@ -47,7 +47,9 @@ test('runtime contract renamed repository preserves installation identity and RE
     assert.equal(localized.theme,'dark');
     assert.equal(localized.layout,'board');
     assert.equal(localized.sample_data,true);
-    assert.equal(localized.live_task_run,false);
+    // A real run of a made-up sample task on a fresh install with a clean home (no personal skills, servers or Works).
+    assert.equal(localized.live_task_run,true);
+    assert.match(localized.environment,/clean home/u);
     assert.equal(localized.paid_model_calls,0);
     for(const screenshot of screenshots){
       const bytes=await readFile(screenshot);
@@ -57,6 +59,6 @@ test('runtime contract renamed repository preserves installation identity and RE
   }
   const receipt=JSON.parse(await readFile('docs/images/capture.json','utf8'));
   assert.equal(receipt.sample_data,true);
-  assert.equal(receipt.live_task_run,false);
+  assert.equal(receipt.live_task_run,true);
   assert.equal(receipt.paid_model_calls,0);
 });
