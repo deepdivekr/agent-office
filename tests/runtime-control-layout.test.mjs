@@ -135,7 +135,8 @@ test('runtime fixture Control Center alignment and compact right actions hold in
     if(lang==='en'){assert.doesNotMatch(catalogState,/[\uac00-\ud7a3]/u,'English AI settings must not retain Korean catalog status fragments');assert.match(catalogState,/new default Codex model is not in this account’s model list/u);}
     else{assert.match(catalogState,/확인한 모델/u);assert.match(catalogState,/새 기본 Codex 모델이 현재 목록에 없어요/u);}
     await rightEdge(page,'#step-2>.actions button','#step-2');await noOverflow(page);
-    const models=await page.locator('#codex-model,#claude-model').evaluateAll(items=>items.map(e=>e.getBoundingClientRect().width));
+    // Only the chosen app's model fields are shown; compare the visible ones.
+    const models=await page.locator('#app-model-row select').evaluateAll(items=>items.filter(e=>e.checkVisibility()).map(e=>e.getBoundingClientRect().width));
     assert.ok(models.every(w=>Math.abs(w-models[0])<1),JSON.stringify(models));
     assert.equal(await page.locator('.terminal pre').evaluate(e=>getComputedStyle(e).textAlign),'start');
     assert.deepEqual(errors,[]);

@@ -144,7 +144,7 @@ export const reviewedCopy: Record<string, readonly [string, string]> = {
   'AI 연결': ['업무 기본값', 'Work defaults'],
   '로컬 실행': ['실행 환경', 'Execution environment'],
   '전용 작업 환경': ['전용 실행 환경', 'Dedicated execution environment'],
-  '로컬 실행 승인': ['실행 환경 연결', 'Connect execution environment'],
+  '이 컴퓨터에서 실행 허용': ['이 컴퓨터에서 실행 허용', 'Allow running on this computer'],
   '전역 · 기본 AI': ['모든 업무의 기본 AI', 'Default AI for all work'],
   '코딩 업무 전용': ['코딩 업무용 AI', 'AI for coding work'],
   '설정 대상': ['적용할 업무', 'Apply to'],

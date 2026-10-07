@@ -103,7 +103,7 @@ test('runtime fixture settings UI locks startup controls, offers retry after fai
   await x.page.goto(x.server.url+'settings');
   assert.equal(await x.page.locator('[data-step="2"]').isDisabled(),true);
   assert.equal(await x.page.locator('#save-model').isDisabled(),true);
-  assert.equal(await x.page.locator('#mode').isDisabled(),true);
+  assert.equal(await x.page.locator('#client').isDisabled(),true);
   release();
   await x.page.locator('#retry-settings').waitFor();
   assert.equal(await x.page.locator('#connect-computer').isDisabled(),true);
@@ -118,7 +118,7 @@ test('runtime fixture settings UI locks startup controls, offers retry after fai
   assert.equal(await help.evaluate(node=>node.open),false);
   await help.locator('summary').click();
   assert.equal(await help.evaluate(node=>node.open),true);
-  assert.ok((await help.innerText()).includes('기본 브라우저는 백그라운드에서 동작해 화면을 방해하지 않아요.'));
+  assert.ok((await help.innerText()).includes('기본 브라우저는 백그라운드에서 돌아요'));
   await help.locator('summary').click();
   assert.equal(await help.locator('p').first().isHidden(),true);
 });
