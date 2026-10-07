@@ -26,7 +26,7 @@ The candidate `a37f84f931f8d8094c015e53e9ea2742dedda632` disposable installer pa
 
 Actual Neo checks cover KO/EN setup at 390px and 1440px, closed help, no horizontal overflow and the final-stage modal. Saving the already-selected app-only destination on a verified Node Work changed its selection revision and retained `available`; no external message was sent. Neo click interference under mobile emulation was diagnosed separately from application behavior.
 
-The isolated Node Work completed after one UI Start action: official page read, local TXT save/readback, independent completion and persisted app result. The separate ASTS Work remains awaiting review for unresolved material evidence. Its preserved intervention and result are not presented as successful independent completion. See [Phase110 evidence](phase-110-work-stages.md).
+The isolated Node Work completed after one UI Start action: official page read, local TXT save/readback, independent completion and persisted app result. The separate ACME Work remains awaiting review for unresolved material evidence. Its preserved intervention and result are not presented as successful independent completion. See [Phase110 evidence](phase-110-work-stages.md).
 
 The isolated actual-use server was safely stopped after confirming zero active Work and zero pending/sending deliveries; result hashes stayed unchanged. Evidence: `phase110-live-server-restart-20260930.json`.
 

@@ -241,7 +241,7 @@ test('runtime OpenCode bridge reuses its configured provider but denies every to
 test('runtime Codex schema transport removes nested URI annotations without mutating original constraints, literals, prompt or hash',async()=>{
   const original={type:'object',additionalProperties:false,required:['workers'],properties:{workers:{type:'array',minItems:2,maxItems:8,items:{type:'object',required:['source_urls'],additionalProperties:false,properties:{source_urls:{type:'array',items:{type:'string',format:'uri',maxLength:2000,pattern:'^https://'}},relative:{anyOf:[{type:'string',format:'uri-reference'},{type:'null'}]},timestamp:{type:'string',format:'date-time'},format:{const:'uri'},metadata:{const:{format:'uri',example:1},enum:[{format:'uri-reference',example:2}]}}}}},$defs:{reference:{type:'string',format:'uri-reference'}},allOf:[{properties:{more:{type:'array',prefixItems:[{type:'string',format:'uri'}]}}}]};
   const before=structuredClone(original),freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}};freeze(original);
-  const instructions='Return bounded source URLs.',input={topic:'ASTS'};let transported,stdin;
+  const instructions='Return bounded source URLs.',input={topic:'ACME'};let transported,stdin;
   const runner={async run(request){
     if(request.args.join(' ')==='login status')return {code:0,stdout:'Logged in using ChatGPT',stderr:''};
     assert.equal(request.args[0],'exec');transported=JSON.parse(await readFile(request.args[request.args.indexOf('--output-schema')+1],'utf8'));stdin=request.stdin;

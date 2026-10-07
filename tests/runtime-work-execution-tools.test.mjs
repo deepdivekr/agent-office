@@ -75,23 +75,23 @@ test('runtime contract Work tool catalog distinguishes durable drafts, local art
 });
 test('runtime fixture ticker social read uses only the historically ready registered profile and independently observes signed-in DOM',async t=>{
  const target={id:'neo-social',engine:'neo',environment:'host_foreground',profile_ref:'social',platform:process.platform,endpoint:'http://127.0.0.1:9010',priority:70};
- const spec={...proposal(),desired_outcome:'ASTS 기사 리서치',browser:{environment:'host_foreground',preferred_engine:'neo'}};
- const x=await fixture(t,{spec,prompt:'ASTS 기사 리서치'});x.config.browserExecutors={targets:[target]};
+ const spec={...proposal(),desired_outcome:'ACME 기사 리서치',browser:{environment:'host_foreground',preferred_engine:'neo'}};
+ const x=await fixture(t,{spec,prompt:'ACME 기사 리서치'});x.config.browserExecutors={targets:[target]};
  const before=x.toolkit.catalog();assert.equal(before.some(tool=>tool.name==='office_social_search'),false);
  setSiteAuth(x.store,x.config,'x.com','ready',false,target);
  const selected=[],opens=[];let liveMarker=true,loginLimited=false;
- const tool=new WorkExecutionTools(x.store,x.config,x.api,x.work.id,randomUUID(),spec,'ASTS 기사 리서치',()=>{},model,{browserFactory:chosen=>{
-   selected.push(chosen.id);let current='';return {target:chosen,async probe(){},async open(url){current=url;opens.push(url);},async navigate(url){current=url;},async observe(){return {url:loginLimited?'https://x.com/i/flow/login':current,title:'ASTS discussion',text:loginLimited?"We've temporarily limited your login. Please try again later.":'Visible discussion about ASTS; claims remain unverified.',links:[{text:'Visible post',url:'https://x.com/example/status/123'}],observed_at:new Date().toISOString()};},async extract(){return liveMarker?[{marker:'visible'}]:[];},async scroll(){},async close(){}};
+ const tool=new WorkExecutionTools(x.store,x.config,x.api,x.work.id,randomUUID(),spec,'ACME 기사 리서치',()=>{},model,{browserFactory:chosen=>{
+   selected.push(chosen.id);let current='';return {target:chosen,async probe(){},async open(url){current=url;opens.push(url);},async navigate(url){current=url;},async observe(){return {url:loginLimited?'https://x.com/i/flow/login':current,title:'ACME discussion',text:loginLimited?"We've temporarily limited your login. Please try again later.":'Visible discussion about ACME; claims remain unverified.',links:[{text:'Visible post',url:'https://x.com/example/status/123'}],observed_at:new Date().toISOString()};},async extract(){return liveMarker?[{marker:'visible'}]:[];},async scroll(){},async close(){}};
  }});t.after(()=>tool.close());
  assert.equal(tool.catalog().find(item=>item.name==='office_social_search')?.effect,'read_only');
- await assert.rejects(tool.execute('office_social_search',{site:'reddit.com',query:'ASTS'},'reddit-unready'),/WORK_SOCIAL_PROFILE_NOT_READY/u);
- const observed=await tool.execute('office_social_search',{site:'x.com',query:'ASTS'},'social-ready');
- assert.deepEqual(selected,['neo-social']);assert.match(opens[0],/^https:\/\/x\.com\/search\?q=ASTS/u);
+ await assert.rejects(tool.execute('office_social_search',{site:'reddit.com',query:'ACME'},'reddit-unready'),/WORK_SOCIAL_PROFILE_NOT_READY/u);
+ const observed=await tool.execute('office_social_search',{site:'x.com',query:'ACME'},'social-ready');
+ assert.deepEqual(selected,['neo-social']);assert.match(opens[0],/^https:\/\/x\.com\/search\?q=ACME/u);
  assert.equal(observed.social_access,'signed_in_marker_observed');assert.equal(observed.provenance,'live_browser_dom');assert.equal(observed.executor,'neo-social');assert.equal(observed.links[0].url,'https://x.com/example/status/123');
  const receipt=await tool.receipt('office_social_search',observed,'social-ready');assert.equal(receipt.status,'succeeded');assert.equal(receipt.effect_state,'none');
- loginLimited=true;const blocked=await tool.execute('office_social_search',{site:'x.com',query:'ASTS'},'social-limited');
+ loginLimited=true;const blocked=await tool.execute('office_social_search',{site:'x.com',query:'ACME'},'social-limited');
  assert.equal(blocked.social_access,'not_verified');assert.equal(blocked.reason,'WORK_SOCIAL_LOGIN_LIMITED');assert.deepEqual(blocked.links,[]);assert.equal((await tool.receipt('office_social_search',blocked,'social-limited')).status,'retryable_failure');assert.deepEqual(selected,['neo-social']);
- await assert.rejects(tool.execute('office_social_search',{site:'x.com',query:'ASTS'},'social-retry'),/WORK_SOCIAL_PROFILE_NOT_READY/u);
+ await assert.rejects(tool.execute('office_social_search',{site:'x.com',query:'ACME'},'social-retry'),/WORK_SOCIAL_PROFILE_NOT_READY/u);
 });
 test('runtime contract invalid Pack status ID is correctable before dispatch without exposing foreign runs',async t=>{
  const x=await fixture(t),owned=x.store.beginPack(x.config.project.id,'owned-status',recipe,'binding',x.work.id).run;
@@ -112,7 +112,7 @@ test('runtime fixture social source never crosses an explicit browser environmen
  const target={id:'neo-social',engine:'neo',environment:'host_foreground',profile_ref:'social',platform:process.platform,endpoint:'http://127.0.0.1:9010',priority:70};
  const x=await fixture(t,{spec:{...proposal(),browser:{environment:'host_foreground',preferred_engine:'aside'}},prompt:'Read stock ticker discussion from X'});x.config.browserExecutors={targets:[target]};setSiteAuth(x.store,x.config,'x.com','ready',false,target);
  assert.equal(x.toolkit.catalog().some(item=>item.name==='office_social_search'),false);
- await assert.rejects(x.toolkit.execute('office_social_search',{site:'x.com',query:'ASTS'},'wrong-profile'),/WORK_SOCIAL_PROFILE_NOT_READY/u);
+ await assert.rejects(x.toolkit.execute('office_social_search',{site:'x.com',query:'ACME'},'wrong-profile'),/WORK_SOCIAL_PROFILE_NOT_READY/u);
  await assert.rejects(x.toolkit.execute('office_browser_read',{url:'https://x.com/example/status/123'},'wrong-profile-link'),/WORK_SOCIAL_PROFILE_NOT_READY|BROWSER_URL_NOT_OBSERVED/u);
 });
 test('runtime contract API inputs are parsed before dispatch and every Work/run identity is scoped',async t=>{

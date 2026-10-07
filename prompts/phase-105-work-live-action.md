@@ -1,13 +1,13 @@
 # Phase 105 — visible Work admission and live execution
 
-The user registered an ASTS article-research Work and sees no visible response, unclear execution actions, and no explanation of analysis, Pack choice or visited sources. Diagnose the actual Work first, then repair the common registration-to-execution experience and verify through the product runtime. Retain Phase104 unfinished acceptance/unknown failure, disabled client MCP, personal data and original bot/runtime authority.
+The user registered an ACME article-research Work and sees no visible response, unclear execution actions, and no explanation of analysis, Pack choice or visited sources. Diagnose the actual Work first, then repair the common registration-to-execution experience and verify through the product runtime. Retain Phase104 unfinished acceptance/unknown failure, disabled client MCP, personal data and original bot/runtime authority.
 
 ## TODO (copy these requirements without merging or omitting)
 
-- [ ] RQ-858 | Diagnose the actual submitted ASTS Work against installed runtime, saved definition, admission, process and activity state without duplicating private tasks.
+- [ ] RQ-858 | Diagnose the actual submitted ACME Work against installed runtime, saved definition, admission, process and activity state without duplicating private tasks.
 - [ ] RQ-859 | Make the human Start work action durably register, immediately open the Work detail and admit its current run without a second Run action; preserve cost consent, revisions, original-runtime authority and uncertain-effect boundaries.
 - [ ] RQ-860 | Surface actual bounded Work analysis, Pack/executor/source selection, current operation and readable execution summaries in live localized progress; move pause/instruction/resume to stage-click modals, without simulated progress or hidden failures.
-- [ ] RQ-861 | Verify desktop/mobile UI and affected contracts, exercise the user's read-only ASTS Work through the installed runtime, preserve state and record actual versus fixture evidence.
+- [ ] RQ-861 | Verify desktop/mobile UI and affected contracts, exercise the user's read-only ACME Work through the installed runtime, preserve state and record actual versus fixture evidence.
 - [ ] RQ-862 | Run proportionate quick/public-boundary/ledger checks without soak; apply the verified local candidate and record failures, issue disposition and remaining publication limits.
 
 ## Boundaries and verification
