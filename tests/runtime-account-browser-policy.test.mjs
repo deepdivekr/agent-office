@@ -6,7 +6,7 @@ const surface=(kind,patch={})=>({kind,local:true,persistent_profile:true,network
 
 test('runtime contract does not encode site-specific terms or force an API route',()=>{
   assert.equal(policySite('https://mobile.twitter.com/example'),'x.com');assert.equal(policySite('https://old.reddit.com/r/example'),'reddit.com');assert.equal(policySite('https://x.com.evil.test/'),'x.com.evil.test');
-  for(const url of ['https://x.com/search','https://reddit.com/r/test','https://stocktwits.com/symbol/ASTS']){
+  for(const url of ['https://x.com/search','https://reddit.com/r/test','https://stocktwits.com/symbol/ACME']){
     assert.equal(siteAutomationPolicy(url).automated_access,'browser_permitted');
     assert.equal(assertAutomatedBrowserAllowed(url).automated_access,'browser_permitted');
   }

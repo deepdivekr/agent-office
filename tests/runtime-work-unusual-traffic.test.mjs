@@ -14,18 +14,18 @@ import {workTail} from '../dist/work/activity.js';
 import {browserCheckpointBinding} from '../dist/browser/executor-routing.js';
 import {hashJson} from '../dist/taskpack/adaptive-spec.js';
 
-const observedAt='2026-09-29T00:00:00.000Z',query='ASTS public source 한글';
+const observedAt='2026-09-29T00:00:00.000Z',query='ACME public source 한글';
 const headless={id:'unusual-headless',engine:'playwright',environment:'owned_headless',platform:process.platform,profile_ref:'public-headless',priority:80};
 const guest={id:'unusual-guest',engine:'playwright',environment:'ubuntu_vm',platform:process.platform,profile_ref:'owned-guest',priority:80};
 const aside={id:'unusual-aside',engine:'aside',environment:'host_foreground',platform:process.platform,profile_ref:'personal-aside',executable:'/fixture/aside',priority:20};
 const neo={id:'unusual-neo',engine:'neo',environment:'host_foreground',platform:process.platform,profile_ref:'personal-neo',endpoint:'http://127.0.0.1:9010/mcp',priority:100};
-const article='https://example.org/observed-asts-report';
+const article='https://example.org/observed-acme-report';
 const searchUrl=value=>{const url=new URL('https://www.google.com/search');url.searchParams.set('q',value);url.searchParams.set('num','10');return url.href;};
-const observation=(url,patch={})=>({url,title:'Observed source results',text:'Fixture page with a visible source link.',links:[{text:'Observed ASTS report',url:article}],observed_at:observedAt,...patch});
+const observation=(url,patch={})=>({url,title:'Observed source results',text:'Fixture page with a visible source link.',links:[{text:'Observed ACME report',url:article}],observed_at:observedAt,...patch});
 const unusual=()=>observation('https://www.google.com/sorry/index',{title:'Google',text:'Our systems have detected unusual traffic from your computer network.',links:[]});
-const proposal={title:'ASTS source research',desired_outcome:'Read public ASTS articles and report observed sources.',completion_checks:[{id:'sources',result:'Sources are saved',evidence:'Observed browser receipts'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[],browser:{environment:'owned_headless'}};
+const proposal={title:'ACME source research',desired_outcome:'Read public ACME articles and report observed sources.',completion_checks:[{id:'sources',result:'Sources are saved',evidence:'Observed browser receipts'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[],browser:{environment:'owned_headless'}};
 
-async function setup(t,{browser=proposal.browser,requested_effect=proposal.requested_effect,prompt='Research ASTS articles',observe=(target,url)=>target.environment==='owned_headless'?unusual():observation(url),probeFail=[],download=()=>false,digest=null,workPolicy=null,marker=true}={}){
+async function setup(t,{browser=proposal.browser,requested_effect=proposal.requested_effect,prompt='Research ACME articles',observe=(target,url)=>target.environment==='owned_headless'?unusual():observation(url),probeFail=[],download=()=>false,digest=null,workPolicy=null,marker=true}={}){
   const root=await mkdtemp(join(tmpdir(),'work-unusual-traffic-')),path=join(root,'host.json');
   await writeFile(path,JSON.stringify({schema_version:1,project_id:'unusual-traffic-fixture',caller_ref:'fixture',account_ref:'owner',worktree:root,data_dir:join(root,'data'),environment:'production',packs:{sources:[],targets:[],models:'off'},swarm:{enabled:true,model_data_approved:true},...(workPolicy?{work:workPolicy}:{}),browser_executors:{targets:[headless,guest,aside,neo]}}));
   const config=loadHostConfig(path),store=new PackStore(config.dbPath);store.registerProject(config.project);initWorkSupervisor(store);
@@ -116,11 +116,11 @@ test('runtime fixture an explicit headless engine pin retains the observed block
 });
 
 test('runtime fixture the default public headless placement keeps authenticated social reads on the verified Aside profile',async t=>{
-  const x=await setup(t,{prompt:'Read ASTS stock discussion from X and public articles',observe:(_target,url)=>observation(url,{title:'Observed ASTS social discussion'})});
+  const x=await setup(t,{prompt:'Read ACME stock discussion from X and public articles',observe:(_target,url)=>observation(url,{title:'Observed ACME social discussion'})});
   setSiteAuth(x.store,x.config,'x.com','ready',false,aside);setSiteAuth(x.store,x.config,'x.com','ready',false,neo);
   const beforeAside=authSites(x.store,x.config,aside),beforeNeo=authSites(x.store,x.config,neo),tools=x.create();
-  const value=await tools.execute('office_social_search',{site:'x.com',query:'ASTS'},'social-search'),receipt=await tools.receipt('office_social_search',value,'social-search');
-  assert.deepEqual(opens(x).map(event=>event.id),[aside.id]);assert.match(opens(x)[0].url,/^https:\/\/x\.com\/search\?q=ASTS/u);
+  const value=await tools.execute('office_social_search',{site:'x.com',query:'ACME'},'social-search'),receipt=await tools.receipt('office_social_search',value,'social-search');
+  assert.deepEqual(opens(x).map(event=>event.id),[aside.id]);assert.match(opens(x)[0].url,/^https:\/\/x\.com\/search\?q=ACME/u);
   assert.equal(value.executor,aside.id);assert.equal(value.social_access,'signed_in_marker_observed');assert.equal(receipt.status,'succeeded');assert.ok(x.events.some(event=>event.kind==='extract'&&event.id===aside.id));
   assert.deepEqual(authSites(x.store,x.config,aside),beforeAside);assert.deepEqual(authSites(x.store,x.config,neo),beforeNeo);assert.deepEqual(authSites(x.store,x.config),[]);
 });
@@ -146,15 +146,15 @@ test('runtime fixture a scheme-less site in the request is readable and an unlis
 // check) moves the same read once to the Aside the owner registered. A normal page never touches Aside.
 test('runtime fixture a public page that refuses the background browser is reread once in the registered Aside; a normal page stays headless',async t=>{
   const wall=url=>observation(url,{title:'Just a moment...',text:'Checking your browser before accessing the site.',links:[]});
-  const x=await setup(t,{browser:null,prompt:'Read https://example.org/observed-asts-report',observe:(target,url)=>target.environment==='owned_headless'?wall(url):observation(url)}),tools=x.create();
+  const x=await setup(t,{browser:null,prompt:'Read https://example.org/observed-acme-report',observe:(target,url)=>target.environment==='owned_headless'?wall(url):observation(url)}),tools=x.create();
   const value=await tools.execute('office_browser_read',{url:article},'walled-read');
   assert.equal(value.executor,aside.id,'The blocked read was handed to the registered Aside.');assert.equal(value.title,'Observed source results');
   assert.deepEqual(opens(x).map(({id,url})=>({id,url})),[{id:headless.id,url:article},{id:aside.id,url:article}]);
   assert.ok(!x.events.some(event=>event.id===guest.id||event.id===neo.id),'No guest or other foreground browser is tried.');
-  const y=await setup(t,{browser:null,prompt:'Read https://example.org/observed-asts-report',observe:(target,url)=>observation(url)}),plain=y.create();
+  const y=await setup(t,{browser:null,prompt:'Read https://example.org/observed-acme-report',observe:(target,url)=>observation(url)}),plain=y.create();
   assert.equal((await plain.execute('office_browser_read',{url:article},'plain-read')).executor,headless.id);
   assert.ok(!y.events.some(event=>event.id===aside.id),'A page the background browser can read never opens the owner\'s foreground browser.');
-  const pinned=await setup(t,{browser:{environment:'owned_headless',preferred_engine:'playwright'},prompt:'Read https://example.org/observed-asts-report',observe:(target,url)=>wall(url)}),explicit=pinned.create();
+  const pinned=await setup(t,{browser:{environment:'owned_headless',preferred_engine:'playwright'},prompt:'Read https://example.org/observed-acme-report',observe:(target,url)=>wall(url)}),explicit=pinned.create();
   assert.equal((await explicit.execute('office_browser_read',{url:article},'pinned-read')).executor,headless.id,'An explicit headless engine pin never acquires the foreground browser.');
 });
 
@@ -212,8 +212,8 @@ test('runtime fixture the reads of one decision are opened in order and their di
 // Live: X and Reddit were signed in inside the owner's Aside and the Work still stopped to ask for a sign-in,
 // because nobody had pressed "Check sign-in" for those sites in this installation.
 test('runtime fixture under delegation a social page is read in the registered Aside and an observed sign-in is remembered',async t=>{
-  const page='https://www.reddit.com/r/ASTSpaceMobile/',request=`ASTS 주식 종목 reddit 반응을 ${page} 에서 확인해줘`;
-  const x=await setup(t,{browser:null,prompt:request,observe:(target,url)=>observation(url,{title:'r/ASTSpaceMobile',text:'Posts from the community.'}),workPolicy:{model_data_approved:true,autonomy:'delegated'}}),tools=x.create();
+  const page='https://www.reddit.com/r/AcmeSat/',request=`ACME 주식 종목 reddit 반응을 ${page} 에서 확인해줘`;
+  const x=await setup(t,{browser:null,prompt:request,observe:(target,url)=>observation(url,{title:'r/AcmeSat',text:'Posts from the community.'}),workPolicy:{model_data_approved:true,autonomy:'delegated'}}),tools=x.create();
   assert.deepEqual(authSites(x.store,x.config,aside).filter(row=>row.site==='reddit.com'),[],'Nothing was recorded for the site before.');
   const value=await tools.execute('office_browser_read',{url:page},'social-read');
   assert.equal(value.executor,aside.id);assert.equal(value.social_access,'signed_in_marker_observed');
@@ -226,10 +226,10 @@ test('runtime fixture under delegation a social page is read in the registered A
 // Live (2026-10-03): X was signed in but its posts had not been drawn yet, and Reddit, signed in inside Aside, did
 // not show the account menu this host looks for. The owner was asked to sign in again to both.
 test('runtime fixture a social page is given time to draw its posts, and a page that shows posts is a read without the account marker',async t=>{
-  const page='https://www.reddit.com/r/ASTSpaceMobile/',request=`ASTS 주식 종목 reddit 반응을 ${page} 에서 확인해줘`;
-  const posts=Array.from({length:8},(_,index)=>({text:`Post ${index}`,url:`https://www.reddit.com/r/ASTSpaceMobile/comments/${index}/`}));
+  const page='https://www.reddit.com/r/AcmeSat/',request=`ACME 주식 종목 reddit 반응을 ${page} 에서 확인해줘`;
+  const posts=Array.from({length:8},(_,index)=>({text:`Post ${index}`,url:`https://www.reddit.com/r/AcmeSat/comments/${index}/`}));
   let looks=0;
-  const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},marker:false,observe:(target,url)=>{looks++;return looks<3?observation(url,{title:'Reddit',text:'Loading',links:[]}):observation(url,{title:'r/ASTSpaceMobile',text:'Retail investors discuss the latest launch. '.repeat(20),links:posts});}});
+  const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},marker:false,observe:(target,url)=>{looks++;return looks<3?observation(url,{title:'Reddit',text:'Loading',links:[]}):observation(url,{title:'r/AcmeSat',text:'Retail investors discuss the latest launch. '.repeat(20),links:posts});}});
   const factory=x.create();
   // The fixture browser shows the posts on the third look and never the account menu.
   const value=await factory.execute('office_browser_read',{url:page},'social-late');
@@ -239,39 +239,39 @@ test('runtime fixture a social page is given time to draw its posts, and a page 
 
 // Live (2026-10-03): a retried Work kept the earlier attempt's "sign-in not seen" for Reddit and never looked again.
 test('runtime fixture a resumed run looks again at a site whose sign-in was not seen, but keeps a site\'s own refusal',async t=>{
-  const page='https://www.reddit.com/r/ASTSpaceMobile/',request=`ASTS 주식 종목 reddit 반응을 ${page} 에서 확인해줘`;
+  const page='https://www.reddit.com/r/AcmeSat/',request=`ACME 주식 종목 reddit 반응을 ${page} 에서 확인해줘`;
   const blocked=(reason)=>({format:1,work_id:null,run_id:null,binding:'a'.repeat(64),turn:1,pending:null,summary:'earlier attempt',observations:[{
     invocation:{request_id:'social-before',turn:0,stage_id:'sources',tool_name:'office_browser_read',arguments:{url:page},effect:'read_only',dispatched:true},
     receipt:{status:'retryable_failure',effect_state:'none',retry_safe:false,evidence_ids:[],value:{status:'retryable_failure',reason,requested_url:page,observed_at:observedAt,social_site:'reddit.com',provenance:'live_browser_dom',executor:aside.id,effect:'read_only',social_access:'not_verified',text:'',links:[]}},observed_at:observedAt}]});
   for(const [reason,expectRead] of [['WORK_SOCIAL_AUTH_NOT_VERIFIED',true],['WORK_SOCIAL_CHALLENGE',false]]){
-    const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},observe:(target,url)=>observation(url,{title:'r/ASTSpaceMobile',text:'Retail investors discuss the latest launch. '.repeat(20),links:Array.from({length:8},(_,index)=>({text:`Post ${index}`,url:`${page}comments/${index}/`}))})});
+    const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},observe:(target,url)=>observation(url,{title:'r/AcmeSat',text:'Retail investors discuss the latest launch. '.repeat(20),links:Array.from({length:8},(_,index)=>({text:`Post ${index}`,url:`${page}comments/${index}/`}))})});
     x.seed({...blocked(reason),work_id:x.work.work_id,run_id:x.run});const tools=x.create();
-    if(expectRead)assert.equal((await tools.execute('office_browser_read',{url:page},'social-again')).title,'r/ASTSpaceMobile',reason);
+    if(expectRead)assert.equal((await tools.execute('office_browser_read',{url:page},'social-again')).title,'r/AcmeSat',reason);
     else await assert.rejects(tools.execute('office_browser_read',{url:page},'social-again'),/WORK_SOCIAL_PROFILE_NOT_READY/u,reason);
   }
 });
 
 // Live (2026-10-03): X's search showed "문제가 발생했습니다. 새로고침해 보세요." in one tab and worked when opened again.
 test('runtime fixture a site\'s own "try reloading" page is reloaded, and social searches ask for the newest posts',async t=>{
-  const page='https://x.com/search?q=ASTS&f=live',request='ASTS 주식 종목 X 반응을 '+page+' 에서 확인해줘',holder={};
+  const page='https://x.com/search?q=ACME&f=live',request='ACME 주식 종목 X 반응을 '+page+' 에서 확인해줘',holder={};
   // The error page stays until the page is opened again, however long it is watched.
   const reloaded=()=>holder.x?.events.some(event=>event.kind==='navigate'&&event.url===page);
-  const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},observe:(target,url)=>!reloaded()?observation(url,{title:'X',text:'문제가 발생했습니다. 새로고침해 보세요. 다시 시도',links:[]}):observation(url,{title:'ASTS - 검색 / X',text:'Retail investors discuss the launch. '.repeat(20),links:Array.from({length:8},(_,index)=>({text:`Post ${index}`,url:`https://x.com/user/status/${index}`}))})});
+  const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},observe:(target,url)=>!reloaded()?observation(url,{title:'X',text:'문제가 발생했습니다. 새로고침해 보세요. 다시 시도',links:[]}):observation(url,{title:'ACME - 검색 / X',text:'Retail investors discuss the launch. '.repeat(20),links:Array.from({length:8},(_,index)=>({text:`Post ${index}`,url:`https://x.com/user/status/${index}`}))})});
   holder.x=x;const value=await x.create().execute('office_browser_read',{url:page},'x-reload');
-  assert.equal(value.title,'ASTS - 검색 / X');assert.equal(opens(x).filter(event=>event.url===page).length,2,'The page was opened once and reloaded once.');
+  assert.equal(value.title,'ACME - 검색 / X');assert.equal(opens(x).filter(event=>event.url===page).length,2,'The page was opened once and reloaded once.');
   const {socialSearchUrlForTest}=await import('../dist/work/execution-tools.js');
-  assert.equal(socialSearchUrlForTest({site:'reddit.com',query:'ASTS'}),'https://www.reddit.com/search/?q=ASTS&type=posts&sort=new');
-  assert.equal(socialSearchUrlForTest({site:'x.com',query:'ASTS'}),'https://x.com/search?q=ASTS&f=live');
+  assert.equal(socialSearchUrlForTest({site:'reddit.com',query:'ACME'}),'https://www.reddit.com/search/?q=ACME&type=posts&sort=new');
+  assert.equal(socialSearchUrlForTest({site:'x.com',query:'ACME'}),'https://x.com/search?q=ACME&f=live');
 });
 
 // Owner direction 2026-10-03: on Reddit, find the subreddit in the search results, then read its newest and top posts.
 test('runtime fixture a subreddit seen in the results may be read newest-first or top-of-day; an unseen one may not',async t=>{
-  const search='https://www.reddit.com/search/?q=ASTS&type=posts&sort=new',request='ASTS 주식 종목 reddit 반응을 '+search+' 에서 확인해줘';
-  const results=observation(search,{title:'ASTS - Reddit Search!',text:'Results for ASTS. '.repeat(30),links:[{text:'r/ASTSpaceMobile',url:'https://www.reddit.com/r/ASTSpaceMobile/'},...Array.from({length:6},(_,index)=>({text:`Post ${index}`,url:`https://www.reddit.com/r/ASTSpaceMobile/comments/${index}/`}))]});
-  const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},observe:(target,url)=>url===search?results:observation(url,{title:'r/ASTSpaceMobile',text:'Posts. '.repeat(80),links:Array.from({length:6},(_,index)=>({text:`New ${index}`,url:`https://www.reddit.com/r/ASTSpaceMobile/comments/n${index}/`}))})});
+  const search='https://www.reddit.com/search/?q=ACME&type=posts&sort=new',request='ACME 주식 종목 reddit 반응을 '+search+' 에서 확인해줘';
+  const results=observation(search,{title:'ACME - Reddit Search!',text:'Results for ACME. '.repeat(30),links:[{text:'r/AcmeSat',url:'https://www.reddit.com/r/AcmeSat/'},...Array.from({length:6},(_,index)=>({text:`Post ${index}`,url:`https://www.reddit.com/r/AcmeSat/comments/${index}/`}))]});
+  const x=await setup(t,{browser:null,prompt:request,workPolicy:{model_data_approved:true,autonomy:'delegated'},observe:(target,url)=>url===search?results:observation(url,{title:'r/AcmeSat',text:'Posts. '.repeat(80),links:Array.from({length:6},(_,index)=>({text:`New ${index}`,url:`https://www.reddit.com/r/AcmeSat/comments/n${index}/`}))})});
   const tools=x.create();await tools.execute('office_browser_read',{url:search},'search');
-  assert.equal((await tools.execute('office_browser_read',{url:'https://www.reddit.com/r/ASTSpaceMobile/new/'},'newest')).title,'r/ASTSpaceMobile');
-  assert.equal((await tools.execute('office_browser_read',{url:'https://www.reddit.com/r/ASTSpaceMobile/top/?t=day'},'top')).title,'r/ASTSpaceMobile');
+  assert.equal((await tools.execute('office_browser_read',{url:'https://www.reddit.com/r/AcmeSat/new/'},'newest')).title,'r/AcmeSat');
+  assert.equal((await tools.execute('office_browser_read',{url:'https://www.reddit.com/r/AcmeSat/top/?t=day'},'top')).title,'r/AcmeSat');
   assert.throws(()=>tools.validate('office_browser_read',{url:'https://www.reddit.com/r/SomethingElse/new/'},'unseen'),/BROWSER_URL_NOT_OBSERVED/u);
 });
 
