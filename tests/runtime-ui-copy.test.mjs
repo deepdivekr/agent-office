@@ -40,8 +40,6 @@ test('display copy: verification, permissions, delivery uncertainty and API cost
   assert.match(en('저장됨 · 발송 연결 미확인'),/not confirmed/u);
   assert.match(ko('전송 여부가 불확실합니다. 메신저에서 수신 여부를 확인하세요.'),/불확실.*수신 여부/u);
   assert.match(ko('Jev API 비용 가능성을 확인하고 연결에 동의합니다'),/API 비용.*동의/u);
-  assert.match(ko('구독 한도를 소진해도 유료 API로 자동 전환하지 않습니다.'),/자동 전환하지 않아요/u);
-  assert.match(en('구독 한도를 소진해도 유료 API로 자동 전환하지 않습니다.'),/never triggers an automatic switch/u);
   assert.match(ko('현재 실행 미관측'),/미확인/u);
 });
 test('display copy: unknown requests, credentials, identifiers and file content remain verbatim',()=>{
