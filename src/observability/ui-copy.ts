@@ -151,7 +151,6 @@ export const reviewedCopy: Record<string, readonly [string, string]> = {
   '연결 방식': ['AI 사용 방식', 'AI connection'],
   '업무 내용을 선택한 AI로 보내 정의·계획하도록 허용': ['업무 내용을 AI에 보내 분석과 실행 허용', 'Allow AI to analyze and run your work'],
   '빠른 반복 판단에 사용합니다. 연결하지 않아도 LLM으로 진행합니다.': ['짧고 반복적인 판단에 사용해요. 연결하지 않아도 AI로 진행할 수 있어요.', 'Used for short, repeated decisions. Your AI can continue without Jev.'],
-  '구독 한도를 소진해도 유료 API로 자동 전환하지 않습니다.': ['구독 한도를 다 써도 유료 API로 자동 전환하지 않아요.', 'A subscription limit never triggers an automatic switch to a paid API.'],
   'Windows AI 앱 연결 · 선택': ['Windows AI 앱 연결 · 선택', 'Connect a Windows AI app · optional'],
   '앱 연결 확인을 마쳤습니다. 클라이언트별 결과를 확인하세요.': ['연결 확인을 마쳤어요. 각 앱의 상태를 확인해 주세요.', 'Connection check finished. See each app’s status.'],
   'WSL 앱이 없다면 Windows 앱에 연결 정보를 등록하고 계속하세요. 등록 여부는 아직 확인되지 않았습니다.': ['Windows AI 앱만 쓴다면 아래 연결 설정을 등록해 주세요. 이 화면에서는 등록 여부를 확인할 수 없어요.', 'If you only use a Windows AI app, add the connection settings below. This page cannot verify its registration.'],
