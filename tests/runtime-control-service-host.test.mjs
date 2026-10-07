@@ -31,7 +31,8 @@ test('runtime contract host collision closes the unpublished listener and retrie
   });t.after(()=>service.close());
   assert.equal(urls.length,2);assert.notEqual(new URL(urls[0]).port,new URL(service.url).port);
   assert.equal(new URL(service.url).pathname,previous.pathname);
-  await assert.rejects(fetch(urls[0]+'settings/status',{signal:AbortSignal.timeout(500)}));
+  // The first listener is closed. With the fixed default port another suite's Control Center may now sit there; it does not know this capability.
+  const closed=await fetch(urls[0]+'settings/status',{signal:AbortSignal.timeout(500)}).then(response=>response.status,()=>'refused');assert.notEqual(closed,200);
   assert.equal((await fetch(service.url+'settings/status')).status,200);
 });
 

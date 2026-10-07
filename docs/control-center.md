@@ -6,7 +6,7 @@ Control Center는 Agent Driver가 맡은 업무의 진행 상태와 연결 설�
 agent-driver dashboard --config /absolute/path/to/host.json
 ```
 
-서버는 `127.0.0.1`에만 열리고 매번 capability URL을 만든다. 온보딩·AI 연결·Jev·사이트 로그인 설정도 이 화면에서 처리한다. 사이트 로그인은 작업에 필요할 때만 표시된다.
+서버는 `127.0.0.1`에만 열리고 기본 포트는 4600이다(쓰고 있으면 빈 포트로 넘어간다). capability URL이 열쇠이며, `agent-office connect`가 여는 `office.localhost` 주소에서는 그 열쇠가 host 전용 쿠키로 옮겨져 주소창에는 `http://office.localhost:4600/`만 남는다. `127.0.0.1`·`localhost`에서는 capability 경로 그대로 쓴다. 온보딩·AI 연결·Jev·사이트 로그인 설정도 이 화면에서 처리한다. 사이트 로그인은 작업에 필요할 때만 표시된다.
 
 ## 확인할 수 있는 것
 
