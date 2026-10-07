@@ -5,7 +5,8 @@ import {dirname} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {PackStore,type RuntimeActivity} from '../packs/store.js';
-import {workAutonomy,workDelegation,type HostConfig} from '../interface/config.js';
+import {workAutonomy,workDelegation,workModelDataApproved,type HostConfig} from '../interface/config.js';
+import {setWorkModelDataApproval} from '../onboarding/connection.js';
 import {listProcedures,setProcedureDisabled} from '../work/procedures.js';
 import {applyAutoSources,readAutoSources,forgetAutoSource} from '../packs/auto-sources.js';
 import {readSwarmDashboard} from '../swarm/dashboard.js';
@@ -339,6 +340,9 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         if(rejectStopped())return;const {execute,cost_acknowledged,timezone,...input}=workStartActionSchema.parse(JSON.parse(body));
         if(input.delivery_target_ids?.some(id=>id!=='app'&&!deliverySettings.target(id)))throw Error('DELIVERY_TARGET_NOT_CONFIGURED');
         if(execute&&!cost_acknowledged)throw Error('WORK_MODEL_USAGE_CONSENT_REQUIRED');
+        // The owner pressing Start in their own Control Center, with the notice that the work text goes to the chosen AI, is the
+        // model-data consent. It is recorded once as the standing approval; the settings switch stays as the way to revoke it.
+        if(execute&&cost_acknowledged&&!workModelDataApproved(config))await setWorkModelDataApproval(config.path,true);
         const intent={execute,cost_acknowledged,...(timezone?{timezone}:{})};
         const recordStart=(work:ReturnType<WorkRuntime['status']>)=>{if(execute)workActivity(store,config.project.id,work.work_id,'dispatch.requested','The owner requested this Work run using the configured AI allowance. External submissions remain separately gated.',{stage_id:'admission',status:'requested'});};
         if(request.headers.accept==='application/x-ndjson'){

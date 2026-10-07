@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {loadHostConfig} from '../dist/interface/config.js';
+import {loadHostConfig,workModelDataApproved} from '../dist/interface/config.js';
 import {PackStore} from '../dist/packs/store.js';
 import {WorkRuntime} from '../dist/work/runtime.js';
 import {WorkSupervisor,supervisorStatus} from '../dist/work/supervisor.js';
@@ -29,7 +29,7 @@ function model({definition=proposal(),gate=null,offline=false,guided=false}={}){
 }
 async function fixture(t,options={}){
   const root=await mkdtemp(join(tmpdir(),'work-live-intake-')),path=join(root,'host.json');
-  await writeFile(path,JSON.stringify({schema_version:1,project_id:'live-intake',caller_ref:'owner',account_ref:'owner',worktree:root,data_dir:join(root,'data'),environment:'production',packs:{sources:[],targets:[],models:'off'},swarm:{enabled:true,model_data_approved:options.approved!==false}}));
+  await writeFile(path,JSON.stringify({schema_version:1,project_id:'live-intake',caller_ref:'owner',account_ref:'owner',worktree:root,data_dir:join(root,'data'),environment:'production',packs:{sources:[],targets:[],models:'off'},...(options.fresh?{swarm:{enabled:false}}:{swarm:{enabled:true,model_data_approved:options.approved!==false}})}));
   const config=loadHostConfig(path),store=new PackStore(config.dbPath);store.registerProject(config.project);initWorkExecution(store);
   const ai=options.model??model(),runtime=new WorkRuntime(store,config,ai),closers=[];
   const cc=await startControlCenter(config,{workModel:ai,...(options.onReload?{onReload:options.onReload}:{}),...(options.reloadStatus?{reloadStatus:options.reloadStatus}:{})});
@@ -305,4 +305,17 @@ test('runtime fixture browser continuity restores only exact observed links from
   const uncertain=create(run);x.closers.push(()=>uncertain.close());assert.deepEqual((await uncertain.execute('office_browser_links',{},'uncertain')).urls,[]);
   checkpoint.observations[0].receipt=receipt;checkpoint.work_id=randomUUID();x.store.hermesState.prepare('UPDATE office_supervisor SET checkpoint=? WHERE run_id=?').run(JSON.stringify(checkpoint),run);
   const foreign=create(run);x.closers.push(()=>foreign.close());assert.deepEqual((await foreign.execute('office_browser_links',{},'foreign-checkpoint')).urls,[]);
+});
+
+test('runtime contract the owner pressing Start in the Control Center records the model-data consent once; a plain registration does not',async t=>{
+  const x=await fixture(t,{fresh:true});
+  const before=JSON.parse(await readFile(x.path,'utf8'));assert.equal(before.work,undefined);assert.equal(workModelDataApproved(x.config),false);
+  const saved=await x.post('work/start',{request_id:'consent-register-only',prompt:'Summarize a sample file.'});
+  assert.equal(saved.response.status,200);assert.equal(JSON.parse(await readFile(x.path,'utf8')).work,undefined,'registering without execute asks nothing and records nothing');
+  const started=await x.post('work/start',{request_id:'consent-on-start',prompt:'Summarize a sample file.',execute:true,cost_acknowledged:true});
+  assert.equal(started.response.status,200,JSON.stringify(started.data));
+  const after=JSON.parse(await readFile(x.path,'utf8'));
+  assert.equal(after.work.model_data_approved,true);assert.equal(after.work.autonomy,'delegated');
+  const detail=await x.detail(started.data.work_id);
+  assert.notEqual(detail.work_status,'needs_model','the start proceeds past definition instead of parking as needs_model');
 });

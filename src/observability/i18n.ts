@@ -156,6 +156,7 @@ const EN:Record<string,string>={
 'AI 응답 수신':'AI response received',
 '담당 AI':'AI','설정한 기본 앱':'Your default app','앱 기본값':'App default','이 업무를 맡을 AI':'The AI that runs this Work',
 'AI는 앱에서 직접 쓸 때와 같은 권한으로 실행합니다.':'The AI runs with the same permissions as when you use the app yourself.',
+'업무 내용은 선택한 AI에 보내 분석하고 실행합니다.':'The work text goes to the AI you chose, which analyzes and runs it.',
 '같은 세션을 이어서 실행합니다.':'Continuing in the same session.',
 '사용자 설정 그대로 업무 폴더에서 실행을 시작합니다.':'Starting in the Work folder with your own settings.',
 '실행을 마치고 만든 파일을 결과로 저장했습니다.':'Finished; the files it made are saved as the result.',
@@ -701,6 +702,9 @@ const RULES:Array<[string,string]>=[
 ['^지시 (\\d+) · (.+)$','Instruction $1 · $2'],['^프로젝트 (.+) · 세션 (.+) · 모델 (.+) · (.+)$','Project $1 · session $2 · model $3 · $4'],
 ['^다음 단계: (.+)$','Next stage: $1'],['^대상: (.+)$','Target: $1'],['^원본: (.+)$','Source: $1'],['^승인 경계: (.+)$','Approval boundary: $1'],['^근거: (.+)$','Evidence: $1'],['^단계: (.+)$','Step: $1'],['^미확인: (.+)$','Unknown: $1'],
 ['^Jev 추천 없음 · (.+)$','No Jev suggestions · $1'],['^가져온 계획 · (.+)$','Imported plan · $1'],
+['^(Codex|Claude Code)가 완료 조건 (\\d+)개를 모두 충족했다고 보고했어요\\. 외부로 보내는 일이 없는 업무라 그 보고로 완료 처리해요\\.$','$1 reported all $2 completion criteria met. Nothing is sent outside, so its report completes the Work.'],
+['^(Codex|Claude Code)가 완료 조건 (\\d+)개를 모두 충족했다고 보고했어요\\. 요청에 든 전송·제출은 앱이 자기 도구로 했고, 그 보고로 완료 처리해요\\.$','$1 reported all $2 completion criteria met. It sent or submitted what the request asked with its own tools, so its report completes the Work.'],
+['^(Codex|Claude Code)가 충족하지 못한 조건 (\\d+)개를 보고했어요: (.+)$','$1 reported $2 unmet completion criteria: $3'],
 ];
 export const controlCenterCopy=buildCopyCatalog({...EN,...extraSourceCopy});
 export const i18nScript=`(()=>{const EN=${JSON.stringify(controlCenterCopy.en)},KO=${JSON.stringify(controlCenterCopy.ko)},RULES=${JSON.stringify(RULES.map(([pattern,replacement])=>[pattern,plainEnglish(replacement!)]))}.map(([p,r])=>[new RegExp(p,'u'),r]),FLAGS=${JSON.stringify(flagSvgs)};

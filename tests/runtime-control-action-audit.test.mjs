@@ -20,27 +20,20 @@ async function setup(t,model){
   return {root,config,server,browser,page};
 }
 
-test('runtime fixture Work UI: delayed consent appears, blocked Jev stays disabled, allowed toggle and pause persist',async t=>{
+test('runtime fixture Work UI: Start records the consent, Jev toggle and pause persist',async t=>{
   let calls=0,executionStarted,releaseExecution;const started=new Promise(resolve=>executionStarted=resolve),executionGate=new Promise(resolve=>releaseExecution=resolve);
   t.after(()=>releaseExecution());
   const x=await setup(t,{calls:[],async call(_purpose,instructions){calls++;if(instructions.startsWith('Execute the registered Work')){executionStarted();if(calls===2)await executionGate;return {action:'wait',stage_id:null,tool_name:null,arguments_json:null,summary:'This fixture stops before external research at a model boundary.',completed_checks:[],wait_reason:'model'};}return spec;}});
-  let release;const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
-  await x.page.route('**/settings/status',async route=>{await gate;await route.continue();});
   await x.page.goto(x.server.url);
   await x.page.locator('#prompt').fill('공개 자료 확인');
   await x.page.locator('#submit-work').click();
-  await x.page.locator('#retry-define').waitFor();
+  // Pressing Start on a fresh install is the model-data consent: the Work is defined at once, with no second consent step.
+  await x.page.getByRole('heading',{name:'검증 업무',exact:true}).waitFor();
   assert.equal(await x.page.locator('#allow-ai-data').count(),0);
+  assert.equal(await x.page.locator('#retry-define').count(),0);
+  assert.equal(JSON.parse(await readFile(x.config.path,'utf8')).work.model_data_approved,true,'Start records the standing consent once');
   assert.equal(await x.page.locator('#jev-cost').count(),0,'new Work delegates to Pack settings without a second cost choice');
   assert.equal(await x.page.locator('.jev-policy').innerText(),'Task Pack 설정 사용');
-  assert.equal(await x.page.locator('#jev-toggle').isDisabled(),true);
-  // Even a stale/scripted change event must not turn an unavailable action on.
-  await x.page.locator('#jev-toggle').evaluate(el=>el.dispatchEvent(new Event('click',{bubbles:true})));
-  assert.equal(await x.page.locator('#jev-toggle').isDisabled(),true);
-  release();
-  await x.page.locator('#allow-ai-data').waitFor();
-  await x.page.locator('#allow-ai-data').click();
-  await x.page.getByRole('heading',{name:'검증 업무',exact:true}).waitFor();
   const workId=new URL(x.page.url()).searchParams.get('work');
   const read=async()=>await (await fetch(x.server.url+'work/detail?id='+encodeURIComponent(workId))).json();
   assert.equal((await read()).work_status,'ready');

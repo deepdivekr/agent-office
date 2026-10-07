@@ -1,15 +1,19 @@
 # Agent Office
 
+**Codex, Claude Code, 헤르메스, 스크립트… 여러 클라이언트에 흩어진 봇과 자동화를 한 화면에서 관리합니다.** 실행은 각 클라이언트와 내 계정이 그대로 맡고, 상태 확인·멈춤 알림·지침 수정·다시 실행은 Agent Office에서 합니다.
+
+![흩어진 봇이 Agent Office 보드 한 곳으로 모이는 모습](docs/images/hero.svg)
+
+멈추면 조용히 넘어가지 않습니다. 멈춘 업무는 *확인 필요*에 올라오고, 메신저를 연결했다면 알림이 갑니다. 새 반복 업무는 한 줄로 맡기면 정해진 때에 실행됩니다.
+
+[English](README.md) · **한국어** · [v0.4.0 변경 내역](docs/releases/v0.4.0.md)
+
+로컬 MCP 서버이기도 해서 Codex, Claude Code, Cursor, OpenCode, Hermes 같은 MCP 클라이언트가 업무를 넘길 수 있습니다.
+
 구체적인 반복 업무는 검증된 Work를 이름과 불변 버전이 있는 커스텀 Pack으로
 저장하고, 새 회차마다 새로운 결과를 확인하며 재사용할 수 있습니다.
 [커스텀 Pack 사용 경로](docs/custom-pack-operation.md) ·
 [리팩토링 기준 문서](docs/custom-pack-refactoring-plan.md)
-
-**AI 에이전트가 내 컴퓨터에서 업무를 실행하고, 중단된 지점부터 이어가게 하는 로컬 MCP 서버입니다.**
-
-[English](README.md) · **한국어** · [v0.4.0 변경 내역](docs/releases/v0.4.0.md)
-
-Codex, Claude Code, Cursor, OpenCode, Hermes 등 MCP 클라이언트에 연결합니다.
 저장소와 기본 명령은 `agent-office`입니다. 이전 `agent-driver` 명령은 호환용 별칭으로 남깁니다.
 
 ## 화면으로 보기
@@ -19,20 +23,15 @@ Codex, Claude Code, Cursor, OpenCode, Hermes 등 MCP 클라이언트에 연결�
 ![Agent Office 다크모드 업무 보드](docs/images/work-overview.png)
 
 <details>
-<summary>업무 상세와 AI 연결 화면 보기</summary>
+<summary>업무 상세 화면 보기</summary>
 
-**업무 상세** — 실행·일시정지·이어가기, 지침 수정, 실제 로그와 결과 파일을 확인합니다.
+**업무 상세** — 앱이 실제로 실행한 기록, 앱이 보고한 완료 확인, 결과 파일을 봅니다.
 
-![업무 상세와 제어](docs/images/work-detail.png)
-
-**AI 연결** — 구독 클라이언트·API·호환 로컬 모델 중 사용할 연결을 선택합니다.
-
-![AI 연결 설정](docs/images/ai-connection.png)
+![실행을 마친 업무 상세](docs/images/work-detail.png)
 
 </details>
 
-v0.3.1 한국어·다크모드 화면에 공개용 예시 업무를 넣어 촬영했습니다.
-설정과 실행 대기 상태를 보여주며, 실제 에이전트 실행 성과를 뜻하지 않습니다.
+새로 설치한 상태에서 만든 예시 업무(석 달 치 판매 기록을 `report.md`로 정리)를 Codex로 실제 실행한 화면입니다. 웹에 접속하거나 외부로 보내는 일은 없습니다.
 
 ## 지원 환경
 
@@ -70,7 +69,7 @@ bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/age
 
 1. **클라이언트 연결** — 설치·로그인을 확인하고 MCP를 등록합니다.
 2. **실행 환경** — 기본 브라우저를 사용하거나 선택 실행기를 연결합니다.
-3. **AI 연결** — 구독 CLI 또는 API를 선택합니다. 호환 로컬 모델도 연결할 수 있습니다.
+3. **AI 연결** — 업무를 맡을 앱(Codex 또는 Claude Code)과 기본 모델을 고릅니다.
 4. **결과 수신(선택)** — Telegram·Slack·Discord 수신처를 저장합니다. 결과는 앱에도 남습니다.
 5. **첫 업무** — 작업지침·완료조건·결과 수신처를 정해 접수합니다. 완료조건을 비우면 AI가 정리합니다. 바로 상세 화면으로 이동하며, 심화 모드에서는 선택사항을 먼저 확인합니다.
 
@@ -171,7 +170,6 @@ LLM이 요청을 구조화하고, 검증된 절차를 재사용합니다.
 
 업무는 접수할 때 고른 AI 앱(Codex 또는 Claude Code, 모델과 추론 강도 포함)이 그 앱의 설정·스킬·MCP 서버를 그대로 써서 실행합니다.
 그 앱이 업무를 끝까지 맡습니다. 로그인이나 사용량이 바닥나면 업무가 기다리고, 다른 앱으로 넘어가지 않습니다.
-**구독에서 유료 API로 자동 전환하지 않습니다.**
 
 기존 업무는 **가져오기**로 연결합니다. 지원되는 Hermes·원격 OpenClaw 연결은 원래 실행 환경·예약·메신저 전송을 유지합니다.
 가져오기만으로 봇을 중복 실행하거나 새 예약을 켜지 않습니다. 관제와 제어에는 코드 폴더뿐 아니라 원본 실행 연결이 필요합니다.
