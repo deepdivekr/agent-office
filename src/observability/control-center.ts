@@ -19,7 +19,9 @@ import {browserPreferenceSchema} from '../browser/executor-contracts.js';
 import {readOffice} from './office.js';
 import {workHtml} from './work-ui.js';
 import {setWorkHidden} from '../work/hidden.js';
-import {readWorkBoard,readWorkDetail,readWorkFeed,readWorkTimeline} from './work-view.js';
+import {WorkPush} from '../work/push.js';
+import {FeedPushWatcher} from './feed-push.js';
+import {readWorkBoard,readWorkDetail,readFeed,readWorkTimeline} from './work-view.js';
 import {workStartActionSchema,workDefineSchema,workAnswerActionSchema,workReconnectSchema,workPauseActionSchema,workJevSchema} from '../work/contracts.js';
 import {WorkRuntime} from '../work/runtime.js';
 import {WorkDispatcher,workDispatchOptions,workExecuteSchema} from '../work/dispatch.js';
@@ -115,7 +117,7 @@ export function readControlCenter(store:PackStore,config:HostConfig,now=Date.now
   return {format:1,project_id:project,generated_at:new Date(now).toISOString(),health,runs,activities,website_connections,latest_revision:latestRevision+JSON.stringify(website_connections),coverage:{agent_driver_only:true,outside_runtime:'unobserved'},read_only:true};
 }
 
-function headers(nonce?:string){return {'cache-control':'no-store','content-security-policy':`default-src 'none'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; style-src 'unsafe-inline'; script-src ${nonce?`'nonce-${nonce}'`:`'none'`}; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};}
+function headers(nonce?:string){return {'cache-control':'no-store','content-security-policy':`default-src 'none'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; style-src 'unsafe-inline'; script-src ${nonce?`'nonce-${nonce}'`:`'none'`}; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};}
 function reply(response:ServerResponse,status:number,body:string,type='text/plain; charset=utf-8',nonce?:string){response.writeHead(status,{'content-type':type,...headers(nonce)});response.end(body);}
 /** Conservative, project-scoped restart admission; historical labels alone are not live leases. */
 export function controlCenterReloadBlockedReason(store:PackStore,project:string,at=Date.now()){
@@ -139,6 +141,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const fileRoutes=new FileExplorerRoutes(store.localFileExplorer(config.project.id,dirname(config.dbPath)));
   const hermesWork=new HermesWorkRuntime(store,config,options.hermes);
   const migrations=new HermesMigrationRuntime(store,config);
+  const push=new WorkPush(store,config),pushWatcher=new FeedPushWatcher(store,config,push);
   const sessionMirror=new SessionMirror(store,config,options.sessions,options.sessions?.temporary??false),addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,(id,text)=>serverNotice(id,text));
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
   const deliverySettings=WorkDeliverySettings.fromConfig(config),results=new WorkResults(store,[],deliverySettings,()=>workDelegation(config).notify);
@@ -181,6 +184,8 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(managementAction)inflightMutations++;
     try{
     if(await serveUiAsset(request,response,suffix))return;
+    // The installable app: its start address carries the capability, because a phone's home screen app keeps its own cookies.
+    if(suffix==='manifest.webmanifest'&&request.method==='GET'){const cookieHost=requestHost===shortHost||onTailnet;reply(response,200,JSON.stringify({name:'Agent Office',short_name:'Office',start_url:`/${token}/`,scope:cookieHost?'/':`/${token}/`,display:'standalone',background_color:'#101317',theme_color:'#101317',icons:[{src:'icon-180.png',sizes:'180x180',type:'image/png'},{src:'icon-512.png',sizes:'512x512',type:'image/png',purpose:'any'}]}),'application/manifest+json; charset=utf-8');return;}
     if(rejectStopped())return;
     if(suffix==='learned/status'){
       if(request.method!=='GET'){reply(response,405,'method not allowed');return;}
@@ -251,13 +256,23 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'REMOTE_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
     }
     // Server observation: register an SSH target, discover its services, link groups as Works, refresh on request.
-    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh','work/server/checks'].includes(suffix)){
+    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh','work/server/checks','work/server/feed'].includes(suffix)){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
       if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
       try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>24000)throw Error('SERVER_REQUEST_TOO_LARGE')}
-        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):await serverOffice.refresh(input);
+        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):suffix.endsWith('/feed')?serverOffice.setFeed(input):await serverOffice.refresh(input);
         reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
+    }
+    // Push to the owner's devices: the page subscribes through its browser's push service.
+    if(suffix==='push/key'&&request.method==='GET'){reply(response,200,JSON.stringify({public_key:push.publicKey(),devices:push.count()}),'application/json; charset=utf-8');return;}
+    if(['push/subscribe','push/unsubscribe','push/test'].includes(suffix)){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>8000)throw Error('PUSH_REQUEST_TOO_LARGE');}if(rejectStopped())return;const input=JSON.parse(body||'{}') as Record<string,unknown>;
+        const value=suffix==='push/subscribe'?push.subscribe(input.subscription):suffix==='push/unsubscribe'?push.unsubscribe(String(input.endpoint??'')):await push.notify({title:'Agent Office',body:'알림이 켜졌어요. 새 산출물이 생기면 여기로 알려 드려요.',tag:'test'});
+        reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');
+      }catch{reply(response,409,JSON.stringify({error:'PUSH_REQUEST_INVALID'}),'application/json; charset=utf-8');}return;
     }
     // Hiding a Work only takes it off the Office screens; it keeps running as before.
     if(suffix==='work/hide'){
@@ -472,7 +487,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(suffix==='work/import/prompt'){reply(response,200,JSON.stringify(imports.prompt()),'application/json; charset=utf-8');return;}
     if(suffix==='work/client-default'){let settings=null;try{settings=readModelSettings(modelSettingsPath(config));}catch{}reply(response,200,JSON.stringify({client:defaultWorkClient(settings)}),'application/json; charset=utf-8');return;}
     if(suffix==='work/board'){reply(response,200,JSON.stringify(readWorkBoard(store,config)),'application/json; charset=utf-8');return;}
-    if(suffix==='work/feed'){reply(response,200,JSON.stringify(readWorkFeed(store,config,results)),'application/json; charset=utf-8');return;}
+    if(suffix==='work/feed'){const before=url.searchParams.get('before');reply(response,200,JSON.stringify(readFeed(store,config,results,before&&before.length<=40?{before}:{})),'application/json; charset=utf-8');return;}
     if(suffix==='work/timeline'){reply(response,200,JSON.stringify(readWorkTimeline(store,config)),'application/json; charset=utf-8');return;}
     if(suffix==='work/thread'){
       const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
@@ -516,8 +531,10 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   }
   // Watched servers are read about every two minutes; a slow or unreachable server never blocks the Control Center.
   const serverTick=setInterval(()=>{if(runtimeReady())void serverOffice.refreshDue().catch(()=>{});},60_000);serverTick.unref();
+  // New outputs and Works that start needing the owner go to their subscribed devices.
+  const pushTick=setInterval(()=>{if(runtimeReady())void pushWatcher.tick().catch(()=>{});},20_000);pushTick.unref();
   const deliveryTick=setInterval(()=>{if(!runtimeReady()||deliveryJobs.size>=4)return;try{for(const id of results.pendingWorkIds(config.project.id,4-deliveryJobs.size))deliverOutput(id);}catch{/* A failed stored configuration is surfaced by the settings/status route. */}},3000);deliveryTick.unref();
   const maintenanceTick=setInterval(()=>{if(!stopped&&!reloading)void settings.tickMaintenance().catch(()=>{});},60_000);maintenanceTick.unref();
   const maintenanceStartup=setTimeout(()=>{if(!stopped&&!reloading)void settings.tickMaintenance('startup').catch(()=>{});},1000);maintenanceStartup.unref();
-  const close=async()=>{if(stopped)return closed;stopped=true;clearInterval(heartbeat);clearInterval(lightTick);clearInterval(hermesTick);clearInterval(serverTick);addressImport.close();clearInterval(deliveryTick);clearInterval(maintenanceTick);clearTimeout(maintenanceStartup);await settings.close();codingRuntime.close();codingDialog.close();await supervisor.close();await dispatcher.close();await hermesWork.close();await remoteOffice.drain();await Promise.allSettled([...deliveryJobs.values()]);store.stopPresence(config.project.id,presence);for(const client of clients)client.end();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await codingRuntime.drain();await codingDialog.drain();await connections.close();store.close();done()};return {url:`http://${host}/${token}/`,closed,close};
+  const close=async()=>{if(stopped)return closed;stopped=true;clearInterval(heartbeat);clearInterval(lightTick);clearInterval(hermesTick);clearInterval(serverTick);clearInterval(pushTick);addressImport.close();clearInterval(deliveryTick);clearInterval(maintenanceTick);clearTimeout(maintenanceStartup);await settings.close();codingRuntime.close();codingDialog.close();await supervisor.close();await dispatcher.close();await hermesWork.close();await remoteOffice.drain();await Promise.allSettled([...deliveryJobs.values()]);store.stopPresence(config.project.id,presence);for(const client of clients)client.end();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await codingRuntime.drain();await codingDialog.drain();await connections.close();store.close();done()};return {url:`http://${host}/${token}/`,closed,close};
 }

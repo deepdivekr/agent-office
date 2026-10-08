@@ -49,9 +49,9 @@ export type ShellPage='work'|'settings'|'connections';
 /** Sidebar links are plain anchors so every view is one click away and pages stay independent. */
 export function sidebarHtml(page:ShellPage){
   const current=(value:ShellPage)=>page===value?' aria-current="page"':'';
-  return `<aside class="side" aria-label="메뉴"><a class="brand" href="./" aria-label="홈">agent-office<i aria-hidden="true"></i></a><div class="brand-sub">로컬 연결 · MCP</div>
+  return `<aside class="side" aria-label="메뉴"><a class="brand" href="./" aria-label="피드">agent-office<i aria-hidden="true"></i></a><div class="brand-sub">로컬 연결 · MCP</div>
 <div class="sec">업무</div>
-<a class="nav" href="./" data-view="home">홈</a>
+<a class="nav" href="./" data-view="feed">피드<span class="n" data-count="feed"></span></a>
 <a class="nav" href="./?view=all" data-view="all">전체<span class="n" data-count="all"></span></a>
 <a class="nav" href="./?view=attention" data-view="attention">확인 필요<span class="n warn" data-count="attention"></span></a>
 <a class="nav" href="./?view=active" data-view="active">실행 중<span class="n" data-count="active"></span></a>

@@ -39,7 +39,7 @@ test('runtime fixture Hermes UI sends, approves, reviews, pauses and isolates dr
  assert.match(await page.locator('.coding-answer').innerText(),/검증 답변/u);
  await page.locator('[data-hermes-action="review"]').click();await page.waitForFunction(()=>!document.getElementById('hermes-send').disabled);
  await page.locator('#hermes-instruction').fill('이 업무의 개인 초안');await page.locator('#hermes-cost').check();await page.locator('#back').click();
- await page.locator('[data-work="'+second+'"]').click();await page.locator('#hermes-instruction').waitFor();assert.equal(await page.locator('#hermes-instruction').inputValue(),'');assert.equal(await page.locator('#hermes-cost').isChecked(),false);
+ await page.locator('[data-view="all"]').click();await page.locator('[data-work="'+second+'"]').click();await page.locator('#hermes-instruction').waitFor();assert.equal(await page.locator('#hermes-instruction').inputValue(),'');assert.equal(await page.locator('#hermes-cost').isChecked(),false);
  for(const width of [1280,390]){await page.setViewportSize({width,height:850});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await page.locator('#hermes-send').isVisible(),true)}
  assert.equal(prompts,1);
 });

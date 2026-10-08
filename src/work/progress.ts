@@ -15,7 +15,7 @@ const trigger=/^(?:schedule\.|supervisor\.(?:edit|direction|resume|retry|pause)$
 const owner=/^supervisor\.(?:edit|direction|resume|retry|pause)$|^approval\./u;
 const running=new Set(['running','leased','queued','advising','retry_wait']);
 // Statuses where the owner has to act; a cycle that stopped there shows a problem at the stage it reached.
-const needsOwner=new Set(['execution_unobserved','connection_required','needs_human','needs_model','awaiting_details','failed','waiting_auth','partial_evidence','retryable_failure','waiting_approval','reconciliation_required','needs_verification','awaiting_review','waiting_model','waiting_connection','uncertain','waiting_user']);
+export const needsOwner:ReadonlySet<string>=new Set(['execution_unobserved','connection_required','needs_human','needs_model','awaiting_details','failed','waiting_auth','partial_evidence','retryable_failure','waiting_approval','reconciliation_required','needs_verification','awaiting_review','waiting_model','waiting_connection','uncertain','waiting_user']);
 const finished=new Set(['succeeded','completed']);
 const settled=new Set(['succeeded','completed','scheduled','schedule_off','stopped']);
 // The text of the event that stopped the cycle, without a leading machine status ("awaiting_review · …").

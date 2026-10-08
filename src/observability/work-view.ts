@@ -1,3 +1,4 @@
+import {statSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {type HostConfig} from '../interface/config.js';
 import {workClientChoice} from '../work/client-run.js';
@@ -27,6 +28,7 @@ import {workProgress,type WorkProgress} from '../work/progress.js';
 import {workTimeline} from '../work/timeline.js';
 import {refinedLog} from '../work/thread.js';
 import {hiddenWorkIds} from '../work/hidden.js';
+import {listFeedPosts} from '../work/feed.js';
 import {imageType,type WorkResults} from '../work/results.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
@@ -55,29 +57,42 @@ export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
 }
 
 /**
- * The home screen: one cell per Work with what the owner reads at a glance. Its state (schedule, stop reason, the
- * newest event while it runs), its latest output (the delivered text, up to four images, an attached conversation's
- * last reply or a server Work's health) and the last three lines of Office's own log. Built from stored records only;
- * the cell's sentence is composed by the page so it follows the page language.
+ * The feed: every output in one place, newest first. A post is a result an Office Work saved, a row a server bot
+ * recorded as sent, a post an AI app made with runtime_feed_post, or an attached conversation's last reply. Works come
+ * along for what the page pins and lists beside the posts: those that need the owner, those running, the next runs and
+ * the servers. Built from stored records only; hidden Works stay out.
  */
-export function readWorkFeed(store:PackStore,config:HostConfig,results:WorkResults){
-  const project=config.project.id,hasActivity=Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get());
-  const recent=hasActivity?store.hermesState.prepare('SELECT kind,summary,created_at,metadata FROM office_activity WHERE project_id=? AND work_id=? ORDER BY id DESC LIMIT 60'):null;
-  return {generated_at:new Date().toISOString(),items:readWorkBoard(store,config).works.map(work=>{
-    const events=recent?(recent.all(project,work.id) as Array<{kind:string;summary:string;created_at:string;metadata:string|null}>).map(e=>({...e,summary:clean(e.summary,300)})):[];
+export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,options:{before?:string;limit?:number}={}){
+  const project=config.project.id,before=options.before??'9999',limit=Math.min(Math.max(options.limit??30,1),60);
+  const board=readWorkBoard(store,config).works.filter(work=>!work.hidden),shown=new Set(board.map(work=>work.id)),titles=new Map(board.map(work=>[work.id,work.title]));
+  const recent=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get()?store.hermesState.prepare('SELECT kind,summary,created_at,metadata FROM office_activity WHERE project_id=? AND work_id=? ORDER BY id DESC LIMIT 1'):null;
+  const works=board.map(work=>{
     // readWorkBoard adds these with Object.assign, after the row type is fixed.
     const added=work as typeof work&{schedule?:ReturnType<WorkSchedules['status']>;progress?:WorkProgress};
-    const schedule=added.schedule?{enabled:Boolean(added.schedule.enabled),state:added.schedule.state,definition:added.schedule.definition,next_run_at:added.schedule.next_run_at??null}:null;
-    const base={id:work.id,title:work.title,hidden:work.hidden,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),created_at:work.created_at,updated_at:work.updated_at,client:work.client?.id??null,
-      schedule,note:added.progress?.note??null,last_event:events[0]?refinedLog([{...events[0],kind:'event'}])[0]!:null,log:refinedLog(events).slice(0,3)};
-    if('server' in work&&work.server)return {...base,server:work.server,output:null};
-    if('session' in work&&work.session){const last=sessionDetail(store,project,work.id)?.session.messages.filter(m=>m.role==='assistant').at(-1);return {...base,session:{client:work.session.client,last:last?clean(last.text,800):null,at:last?.at??null},output:null};}
-    let latest;try{latest=results.list(project,work.id,1)[0];}catch{latest=undefined;}
-    if(!latest)return {...base,output:null};
-    const images=latest.artifacts.filter(a=>a.download_available&&imageType(a.label)).slice(0,4).map(a=>({artifact_id:a.id,label:a.label}));
-    return {...base,output:{result_id:latest.id,at:latest.created_at,status:latest.source_status,verified:latest.work_completion_verified,text:clean(latest.delivery_text||latest.text||latest.summary,800),images,files:latest.artifacts.length,
-      deliveries:latest.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))}};
-  })};
+    const event=recent?(recent.all(project,work.id) as Array<{kind:string;summary:string;created_at:string;metadata:string|null}>)[0]:undefined;
+    return {id:work.id,title:work.title,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),client:work.client?.id??null,created_at:work.created_at,
+      schedule:added.schedule?{enabled:Boolean(added.schedule.enabled),definition:added.schedule.definition,next_run_at:added.schedule.next_run_at??null}:null,
+      note:added.progress?.note??null,last_event:event?refinedLog([{...event,kind:'event',summary:clean(event.summary,300)}])[0]!:null,
+      ...('server' in work&&work.server?{server:work.server}:{})};
+  });
+  const posts:Array<Record<string,unknown>&{at:string}>=[];
+  if(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result'").get())
+    for(const row of store.hermesState.prepare('SELECT id,work_id,body FROM office_result WHERE project_id=? AND created_at<? ORDER BY created_at DESC LIMIT ?').all(project,before,limit*2) as Array<{id:string;work_id:string;body:string}>){
+      if(!shown.has(row.work_id))continue;let r;try{r=results.get(project,row.work_id,row.id);}catch{continue;}
+      // A later run may have replaced a picture in the Work folder: only files still as they were saved are shown.
+      let stored:Array<{id:string;path:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
+      const intact=new Set(stored.filter(a=>{try{const size=statSync(a.path).size;return a.bytes===null||a.bytes===size;}catch{return false;}}).map(a=>a.id));
+      const images=r.artifacts.filter(a=>a.download_available&&imageType(a.label)&&intact.has(a.id));
+      posts.push({id:'r:'+r.id,kind:'result',work_id:r.work_id,work_title:titles.get(r.work_id),at:r.created_at,result_id:r.id,text:clean(r.delivery_text||r.text||r.summary,4000),
+        images:images.slice(0,4).map(a=>({artifact_id:a.id,label:a.label})),image_count:images.length,files:r.artifacts.length,verified:r.work_completion_verified,
+        deliveries:r.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))});
+    }
+  for(const post of listFeedPosts(store,project,{before,limit}))if(!post.work_id||shown.has(post.work_id))
+    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label});
+  for(const work of board)if('session' in work&&work.session){const last=sessionDetail(store,project,work.id)?.session.messages.filter(m=>m.role==='assistant').at(-1);
+    if(last?.at&&last.at<before)posts.push({id:'s:'+work.id+':'+last.at,kind:'reply',work_id:work.id,work_title:work.title,client:work.session.client,at:last.at,text:clean(last.text,4000)});}
+  posts.sort((a,b)=>b.at.localeCompare(a.at));const page=posts.slice(0,limit);
+  return {generated_at:new Date().toISOString(),works,posts:page,next_before:page.length===limit?page.at(-1)!.at:null};
 }
 
 /** The board's Works over the last hours: one bar per cycle and marks for owner actions, for the timeline view. */
