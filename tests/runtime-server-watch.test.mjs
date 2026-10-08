@@ -112,6 +112,12 @@ test('runtime fixture the Control Center registers a server, links its groups an
   await page.locator('.tile',{hasText:'chat-relay-bot'}).click();await page.locator('.server-table').waitFor();
   assert.match(await page.locator('.server-table tbody').innerText(),/chat-relay-bot\.service/u);
   assert.equal(await page.locator('.server-table tbody tr').count(),1,'the unchecked unit is not watched');
+  // The name cell holds only the unit; every cell stays on one line and a wide table scrolls sideways, even on a phone.
+  const row=page.locator('.server-units .server-table tbody tr').first();
+  assert.equal(await row.locator('td').nth(1).innerText(),'chat-relay-bot.service');
+  const size=page.viewportSize();await page.setViewportSize({width:390,height:844});
+  const fit=await page.locator('.server-units .server-wrap').evaluate(w=>{const cells=[...w.querySelectorAll('tbody tr:first-child td')].slice(1).map(c=>Math.round(c.getBoundingClientRect().height));return {scrolls:w.scrollWidth>w.clientWidth,pageFits:document.documentElement.scrollWidth<=innerWidth,oneLine:new Set(cells).size===1}});
+  assert.deepEqual(fit,{scrolls:true,pageFits:true,oneLine:true});await page.setViewportSize(size);
   assert.equal(await page.locator('.delivery-stage').count(),0);
   assert.match(await page.locator('.server-targets').innerText(),/Add a destination such as Telegram/u);
   await page.fill('#check-label','Relay heartbeat');await page.fill('#check-pattern','heartbeat');await page.fill('#check-amount','10');await page.selectOption('#check-scale','1');

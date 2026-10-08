@@ -90,3 +90,12 @@ test('runtime native a configured tailnet name reaches Office through tailscale 
   // Only MagicDNS names: any other name could be pointed at this computer by someone else's DNS.
   for(const host of ['example.com:4600','127.0.0.1:4600','office-pc.tail0000.ts.net.evil.com'])await writeFile(paths.runtimeConfig,JSON.stringify({...raw,observability:{tailnet_hosts:[host]}})).then(()=>assert.throws(()=>loadHostConfig(paths.runtimeConfig),undefined,host));
 });
+
+test('runtime native the app icon is served behind the capability like the font, and every page names it for the phone home screen',async t=>{
+  const x=await setup(t,{port:0});
+  const icon=await new Promise((resolve,reject)=>{const target=new URL(x.server.url+'icon-180.png');httpRequest({hostname:'127.0.0.1',port:target.port,path:target.pathname},response=>{const chunks=[];response.on('data',c=>chunks.push(c));response.on('end',()=>resolve({status:response.statusCode,type:response.headers['content-type'],body:Buffer.concat(chunks)}));}).on('error',reject).end();});
+  assert.deepEqual([icon.status,icon.type,icon.body.subarray(1,4).toString()],[200,'image/png','PNG']);
+  for(const page of ['','settings','connections']){const html=(await send(x.server.url+page,{headers:{accept:'text/html'}})).text;
+    assert.match(html,/<link rel="apple-touch-icon" href="icon-180\.png">/u,page);assert.match(html,/<meta name="apple-mobile-web-app-title" content="Agent Office">/u,page);}
+  assert.equal((await send(new URL('/icon-180.png',x.server.url).href)).status,404,'not outside the capability');
+});
