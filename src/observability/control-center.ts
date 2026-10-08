@@ -18,6 +18,7 @@ import {authSites,blockedAuthSites} from '../swarm/browser-auth.js';
 import {browserPreferenceSchema} from '../browser/executor-contracts.js';
 import {readOffice} from './office.js';
 import {workHtml} from './work-ui.js';
+import {setWorkHidden} from '../work/hidden.js';
 import {readWorkBoard,readWorkDetail,readWorkFeed,readWorkTimeline} from './work-view.js';
 import {workStartActionSchema,workDefineSchema,workAnswerActionSchema,workReconnectSchema,workPauseActionSchema,workJevSchema} from '../work/contracts.js';
 import {WorkRuntime} from '../work/runtime.js';
@@ -257,6 +258,15 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):await serverOffice.refresh(input);
         reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
+    }
+    // Hiding a Work only takes it off the Office screens; it keeps running as before.
+    if(suffix==='work/hide'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>1024)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
+        const input=z.object({work_id:z.string().min(1).max(128),hidden:z.boolean()}).strict().parse(JSON.parse(body));
+        reply(response,200,JSON.stringify(setWorkHidden(store,config.project.id,input.work_id,input.hidden)),'application/json; charset=utf-8');
+      }catch{reply(response,409,JSON.stringify({error:'WORK_HIDE_FAILED'}),'application/json; charset=utf-8');}return;
     }
     // Sessions the owner started in their own Claude Code or Codex app: list, attach as a Work, continue while idle.
     if(['work/session/list','work/session/attach','work/session/send'].includes(suffix)){

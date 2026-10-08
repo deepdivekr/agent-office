@@ -77,6 +77,10 @@ test('the detail workspace shows the conversation, selects a cycle and sends a d
   await page.waitForFunction(()=>!document.querySelector('#chat-submit')?.disabled&&document.querySelector('#chat-input')?.value==='');
   assert.deepEqual(calls.map(c=>c.action),['edit','resume']);
   assert.deepEqual([calls[0].instruction,calls[0].stage_id,calls[0].revision,calls[1].revision],['Add the author names.','next',3,4]);
+  // The note under the chat is a paragraph, not the round help button that shares the class: on a phone it reads as a line.
+  await page.setViewportSize({width:390,height:844});
+  const note=await page.locator('.ws-chat p.hint').evaluate(n=>{const r=n.getBoundingClientRect();return {wide:r.width>250,lines:Math.round(r.height/parseFloat(getComputedStyle(n).lineHeight))}});
+  assert.ok(note.wide&&note.lines<=3,JSON.stringify(note));
   assert.deepEqual(errors,[]);
 });
 

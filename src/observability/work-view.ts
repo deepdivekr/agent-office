@@ -26,6 +26,7 @@ import {businessSteps,currentStageReports,stageBinding} from '../work/stages.js'
 import {workProgress,type WorkProgress} from '../work/progress.js';
 import {workTimeline} from '../work/timeline.js';
 import {refinedLog} from '../work/thread.js';
+import {hiddenWorkIds} from '../work/hidden.js';
 import {imageType,type WorkResults} from '../work/results.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
@@ -46,8 +47,8 @@ function boardRow(row:OfficeRow){
 
 export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
   const project=config.project.id;store.expireCodingStages(project);store.expireCodingDialogTurns(project);store.expireCodingDialogAdvice(project);
-  const files=store.localFileExplorer(project,dirname(config.dbPath));
-  const works=store.officeWorkSummaries(project,limit).map(row=>{const base=boardRow(row),file=files.activity(row.id);const connection=importedConnectionReadiness(store,config,row.id);return {...base,client:workClientChoice(store,project,row.id),lifecycle:readWorkLifecycle(store,project,row.id),...(connection?{status:connection.state}:{}),...(!base.run&&file?{status:base.paused?'paused':file.status,file_activity:file}:{}),...(hermesBoardRow(store,project,row.id)??{}),...(remoteBoard(store,project,row.id)??{}),...(serverBoard(store,project,row.id)??{}),...(sessionBoard(store,project,row.id)??{})};});
+  const files=store.localFileExplorer(project,dirname(config.dbPath)),hidden=hiddenWorkIds(store,project);
+  const works=store.officeWorkSummaries(project,limit).map(row=>{const base=boardRow(row),file=files.activity(row.id);const connection=importedConnectionReadiness(store,config,row.id);return {...base,hidden:hidden.has(row.id),client:workClientChoice(store,project,row.id),lifecycle:readWorkLifecycle(store,project,row.id),...(connection?{status:connection.state}:{}),...(!base.run&&file?{status:base.paused?'paused':file.status,file_activity:file}:{}),...(hermesBoardRow(store,project,row.id)??{}),...(remoteBoard(store,project,row.id)??{}),...(serverBoard(store,project,row.id)??{}),...(sessionBoard(store,project,row.id)??{})};});
   for(const work of works){if(work.lifecycle.state!=='connected'){Object.assign(work,{status:work.lifecycle.state,execution:{live:false,active_workers:0,basis:'office_control_disconnected'}});continue;}const adoption=importedWorkAdoption(store,config,work.id);if(adoption){Object.assign(work,{status:adoption.state,adoption,execution:{live:adoption.live,active_workers:adoption.live?1:0,basis:'original_runtime'}});continue;}if(work.run?.kind==='hermes'||work.run?.kind==='remote'||work.run?.kind==='server'||work.run?.kind==='session')continue;const observation=workObservation(store,project,work.id,String(work.status));Object.assign(work,{status:observation.status,execution:observation});const schedule=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_work_schedule'").get()?new WorkSchedules(store,project).status(work.id):null;if(schedule?.definition)Object.assign(work,{schedule});if(['succeeded','completed'].includes(observation.status)){if(schedule?.enabled)Object.assign(work,{status:'scheduled'});else if(schedule?.state==='disabled')Object.assign(work,{status:'schedule_off'});}const progress=workProgress(store,project,work.id,{status:String(work.status),recurring:Boolean(schedule?.enabled)});Object.assign(work,{progress:{...progress,note:progress.note?clean(progress.note,100):null}});}
   const auth_attention_count=authSites(store,config).filter(site=>site.handoff||site.state!=='ready'&&site.state!=='retry_requested').length;
   return {format:1,project_id:project,generated_at:new Date().toISOString(),works,auth_attention_count,read_only:false,coverage:{runtime_only:true,unobserved_work:'not_shown'}};
@@ -67,7 +68,7 @@ export function readWorkFeed(store:PackStore,config:HostConfig,results:WorkResul
     // readWorkBoard adds these with Object.assign, after the row type is fixed.
     const added=work as typeof work&{schedule?:ReturnType<WorkSchedules['status']>;progress?:WorkProgress};
     const schedule=added.schedule?{enabled:Boolean(added.schedule.enabled),state:added.schedule.state,definition:added.schedule.definition,next_run_at:added.schedule.next_run_at??null}:null;
-    const base={id:work.id,title:work.title,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),created_at:work.created_at,updated_at:work.updated_at,client:work.client?.id??null,
+    const base={id:work.id,title:work.title,hidden:work.hidden,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),created_at:work.created_at,updated_at:work.updated_at,client:work.client?.id??null,
       schedule,note:added.progress?.note??null,last_event:events[0]?refinedLog([{...events[0],kind:'event'}])[0]!:null,log:refinedLog(events).slice(0,3)};
     if('server' in work&&work.server)return {...base,server:work.server,output:null};
     if('session' in work&&work.session){const last=sessionDetail(store,project,work.id)?.session.messages.filter(m=>m.role==='assistant').at(-1);return {...base,session:{client:work.session.client,last:last?clean(last.text,800):null,at:last?.at??null},output:null};}
