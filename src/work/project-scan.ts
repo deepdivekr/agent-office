@@ -70,7 +70,7 @@ function recommendation(kind:ProjectKind,found:Set<string>){
   if(kind==='bot_only')return [
     '기존 봇의 메시지 수신·전송은 유지하고, 예상 밖 요청만 LLM 검토로 넘기기',
     ...(found.has('state')?[]:['중단 지점·처리 영수증을 저장해 재시작 후 이어가기']),
-    '작업별 완료 조건과 사람 승인 경계를 정의한 뒤 Agent Driver Work로 연결하기',
+    '작업별 완료 조건과 사람 승인 경계를 정의한 뒤 Agent Office 업무로 연결하기',
   ];
   if(kind==='agentic_workflow'||kind==='mixed')return ['기존 실행 코드를 보존하고 Work 단계·완료 증거·실패 재개 지점을 대응시키기','시험 실행으로 기존 결과와 새 Work 결과를 비교한 뒤에만 이전하기'];
   return ['진입점과 실제 실행 로그를 추가 확인한 뒤 자동화 여부를 판정하기'];

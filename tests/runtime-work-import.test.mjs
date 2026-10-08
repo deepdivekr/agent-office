@@ -24,6 +24,12 @@ test('copyable migration prompt asks for observations, unknowns and no credentia
   assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/추측하지 말고 null 또는 unknown/u);
   assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/API 키·비밀번호·쿠키·토큰/u);
   assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/evidence_ids/u);
+  // The owner's own AI app runs the moved Work (owner decision 2026-10-03): the draft has to carry the procedure it follows.
+  assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/^내가 이 플랫폼에서 쓰던 자동화 한 건을 Agent Office로 옮기려 합니다/u);
+  assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/내 AI 앱\(Codex나 Claude Code\)이 내 계정·스킬·도구·권한으로 이 자동화를 직접 실행/u);
+  assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/원래 지침\(프롬프트\)을 확인한 문장 그대로/u);
+  assert.match(UNIVERSAL_WORK_MIGRATION_PROMPT,/파일·폴더 경로, 실행하던 명령이나 스크립트, 스킬, MCP 서버·커넥터/u);
+  assert.doesNotMatch(UNIVERSAL_WORK_MIGRATION_PROMPT,/Agent Driver/u);
   const match=UNIVERSAL_WORK_MIGRATION_PROMPT.match(/\n(\{\n[\s\S]*?\n\})\n/u);
   assert.ok(match);
   assert.equal(parseWorkImportDraft(match[1]).goal.value,null);

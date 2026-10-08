@@ -149,7 +149,7 @@ export class WorkImportRuntime{
         title=`${title} 개선`;
         prompt=cleanedOneLine(`등록된 로컬 Git 프로젝트에서 기존 봇의 동작을 보존하며 다음 목표를 구현하고 검증한다: ${goal}`);
       }else if(needsCoding){
-        prompt=cleanedOneLine(`등록된 로컬 Git 프로젝트에서 기존 자동화의 동작을 보존하며 Agent Driver Work로 이전하는 코드를 구현하고 검증한다: ${goal}`);
+        prompt=cleanedOneLine(`등록된 로컬 Git 프로젝트에서 기존 자동화의 동작을 보존하며 Agent Office 업무로 이전하는 코드를 구현하고 검증한다: ${goal}`);
       }
       if(input.mode==='observe')prompt=cleanedOneLine(`기존 실행 위치와 예약을 유지하고 관제 연결만 준비한다. 원본 봇 실행·수정·예약 생성·전송을 하지 않는다. 운영 연결 확인 전에는 재실행하지 않는다: ${goal}`);
     }

@@ -57,6 +57,8 @@ test('runtime unit migration prompt response adds English without replacing Kore
   assert.match(response.prompt_en,/Do not run, change or stop the existing automation/u);
   assert.match(response.prompt_en,/Never output the actual value of an API key, password, cookie, token or verification code/u);
   assert.match(response.prompt_en,/Do not decide whether the Work may run or be activated/u);
+  assert.match(response.prompt_en,/my own AI app \(Codex or Claude Code\) runs it with my accounts, skills, tools and permissions/u);
+  assert.match(response.prompt_en,/the original standing instruction \(prompt\) of the automation, in the words you confirmed/u);
   const skeleton=prompt=>JSON.parse(prompt.match(/\n(\{\n[\s\S]*?\n\})\n/u)[1]);
   assert.deepEqual(skeleton(response.prompt_en),skeleton(response.prompt));
   for(const prompt of [response.prompt,response.prompt_en]){
