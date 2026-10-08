@@ -1,8 +1,9 @@
+import {iconHead} from './ui-assets.js';
 import {displayOptionsHtml,sidebarHtml,themeScript,uiCss} from './ui-shell.js';
 import {i18nScript} from './i18n.js';
 import {browserSetupHtml,browserSetupScript} from './browser-setup-ui.js';
 import {deliveryCss,deliverySettingsHtml,deliverySettingsScript} from './delivery-ui.js';
-export function settingsHtml(nonce:string){return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>연결 및 설정 · Agent Office</title>
+export function settingsHtml(nonce:string){return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>연결 및 설정 · Agent Office</title>${iconHead}
 <style>${uiCss}${deliveryCss}
 .flow{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr;align-items:stretch;margin:0 0 18px}.flow i{height:1px;background:var(--line2);align-self:center}.nd{border:1px solid var(--line2);border-radius:var(--r);padding:10px 14px;background:var(--panel);min-width:0;text-align:center;display:grid;align-content:center}.nd b{display:block;font:500 14px var(--mono)}.nd small{font:11.5px var(--mono);color:var(--dim)}.nd.hot{border-color:var(--accent);box-shadow:0 0 0 3px var(--acc-a)}
 @media(max-width:700px){.flow{grid-template-columns:1fr}.flow i{width:1px;height:12px;margin:auto}}
