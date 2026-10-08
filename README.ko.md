@@ -7,7 +7,7 @@
 
 멈추면 조용히 넘어가지 않습니다. 멈춘 업무는 *확인 필요*에 올라오고, 메신저를 연결했다면 알림이 갑니다. 새 반복 업무는 한 줄로 맡기면 정해진 때에 실행됩니다.
 
-[English](README.md) · **한국어** · [v0.4.0 변경 내역](docs/releases/v0.4.0.md)
+[English](README.md) · **한국어** · [v0.5.0 변경 내역](docs/releases/v0.5.0.md)
 
 로컬 MCP 서버이기도 해서 Codex, Claude Code, Cursor, OpenCode, Hermes 같은 MCP 클라이언트가 업무를 넘길 수 있습니다.
 
@@ -36,7 +36,7 @@
 
 ## 지원 환경
 
-실행 흐름은 [실행 안내](docs/work-operation.md), 확인한 범위와 남은 제약은 [출시 검증 기록](docs/release-readiness-v0.4.0.md)에 정리합니다.
+실행 흐름은 [실행 안내](docs/work-operation.md), 확인한 범위와 남은 제약은 [출시 검증 기록](docs/release-readiness-v0.5.0.md)에 정리합니다.
 
 | 환경 | 상태 |
 |---|---|
@@ -57,7 +57,7 @@
 직접 설치하려면 **Ubuntu 또는 WSL Ubuntu 터미널**에서 실행합니다. 작업 폴더와 무관합니다.
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.4.0/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.5.0/install.sh | bash'
 ```
 
 설치 전에 [스크립트](install.sh)를 확인할 수 있습니다.
@@ -192,7 +192,7 @@ AI 설정의 **CLI 자동 업데이트**와 **지금 업데이트**를 이용하
 - 큐의 업무마다 VM을 만들지 않습니다. 실제 브라우저·CLI 실행은 별도 자원을 사용합니다.
 - 로컬 연결 주소의 토큰, API 키, 개인 업무 데이터는 공유하지 마세요.
 
-[출시 검증 범위](docs/release-readiness-v0.4.0.md) · [AI 설정](docs/control-settings.md) · [브라우저 라우팅](docs/browser-executor-routing.md) · [메모리와 서버 수명](docs/mcp-resource-lifecycle.md)
+[출시 검증 범위](docs/release-readiness-v0.5.0.md) · [AI 설정](docs/control-settings.md) · [브라우저 라우팅](docs/browser-executor-routing.md) · [메모리와 서버 수명](docs/mcp-resource-lifecycle.md)
 
 ## 개발과 라이선스
 
