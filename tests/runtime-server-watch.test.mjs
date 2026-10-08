@@ -112,5 +112,44 @@ test('runtime fixture the Control Center registers a server, links its groups an
   assert.match(await page.locator('.server-table tbody').innerText(),/chat-relay-bot\.service/u);
   assert.equal(await page.locator('.server-table tbody tr').count(),1,'the unchecked unit is not watched');
   assert.equal(await page.locator('.delivery-stage').count(),0);
+  assert.match(await page.locator('.server-targets').innerText(),/Add a destination such as Telegram/u);
+  await page.fill('#check-label','Relay heartbeat');await page.fill('#check-pattern','heartbeat');await page.fill('#check-amount','10');await page.selectOption('#check-scale','1');
+  await page.locator('#check-add').click();await page.waitForFunction(()=>document.body.innerText.includes('Relay heartbeat'));
+  assert.match(await page.locator('.server-table').last().innerText(),/Relay heartbeat[\s\S]*chat-relay-bot\.service[\s\S]*heartbeat[\s\S]*10min[\s\S]*next check/u);
   assert.deepEqual(errors,[]);
+});
+
+test('an activity check travels as data: the script decodes it and the shell never sees the pattern as syntax',async()=>{
+  const {snapshotScript}=await import('../dist/integrations/server-ssh.js'),{execFileSync}=await import('node:child_process'),{writeFileSync,mkdtempSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const evil="a'; touch /tmp/office-check-pwned; echo '",script=snapshotScript([{id:'c0123456789ab',label:'beat',unit:'notes-bot.service',pattern:evil,minutes:10}]);
+  assert.equal(script.includes(evil),false);assert.ok(script.includes(Buffer.from(evil).toString('base64')));
+  const file=join(mkdtempSync(join(tmpdir(),'check-script-')),'s.sh');writeFileSync(file,script);execFileSync('sh',['-n',file]);
+});
+test('a check with no matching line in its window is a problem; one not run yet is not',()=>{
+  const s=parseServerSnapshot({...sample,checks:{c0000000000aa:0,c0000000000bb:4}});
+  const checks=[{id:'c0000000000aa',label:'리포트 작업',unit:'shop-web.service',pattern:'sent',minutes:60},{id:'c0000000000bb',label:'하트비트',unit:'shop-web.service',pattern:'beat',minutes:10},{id:'c0000000000cc',label:'새 점검',unit:'shop-web.service',pattern:'x',minutes:5}];
+  assert.deepEqual(serverHealth(s,['shop-web.service'],checks).problems,[{id:'리포트 작업',note:'no_recent_activity'}]);
+});
+test('runtime fixture checks reach the next read of the server and a change sends one notice to the Work destinations',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js');
+  const root=await mkdtemp(join(tmpdir(),'office-server-checks-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
+  let count=3;const asked=[],notices=[];
+  const office=new ServerOffice(store,config,{async snapshot(target,checks=[]){asked.push(checks.map(c=>c.unit+'|'+c.pattern+'|'+c.minutes));return {...sample,checks:Object.fromEntries(checks.map(c=>[c.id,count]))};}},(id,text)=>notices.push(text));
+  const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
+  const {work_ids:[web]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop web',units:['shop-web.service']}]});
+  const detail=office.setChecks({work_id:web,checks:[{label:'리포트 작업',unit:'shop-web.service',pattern:'market-close.*executed successfully',minutes:4320}]});
+  assert.equal(detail.server.checks[0].count,null,'a new check runs with the next read');
+  await office.refreshTarget(target);assert.deepEqual(asked.at(-1),['shop-web.service|market-close.*executed successfully|4320']);
+  assert.equal(notices.length,0,'the first healthy read sends nothing');
+  count=0;await office.refreshTarget(target);await office.refreshTarget(target);
+  assert.equal(notices.length,1,'one notice per change, not per read');assert.match(notices[0],/^\[서버 확인 필요\] Shop web\nMain VM \(203\.0\.113\.7\)\n확인 필요: 리포트 작업 \(최근 기록 없음\)$/u);
+  count=2;await office.refreshTarget(target);assert.match(notices[1],/^\[회복\] Shop web/u);
+  assert.throws(()=>office.setChecks({work_id:web,checks:[{label:'x',unit:'a b',pattern:'p',minutes:5}]}));
+});
+test('a notice is delivered as written, without the result header and footer',async()=>{
+  const {deliveryContent}=await import('../dist/work/delivery-connectors.js');
+  assert.equal(deliveryContent({notice:'[회복] Shop web\nMain VM\n모든 서비스가 정상입니다.',summary:'x',text:'x',artifacts:[],work_title:'Shop web',source_status:'notice',id:'n'}),'[회복] Shop web\nMain VM\n모든 서비스가 정상입니다.');
 });

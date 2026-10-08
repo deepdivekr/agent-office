@@ -1,4 +1,4 @@
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {type PackStore} from '../packs/store.js';
 import {type HostConfig} from '../interface/config.js';
@@ -7,30 +7,34 @@ import {migrationText as clean} from './hermes-source.js';
 import {initWorkExecution,workActivity} from './activity.js';
 import {assertWorkConnected,readWorkLifecycle} from './lifecycle.js';
 import {serverTargetSchema,SshServerProbe,type ServerProbe,type ServerTarget} from '../integrations/server-ssh.js';
-import {parseServerSnapshot,serverHealth,suggestServerGroups,type RawSnapshot,type ServerSnapshot,type ServerStatus} from './server-watch.js';
+import {parseServerSnapshot,serverHealth,suggestServerGroups,type ActivityCheck,type RawSnapshot,type ServerSnapshot,type ServerStatus} from './server-watch.js';
 
 const uuid=z.string().uuid(),unitId=z.string().regex(/^[A-Za-z0-9@._:-]{1,200}$/u),now=()=>new Date().toISOString();
 export const serverDiscover=z.object({target_id:uuid}).strict();
 export const serverLink=z.object({target_id:uuid,acknowledged:z.literal(true),groups:z.array(z.object({name:z.string().trim().min(1).max(80),units:z.array(unitId).min(1).max(60)}).strict()).min(1).max(20)}).strict();
 export const serverRefresh=z.object({work_id:uuid}).strict();
+export const serverChecks=z.object({work_id:uuid,checks:z.array(z.object({label:z.string().trim().min(1).max(80),unit:unitId,pattern:z.string().min(1).max(200),minutes:z.number().int().min(1).max(20160)}).strict()).max(10)}).strict();
+// The same unit, pattern and window is one check on the server, whichever Work asked for it.
+const checkId=(c:{unit:string;pattern:string;minutes:number})=>'c'+createHash('sha256').update(JSON.stringify([c.unit,c.pattern,c.minutes])).digest('hex').slice(0,12);
+const NOTE_KO:Record<string,string>={failed:'실패',stopped:'멈춤',last_run_failed:'마지막 실행 실패',timer_inactive:'타이머 꺼짐',unhealthy:'상태 이상',exited:'종료됨',not_found:'찾을 수 없음',no_recent_activity:'최근 기록 없음'};
 // A snapshot older than this is shown as stale; Office reads each watched server about every two minutes.
 const STALE_MS=10*60_000;
 type TargetRow={id:string;definition:string;snapshot:string|null;observed_at:string|null;error:string|null};
-type WorkRow={work_id:string;target_id:string;units:string;last_status:string|null};
+type WorkRow={work_id:string;target_id:string;units:string;last_status:string|null;checks:string|null};
 
 function init(store:PackStore){initWorkExecution(store);store.hermesState.exec(`
  CREATE TABLE IF NOT EXISTS office_server_target(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,snapshot TEXT,observed_at TEXT,error TEXT,UNIQUE(project_id,definition));
  CREATE TABLE IF NOT EXISTS office_server_work(work_id TEXT PRIMARY KEY REFERENCES office_work(id),project_id TEXT NOT NULL,target_id TEXT NOT NULL,units TEXT NOT NULL,last_status TEXT,created_at TEXT NOT NULL);
-`);}
+`);try{store.hermesState.exec('ALTER TABLE office_server_work ADD COLUMN checks TEXT');}catch{/* already there */}}
 const exists=(store:PackStore)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_server_work'").get());
 function watched(store:PackStore,project:string,id:string){
   if(!exists(store))return null;
-  const work=store.hermesState.prepare('SELECT work_id,target_id,units,last_status FROM office_server_work WHERE project_id=? AND work_id=?').get(project,id) as WorkRow|undefined;if(!work)return null;
+  const work=store.hermesState.prepare('SELECT * FROM office_server_work WHERE project_id=? AND work_id=?').get(project,id) as WorkRow|undefined;if(!work)return null;
   const target=store.hermesState.prepare('SELECT id,definition,snapshot,observed_at,error FROM office_server_target WHERE project_id=? AND id=?').get(project,work.target_id) as TargetRow|undefined;if(!target)return null;
-  return {work,target,definition:JSON.parse(target.definition) as ServerTarget,units:JSON.parse(work.units) as string[],snapshot:target.snapshot?parseServerSnapshot(JSON.parse(target.snapshot) as RawSnapshot):null};
+  return {work,target,definition:JSON.parse(target.definition) as ServerTarget,units:JSON.parse(work.units) as string[],checks:work.checks?JSON.parse(work.checks) as ActivityCheck[]:[],snapshot:target.snapshot?parseServerSnapshot(JSON.parse(target.snapshot) as RawSnapshot):null};
 }
 function judge(view:NonNullable<ReturnType<typeof watched>>){
-  const health=view.snapshot?serverHealth(view.snapshot,view.units):null;
+  const health=view.snapshot?serverHealth(view.snapshot,view.units,view.checks):null;
   const status:ServerStatus=!view.snapshot?(view.target.error?'service_unreachable':'service_unobserved'):view.target.error?'service_unreachable':health!.status;
   const stale=!view.target.observed_at||Date.now()-Date.parse(view.target.observed_at)>STALE_MS;
   return {status,health,stale};
@@ -48,12 +52,13 @@ export function serverDetail(store:PackStore,project:string,id:string){
   const work=store.officeWorkById(project,id),byId=new Map((view.snapshot?.units??[]).map(u=>[u.id,u]));
   const units=view.units.map(unit=>byId.get(unit)??{id:unit,kind:unit.endsWith('.timer')?'timer':unit.endsWith('.service')?'service':'container',state:view.snapshot?.disabled.includes(unit)?'off':'problem',note:view.snapshot?.disabled.includes(unit)?null:'not_found',description:'',active:'',sub:'',restarts:0,since:null,last_run:null,next_run:null,job:null,links:[],project:null});
   return {id,title:work.title,goal:work.goal,revision:0,run_status:status,completion_verified:false,updated_at:view.target.observed_at??work.updated_at,
-    server:{target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units}};
+    server:{target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units,checks:view.checks.map(c=>({...c,count:view.snapshot?.checks[c.id]??null}))}};
 }
 
 export class ServerOffice {
   private running=new Map<string,Promise<unknown>>();
-  constructor(readonly store:PackStore,readonly config:HostConfig,readonly probe:ServerProbe=new SshServerProbe()){init(store);}
+  /** notify sends a short notice to the Work's chosen messenger destinations when its state changes. */
+  constructor(readonly store:PackStore,readonly config:HostConfig,readonly probe:ServerProbe=new SshServerProbe(),private readonly notify?:(workId:string,text:string)=>void){init(store);}
   targets(){return this.store.hermesState.prepare('SELECT id,definition,observed_at,error FROM office_server_target WHERE project_id=? ORDER BY created_at').all(this.config.project.id).map(row=>({id:String(row.id),...JSON.parse(String(row.definition)) as ServerTarget,observed_at:row.observed_at??null,error:row.error??null}));}
   register(raw:unknown){
     const definition=serverTargetSchema.parse(raw);requireCondition(clean(definition.name,80)===definition.name,'SERVER_CREDENTIAL_LIKE_INPUT');
@@ -66,7 +71,8 @@ export class ServerOffice {
   refreshTarget(targetId:string):Promise<ServerSnapshot|null>{
     const pending=this.running.get(targetId);if(pending)return pending as Promise<ServerSnapshot|null>;
     const task=(async()=>{const target=this.target(targetId);
-      try{const raw=await this.probe.snapshot(target),snapshot=parseServerSnapshot(raw);this.store.hermesState.prepare('UPDATE office_server_target SET snapshot=?,observed_at=?,error=NULL WHERE project_id=? AND id=?').run(JSON.stringify(raw),now(),this.config.project.id,targetId);this.recordChanges(targetId);return snapshot;}
+      const checks=[...new Map(this.store.hermesState.prepare('SELECT checks FROM office_server_work WHERE project_id=? AND target_id=? AND checks IS NOT NULL').all(this.config.project.id,targetId).flatMap(row=>JSON.parse(String(row.checks)) as ActivityCheck[]).map(c=>[c.id,c])).values()];
+      try{const raw=await this.probe.snapshot(target,checks),snapshot=parseServerSnapshot(raw);this.store.hermesState.prepare('UPDATE office_server_target SET snapshot=?,observed_at=?,error=NULL WHERE project_id=? AND id=?').run(JSON.stringify(raw),now(),this.config.project.id,targetId);this.recordChanges(targetId);return snapshot;}
       catch(error){const code=error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_CONNECTION_FAILED';this.store.hermesState.prepare('UPDATE office_server_target SET error=? WHERE project_id=? AND id=?').run(code,this.config.project.id,targetId);this.recordChanges(targetId);return null;}
     })().finally(()=>this.running.delete(targetId));
     this.running.set(targetId,task);return task;
@@ -78,7 +84,10 @@ export class ServerOffice {
       const id=String(row.work_id),view=watched(this.store,project,id);if(!view)continue;const {status,health}=judge(view);if(status===view.work.last_status)continue;
       this.store.hermesState.prepare('UPDATE office_server_work SET last_status=? WHERE project_id=? AND work_id=?').run(status,project,id);
       if(view.work.last_status===null&&status==='service_ok')continue;
-      workActivity(this.store,project,id,status==='service_ok'?'server.recovered':status==='service_unreachable'?'server.unreachable':'server.problem',status==='service_ok'?'모든 서비스가 정상입니다.':status==='service_unreachable'?'서버에 접속하지 못했습니다.':`확인 필요: ${health?.problems.map(p=>`${p.id} (${p.note})`).join(', ')}`);
+      const summary=status==='service_ok'?'모든 서비스가 정상입니다.':status==='service_unreachable'?'서버에 접속하지 못했습니다.':`확인 필요: ${health?.problems.map(p=>`${p.id} (${NOTE_KO[p.note??'']??p.note})`).join(', ')}`;
+      workActivity(this.store,project,id,status==='service_ok'?'server.recovered':status==='service_unreachable'?'server.unreachable':'server.problem',summary);
+      const title=this.store.officeWorkById(project,id).title,where=`${view.definition.name} (${view.definition.host})`;
+      this.notify?.(id,`${status==='service_ok'?'[회복]':status==='service_unreachable'?'[서버 연결 안 됨]':'[서버 확인 필요]'} ${title}\n${where}\n${summary}`);
     }
   }
   async discover(raw:unknown){
@@ -101,6 +110,15 @@ export class ServerOffice {
       this.store.hermesState.exec('COMMIT');
     }catch(error){this.store.hermesState.exec('ROLLBACK');throw error;}
     this.recordChanges(input.target_id);return {work_ids:ids};
+  }
+  /** The owner's activity checks of one Work; they run with the next read of its server. */
+  setChecks(raw:unknown){
+    const input=serverChecks.parse(raw),project=this.config.project.id;assertWorkConnected(this.store,project,input.work_id);requireCondition(watched(this.store,project,input.work_id),'SERVER_WORK_NOT_FOUND');
+    for(const c of input.checks)requireCondition(clean(c.label,80)===c.label,'SERVER_CREDENTIAL_LIKE_INPUT');
+    const checks:ActivityCheck[]=input.checks.map(c=>({id:checkId(c),...c}));
+    this.store.hermesState.prepare('UPDATE office_server_work SET checks=? WHERE project_id=? AND work_id=?').run(JSON.stringify(checks),project,input.work_id);
+    workActivity(this.store,project,input.work_id,'server.checks',`활동 점검 ${checks.length}개를 저장했습니다.`);
+    return serverDetail(this.store,project,input.work_id);
   }
   async refresh(raw:unknown){const {work_id}=serverRefresh.parse(raw),project=this.config.project.id;assertWorkConnected(this.store,project,work_id);const view=watched(this.store,project,work_id);requireCondition(view,'SERVER_WORK_NOT_FOUND');await this.refreshTarget(view.target.id);return serverDetail(this.store,project,work_id);}
   /** Called on a timer by the Control Center: servers that have a connected Work and an old or missing snapshot. */
