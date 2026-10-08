@@ -44,7 +44,7 @@ dialog.help{border:1px solid var(--line2);border-radius:12px;background:var(--pa
 dialog.help p{margin:0 0 14px;line-height:1.6;white-space:pre-line}dialog.help form{text-align:right}
 .notice{min-height:20px;margin:10px 0;color:var(--accent);font:12.5px var(--mono);overflow-wrap:anywhere}
 .tagline{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;font:11.5px var(--mono);color:var(--faint)}.tagline span:last-child{margin-left:auto}
-@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr;background:var(--bg)}.side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px;padding:12px 16px;border-bottom:1px solid var(--line)}.brand{width:100%;padding:0 0 6px}.brand-sub,.side .sec,.side .foot,.paths{display:none}.nav{width:auto;padding:5px 8px}.main{padding:16px 16px 36px}}@media(max-width:480px){.candidate-row{grid-template-columns:1fr}.candidate-row>button{min-height:36px}}`;
+@media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr;background:var(--bg)}.side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px;padding:12px 16px;border-bottom:1px solid var(--line)}.brand{width:100%;padding:0 0 6px}.brand-sub,.side .sec,.side .foot,.paths,.agents{display:none}.nav{width:auto;padding:5px 8px}.main{padding:16px 16px 36px}}@media(max-width:480px){.candidate-row{grid-template-columns:1fr}.candidate-row>button{min-height:36px}}`;
 
 export type ShellPage='work'|'settings'|'connections';
 /** Sidebar links are plain anchors so every view is one click away and pages stay independent. */
@@ -64,7 +64,7 @@ export function sidebarHtml(page:ShellPage){
 <a class="nav" href="connections" data-nav="connections"${current('connections')}>사이트 로그인</a>
 <a class="nav" href="settings"${page==='connections'?' aria-current="page"':current('settings')}>연결 및 설정</a>
 <a class="nav" id="connections" href="connections" hidden>사이트 로그인</a>
-<div class="sec">업무 처리</div><div class="paths"><span class="pth p-code">코드</span><span class="pth p-jev">Jev</span><span class="pth p-llm">AI</span><span class="pth p-human">사용자</span></div>
+<div class="sec">에이전트</div><div class="agents" id="side-agents"></div> <div class="sec">업무 처리</div><div class="paths"><span class="pth p-code">코드</span><span class="pth p-jev">Jev</span><span class="pth p-llm">AI</span><span class="pth p-human">사용자</span></div>
 <div class="foot" id="shell-foot">이 컴퓨터에서 실행</div></aside>`;
 }
 const usFlag='<svg viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" fill="#fff"/><path d="M0 1h20M0 3.2h20M0 5.4h20M0 7.6h20M0 9.8h20M0 12h20" stroke="#b22234" stroke-width="1.1"/><rect width="8.6" height="7.6" fill="#3c3b6e"/></svg>';
@@ -123,5 +123,9 @@ new MutationObserver(render).observe(sel,{childList:true,subtree:true,attributes
 const scan=root=>{for(const sel of (root.querySelectorAll?root.querySelectorAll('select[data-slider]'):[]))slider(sel);};
 const start=()=>{scan(document);new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1){if(n.matches&&n.matches('select[data-slider]'))slider(n);scan(n);}}).observe(document.body,{childList:true,subtree:true});};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();})();`;
-export const uiCss=baseUiCss+pressFeedbackCss+segmentCss+sliderCss;
-export const themeScript=themeOnlyScript+'\n'+pressFeedbackScript+'\n'+segmentScript+'\n'+sliderScript;
+// Which AI apps are connected to Office, from the same check the settings page shows (settings/mcp).
+const agentsCss=`.agents{display:flex;flex-direction:column;gap:2px;padding:2px 8px}.agent{display:flex;align-items:center;gap:9px;padding:3px 0;font:12.5px var(--mono);color:var(--text)}.agent i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}.agent.on i{background:var(--ok)}.agent.warn i{background:var(--accent)}.agent small{margin-left:auto;font-size:11px;color:var(--dim)}`;
+const agentsScript=`(()=>{const box=document.getElementById('side-agents');if(!box)return;const names={codex:'Codex',claude:'Claude Code',hermes:'Hermes',opencode:'OpenCode',cursor:'Cursor'},t=(ko,en)=>window.officeCopy?window.officeCopy(ko,en):ko;
+fetch('settings/mcp',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(view=>{if(!view?.clients)return;box.replaceChildren(...view.clients.filter(c=>['codex','claude','hermes'].includes(c.id)||c.registration==='registered').map(c=>{const row=document.createElement('div'),dot=document.createElement('i'),name=document.createElement('span'),note=document.createElement('small'),on=c.installed&&c.registration==='registered';row.className='agent'+(on?' on':c.installed?' warn':'');name.textContent=names[c.id]||c.id;note.textContent=on?'MCP':c.installed?t('미연결','Not connected'):t('설치 안 됨','Not installed');row.title=on?t('Office에 연결됨','Connected to Office'):c.installed?t('설치됨 · Office에 연결 안 됨','Installed · not connected to Office'):t('설치되지 않음','Not installed');row.append(dot,name,note);return row}))}).catch(()=>{});})();`;
+export const uiCss=baseUiCss+pressFeedbackCss+segmentCss+sliderCss+agentsCss;
+export const themeScript=themeOnlyScript+'\n'+pressFeedbackScript+'\n'+segmentScript+'\n'+sliderScript+'\n'+agentsScript;
