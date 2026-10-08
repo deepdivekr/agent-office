@@ -11,6 +11,7 @@ import {requireCondition} from '../core/contracts.js';
 import {WINDOWS_WORKFLOWS} from '../desktop/windows-workflows.js';
 import {type WorkMode,type WorkProposal,validateModelWorkProposal,workExecutionBinding,workAnswerSchema,workDefineSchema,workJevSchema,workListSchema,workPauseSchema,workProposalSchema,workStartSchema,workStatusSchema} from './contracts.js';
 import {initWorkExecution,workActivity} from './activity.js';
+import {setTimeout as delay} from 'node:timers/promises';
 import {safeControlText} from '../observability/safe-text.js';
 import {browserCatalog} from '../browser/executor-routing.js';
 import {bindWorkIntakeOptions,readWorkIntakeOptions} from './intake-options.js';
@@ -128,6 +129,8 @@ export class WorkRuntime {
   constructor(readonly store:PackStore,readonly config:HostConfig,readonly model:StructuredModel,private readonly capabilities:()=>unknown=()=>({browser_executors:browserCatalog(config)}),private readonly onIntake?:(workId:string,input:z.infer<typeof workStartSchema>,created:boolean)=>void,
     /** Where results go is the host's own setting: the registered destinations and the ones chosen for this Work. */
     private readonly resultDelivery?:(workId:string)=>{registered:Array<{id:string;platform:string;label:string}>;selected:string[]}){}
+  /** Waits before the definition asks the model again after a passing error (an outage, a rate limit, a login refresh). */
+  definitionRetryDelaysMs=[15_000,45_000];
   planningContext(workId?:string){return {...workPlanningContext(this.store,this.config,this.capabilities()),...(workId?{observed_source_schemas:observedWorkSourceSchemas(this.store,this.config,workId)}:{})};}
   private definitionDiagnostic(workId:string,event:WorkDefinitionDiagnostic){
     if(this.store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get())workActivity(this.store,this.config.project.id,workId,`definition.${event.kind}`,`Work definition ${event.kind}: ${event.code}`);
@@ -215,7 +218,19 @@ export class WorkRuntime {
       // The planner is the Work's own client and model.
       const pinned=workClientChoice(this.store,project,work_id);if(pinned&&planner instanceof ConfiguredStructuredModel)planner=planner.forClient(pinned.id,pinned.model);
       plannerCallsBefore=planner.calls?.length??0;
-      const rawProposal=await planner.call('design',instructions,modelInput,schema);
+      // A passing provider error is waited out a little before the Work is left waiting for a model (live 2026-10-08:
+      // a Claude login refresh met another Claude process, answered "try again" once, and the Work stopped).
+      let rawProposal:unknown;
+      for(let attempt=0;;attempt++){
+        const callsBefore=planner.calls?.length??0;
+        try{rawProposal=await planner.call('design',instructions,modelInput,schema);break;}
+        catch(error){
+          const kind=(planner.calls??[]).slice(callsBefore).filter(call=>call.status==='failed').at(-1)?.failure_kind;
+          if(attempt>=this.definitionRetryDelaysMs.length||leaseLost||!['provider_unavailable','rate_limited'].includes(String(kind)))throw error;
+          workActivity(this.store,project,work_id,'definition.retry',`The model was briefly unavailable (${kind}); trying again.`,{stage_id:'definition',status:'defining',reason:String(kind)});
+          await delay(this.definitionRetryDelaysMs[attempt]);assertWorkConnected(this.store,project,work_id);
+        }
+      }
       assertWorkConnected(this.store,project,work_id);
       const proposal=await validateOrCorrectWorkProposal(rawProposal,work.mode as WorkMode,Object.keys(work.answers).length>0,{model:planner,instructions,input:modelInput,onDiagnostic:event=>this.definitionDiagnostic(work_id,event)});
       // The host accepts a selection only among the candidates it listed; anything else is dropped, not an error.

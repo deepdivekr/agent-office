@@ -98,3 +98,29 @@ test('current model catalogs are bounded, key-safe, and list the documented Clau
   const claude=claudeModelCatalog();assert.deepEqual(claude.models.map(item=>item.id),['claude-opus-5-5','claude-sonnet-5-5','claude-haiku-4-5-20251001']);
   assert.deepEqual(claude.models.map(item=>item.label),['Claude Opus 5.5','Claude Sonnet 5.5','Claude Haiku 4.5']);
 });
+
+// Live 2026-10-08: a Claude token refresh that met another Claude process answered "try again" once; Office read the
+// whole JSON result, found "fallback_credit" and stopped the Work as out of credit.
+test('a failed Claude call is classified from its error words, not from every field of its JSON result',async()=>{
+  const {cliFailureText}=await import('../dist/integrations/client-failure.js');
+  const result=extra=>JSON.stringify({type:'result',subtype:'success',is_error:true,session_id:'a76edacc-5425-4716-a403-4422951e688d',total_cost_usd:0,usage:{input_tokens:0,fallback_credit:0},fast_mode_disabled_reason:'sdk_opt_in_required',...extra});
+  assert.equal(classifyClientFailure(cliFailureText(result({result:'Another request is refreshing your login. Please try again in a moment.'}),'')),'provider_unavailable');
+  assert.equal(classifyClientFailure(cliFailureText(result({result:'Overloaded',api_error_status:529}),'')),'provider_unavailable');
+  assert.equal(classifyClientFailure(cliFailureText(result({result:'Rate limited',api_error_status:429}),'')),'rate_limited');
+  assert.equal(classifyClientFailure(cliFailureText(result({result:'Your credit balance is too low',api_error_status:402}),'')),'quota_exhausted');
+  assert.equal(classifyClientFailure(cliFailureText(result({result:'Invalid authentication credentials',api_error_status:401}),'')),'auth_expired');
+  // Codex reports in JSON lines; only its error events count. Plain lines and stderr are kept as they are.
+  const codex=[{type:'thread.started',thread_id:'t'},{type:'item.completed',item:{type:'agent_message',text:'Checking the credit card statement'}},{type:'turn.failed',error:{message:'stream disconnected before completion'}}].map(JSON.stringify).join('\n');
+  assert.equal(classifyClientFailure(cliFailureText(codex,'')),'provider_unavailable');
+  assert.equal(classifyClientFailure(cliFailureText('','Weekly usage limit reached')),'quota_exhausted');
+});
+test('a Claude design call that fails with a passing error is classified as a provider outage, not quota',async()=>{
+  const runner={async run(request){
+    if(request.args.join(' ')==='auth status')return {code:0,stdout:JSON.stringify({loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty'}),stderr:''};
+    if(request.executable==='/fixture/claude')return {code:1,stdout:JSON.stringify({type:'result',subtype:'success',is_error:true,result:'Please try again in a moment.',usage:{fallback_credit:0}}),stderr:''};
+    throw Error('UNEXPECTED_CLIENT');
+  }};
+  const model=new SubscriptionAwareStructuredModel({environment:{AGENT_DRIVER_LLM_CLIENT:'claude',AGENT_DRIVER_CLAUDE_EXECUTABLE:'/fixture/claude'},runner});
+  await assert.rejects(model.call('design','Choose.',{work_id:'work-1',run_id:'run-1'},schema),/^Error: STRUCTURED_MODEL_UNAVAILABLE$/u);
+  assert.deepEqual(model.calls.map(call=>[call.provider,call.failure_kind]),[['claude','provider_unavailable']]);
+});
