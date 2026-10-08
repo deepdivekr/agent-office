@@ -121,7 +121,13 @@ test('runtime fixture the Control Center registers a server, links its groups an
   assert.deepEqual(fit,{scrolls:true,pageFits:true,oneLine:true});await page.setViewportSize(size);
   assert.equal(await page.locator('.delivery-stage').count(),0);
   assert.match(await page.locator('.server-targets').innerText(),/Add a destination such as Telegram/u);
-  await page.fill('#check-label','Relay heartbeat');await page.fill('#check-pattern','heartbeat');await page.fill('#check-amount','10');await page.selectOption('#check-scale','1');
+  // Picked from lists: what to look for and the window; a pattern only when the owner chooses to type one.
+  assert.equal(await page.locator('#check-pattern-wrap').isHidden(),true);
+  await page.selectOption('#check-kind','any');await page.selectOption('#check-window','60');await page.locator('#check-add').click();
+  await page.waitForFunction(()=>document.body.innerText.includes('chat-relay-bot · Log lines keep coming'));
+  assert.match(await page.locator('.server-table').last().innerText(),/chat-relay-bot · Log lines keep coming[\s\S]*Log lines keep coming[\s\S]*1h/u,'a name is made when none is given');
+  await page.selectOption('#check-kind','custom');assert.equal(await page.locator('#check-pattern-wrap').isHidden(),false);
+  await page.fill('#check-label','Relay heartbeat');await page.fill('#check-pattern','heartbeat');await page.selectOption('#check-window','10');
   await page.locator('#check-add').click();await page.waitForFunction(()=>document.body.innerText.includes('Relay heartbeat'));
   assert.match(await page.locator('.server-table').last().innerText(),/Relay heartbeat[\s\S]*chat-relay-bot\.service[\s\S]*heartbeat[\s\S]*10min[\s\S]*next check/u);
   assert.deepEqual(errors,[]);
