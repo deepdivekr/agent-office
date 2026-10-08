@@ -58,6 +58,7 @@ export function sidebarHtml(page:ShellPage){
 <a class="nav" href="./?view=recurring" data-view="recurring">반복 실행<span class="n" data-count="recurring"></span></a>
 <a class="nav" href="./?view=hold" data-view="hold">보류<span class="n" data-count="hold"></span></a>
 <a class="nav" href="./?view=done" data-view="done">종료된 업무<span class="n" data-count="done"></span></a>
+<a class="nav" href="./?view=hidden" data-view="hidden">숨김<span class="n" data-count="hidden"></span></a>
 <div class="sec">도구</div>
 
 <a class="nav" href="./?import=1" data-nav="import">가져오기</a>

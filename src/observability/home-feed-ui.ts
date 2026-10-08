@@ -60,7 +60,7 @@ return '<div class="htile server'+(bad.length?' warn':'')+'"><span class="hh"><i
 function renderHome(q){if((!feed||Date.now()-feedAt>15000)&&Date.now()-feedTried>5000)loadFeed();if(!feed){app.innerHTML='<p class="muted keep">'+esc(feedFailed?hf(['산출물을 불러오지 못했어요. 잠시 뒤 다시 시도해요.','Outputs could not be loaded. Trying again shortly.']):hf(['산출물을 모으는 중…','Gathering outputs…']))+'</p>';return}
 // The same place on every visit: what needs the owner first, Works on hold and ended ones last, otherwise in the order they were made.
 const rank=item=>{const g=groupOf(item.status);return g==='attention'?0:g==='hold'?2:g==='done'?3:1};
-const items=feed.items.filter(item=>!q||String(item.title).toLowerCase().includes(q)).sort((a,b)=>rank(a)-rank(b)||String(a.created_at).localeCompare(String(b.created_at)));
+const items=feed.items.filter(item=>!item.hidden&&(!q||String(item.title).toLowerCase().includes(q))).sort((a,b)=>rank(a)-rank(b)||String(a.created_at).localeCompare(String(b.created_at)));
 const cells=[],servers=new Map();
 for(const item of items){if(!item.server){cells.push(homeCellHtml(item));continue}const key=item.server.host+'|'+item.server.target;if(!servers.has(key)){servers.set(key,[]);cells.push(key)}servers.get(key).push(item)}
 app.innerHTML=cells.length?'<div class="home-grid">'+cells.map(cell=>servers.has(cell)?homeServerHtml(servers.get(cell)):cell).join('')+'</div>':'<div class="empty">'+esc(hf(['아직 맡긴 업무가 없습니다. 위에서 한 줄로 업무를 시작하세요.','No Work yet. Start one in a line above.']))+'</div>'}

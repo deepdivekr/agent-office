@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+test('runtime fixture Hide takes a Work off home, the board and the counts into the Hidden view, and Show again brings it back',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{chromium}=await import('playwright');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js'),{startControlCenter}=await import('../dist/observability/control-center.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{hiddenWorkIds}=await import('../dist/work/hidden.js');
+  const root=await mkdtemp(join(tmpdir(),'work-hide-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);
+  const personal=store.beginWork(config.project.id,'hide-personal','개인 업무','quick').work.id,shown=store.beginWork(config.project.id,'hide-shown','보여 줄 업무','quick').work.id;
+  store.hermesState.prepare("UPDATE office_intake SET status='ready' WHERE work_id IN (?,?)").run(personal,shown);store.close();
+  const server=await startControlCenter(config),browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();await server.close();await rm(root,{recursive:true,force:true});});
+  const context=await browser.newContext({viewport:{width:1280,height:900}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const homeCells=async()=>{await page.locator('.htile').first().waitFor();return page.locator('.htile').evaluateAll(n=>n.map(t=>t.dataset.work).sort())};
+  await page.goto(server.url);assert.deepEqual(await homeCells(),[personal,shown].sort());
+  await page.locator('.htile[data-work="'+personal+'"]').click();await page.locator('[data-work-hide="hide"]').click();await page.locator('[data-work-hide="show"]').waitFor();
+  const read=new PackStore(config.dbPath);assert.deepEqual([...hiddenWorkIds(read,config.project.id)],[personal]);read.close();
+  await page.locator('#back').click();
+  await page.waitForFunction(id=>![...document.querySelectorAll('.htile')].some(t=>t.dataset.work===id),personal);assert.deepEqual(await homeCells(),[shown]);
+  assert.deepEqual([await page.locator('[data-count="all"]').innerText(),await page.locator('[data-count="hidden"]').innerText()],['1','1']);
+  await page.locator('[data-view="all"]').click();await page.locator('.tile').first().waitFor();
+  assert.deepEqual(await page.locator('.tile').evaluateAll(n=>n.map(t=>t.dataset.work)),[shown]);
+  await page.locator('[data-view="hidden"]').click();await page.waitForFunction(()=>document.querySelectorAll('.tile').length===1);
+  assert.deepEqual(await page.locator('.tile').evaluateAll(n=>n.map(t=>t.dataset.work)),[personal],'the Hidden view holds only hidden Works');
+  await page.locator('.tile[data-work="'+personal+'"]').click();await page.locator('[data-work-hide="show"]').click();await page.locator('[data-work-hide="hide"]').waitFor();
+  await page.locator('[data-view="home"]').click();await page.waitForFunction(()=>document.querySelectorAll('.htile').length===2);
+  assert.equal(await page.locator('[data-count="hidden"]').innerText(),'');
+  const forged=await page.evaluate(async id=>(await fetch('work/hide',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({work_id:id,hidden:true})})).status,personal);
+  assert.equal(forged,403,'only the Office page can hide');
+  assert.deepEqual(errors,[]);
+});
