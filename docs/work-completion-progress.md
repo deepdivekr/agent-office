@@ -920,3 +920,12 @@ ACME(가져온 업무, 자기 도우미로 텔레그램 전송)의 15:00·18:00 
 
 테스트: runtime-owner-mcp(핸드셰이크 성공·실패·시간 초과, 늦게 열린 연결 닫기), runtime-work-client-run(응답 없는 Aside 제외와 대체 안내,
 연결된 Aside의 대체 문구, 미충족 보고 수정 3회 후 검토 대기, 수정 1회로 완료), 관련 파일 visual-fallback·autonomy·planning-context 통과.
+
+## 가져오기 프롬프트를 클라이언트 실행 기준으로 (2026-10-08)
+
+주인: "가져오기 기능 프롬프트도 조절해야겠네. 호스트가 아니라 클라이언트가 운영 주체로 바뀐 거잖아." 복사용 이전 프롬프트(한·영)가 Office가
+단계를 실행하던 시절 문구였다(한국어판은 "Agent Driver의 Work 초안"). 받은 JSON의 steps(goal·tool_hints)는 클라이언트 첫 지시에 "주인
+자동화의 절차"로 그대로 들어가는데, 프롬프트는 요약과 근거 연결만 요구해 지침 원문·명령·경로·스킬이 빠지기 쉬웠다. 이제 프롬프트는 옮긴 업무를
+주인의 AI 앱이 자기 계정·스킬·도구로 실행하고 Office는 일정·기록·전달·일시정지만 맡는다고 밝히고, goal에 원래 지침 원문, steps에 구체 기준과
+정확한 경로·명령·스킬·MCP, completion에 정상 결과의 모양을 담게 한다. JSON 형식과 근거·비밀값 규칙은 그대로다. 프로젝트 스캔 권고와 코딩
+이전 프롬프트의 "Agent Driver Work"도 "Agent Office 업무"로 고쳤다. 테스트: runtime-work-import·runtime-pr29-continuity 문구 단언 추가.
