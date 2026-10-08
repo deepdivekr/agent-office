@@ -49,7 +49,7 @@ export function threadFromRecords(input:ThreadInput):WorkThread{
   return {turns,items,log};
 }
 
-/** The Work's thread for the detail screen: the last 40 replies and the log since the oldest of them. */
+/** The Work's thread for the detail screen: the last 30 replies (the most WorkResults.list returns) and the log since the oldest of them. */
 export function readWorkThread(store:PackStore,project:string,id:string,results:ResultRow[]):WorkThread{
   const work=store.officeWorkById(project,id);
   const intake=store.hermesState.prepare('SELECT prompt FROM office_intake WHERE project_id=? AND work_id=?').get(project,id) as {prompt?:string}|undefined;

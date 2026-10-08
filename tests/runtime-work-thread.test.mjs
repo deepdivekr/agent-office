@@ -79,3 +79,16 @@ test('the detail workspace shows the conversation, selects a cycle and sends a d
   assert.deepEqual([calls[0].instruction,calls[0].stage_id,calls[0].revision,calls[1].revision],['Add the author names.','next',3,4]);
   assert.deepEqual(errors,[]);
 });
+
+test('runtime native work/thread answers from the real Control Center for a new Work',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {startControlCenter}=await import('../dist/observability/control-center.js'),{PackStore}=await import('../dist/packs/store.js');
+  const root=await mkdtemp(join(tmpdir(),'office-thread-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);const work=store.beginWork(config.project.id,'thread-native','새 글 정리','quick').work.id;store.close();
+  const server=await startControlCenter(config);t.after(async()=>{await server.close();await rm(root,{recursive:true,force:true});});
+  const response=await fetch(server.url+'work/thread?id='+work);
+  assert.equal(response.status,200);
+  const thread=await response.json();
+  assert.deepEqual([thread.turns[0].role,thread.turns[0].kind,thread.turns[0].text,thread.items.length],['owner','request','새 글 정리',0]);
+});

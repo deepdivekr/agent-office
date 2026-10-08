@@ -452,7 +452,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(suffix==='work/timeline'){reply(response,200,JSON.stringify(readWorkTimeline(store,config)),'application/json; charset=utf-8');return;}
     if(suffix==='work/thread'){
       const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
-      try{const rows=results.list(config.project.id,id,40).map(r=>({id:r.id,summary:r.summary,source_status:r.source_status,verification:r.verification,created_at:r.created_at,artifacts:r.artifacts.map(a=>({label:a.label,bytes:a.bytes}))}));reply(response,200,JSON.stringify(readWorkThread(store,config.project.id,id,rows)),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;
+      try{const rows=results.list(config.project.id,id,30).map(r=>({id:r.id,summary:r.summary,source_status:r.source_status,verification:r.verification,created_at:r.created_at,artifacts:r.artifacts.map(a=>({label:a.label,bytes:a.bytes}))}));reply(response,200,JSON.stringify(readWorkThread(store,config.project.id,id,rows)),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;
     }
     if(suffix==='work/detail'){
       const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
