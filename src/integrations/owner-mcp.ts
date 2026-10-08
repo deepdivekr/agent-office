@@ -163,6 +163,19 @@ const connectLaunch:Connect=async(launch,environment)=>{
 };
 const reads=(tool:{name:string;annotations?:{readOnlyHint?:boolean|undefined;destructiveHint?:boolean|undefined}|undefined})=>tool.annotations?.destructiveHint!==true&&(tool.annotations?.readOnlyHint===true||tool.annotations?.readOnlyHint===undefined&&readVerb.test(tool.name)&&!writeVerb.test(tool.name));
 
+/** Whether a server finishes the MCP handshake and lists its tools in time (live 2026-10-08: aside.exe existed but closed
+ * during initialize, and the run was still told it was its browser). A connection that opens after the time is closed. */
+export async function mcpServerAnswers(server:ClientRunMcpServer,timeoutMs=15_000,connect:Connect=connectLaunch):Promise<boolean>{
+  const launch:Launch=server.url?{kind:'http',url:server.url}:{kind:'stdio',command:server.command??'',args:server.args??[],env:{}};
+  let timer:NodeJS.Timeout|undefined,expired=false;
+  const opening=connect(launch,process.env);
+  opening.then(connection=>{if(expired)void connection.client.close().catch(()=>{});},()=>{});
+  try{
+    const connection=await Promise.race([opening,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(Error('MCP_HANDSHAKE_TIMEOUT'));},timeoutMs);})]);
+    try{await connection.client.listTools(undefined,{timeout:timeoutMs});return true;}catch{return false;}finally{await connection.client.close().catch(()=>{});}
+  }catch{return false;}
+  finally{clearTimeout(timer);}
+}
 let snapshot:OwnerMcpSnapshot|null=null,definitions=new Map<string,ServerDefinition>(),refreshing:Promise<OwnerMcpSnapshot>|null=null,enabled=false;
 /** Looks at every server once and keeps the result until it is asked to look again. */
 export function refreshOwnerMcp(environment:NodeJS.ProcessEnv=process.env,dependencies:{servers?:ServerDefinition[];connect?:Connect}={}):Promise<OwnerMcpSnapshot>{
