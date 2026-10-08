@@ -87,6 +87,6 @@ Ubuntu Browser VM의 새 기본 메모리 할당은 3GiB이며 필요하면 `vm 
 
 1. `runtime-config.json`의 `observability.tailnet_hosts`에 이 컴퓨터의 MagicDNS 이름을 브라우저가 보내는 그대로(포트 포함) 넣는다. 예: `"observability": {"tailnet_hosts": ["my-pc.tail1234.ts.net:4600"]}`. 다른 DNS 이름은 받지 않는다. 남이 그 이름을 이 컴퓨터로 가리키게 할 수 있기 때문이다.
 2. Tailscale이 도는 쪽에서 HTTPS로 관제센터를 연다. WSL이면 Windows 쪽이다: `tailscale serve --bg --https=4600 http://127.0.0.1:4600`. Funnel은 인터넷 전체에 공개하므로 쓰지 않는다.
-3. 관제센터를 다시 시작하면 `agent-office connect` 출력의 `tailnet_urls`에 휴대폰용 주소(`https://<이름>:4600/<토큰>/`)가 나온다. 처음 한 번 이 주소로 열면 토큰이 그 이름 전용 쿠키(HttpOnly·Secure)로 옮겨지고, 이후에는 `https://<이름>:4600/`만으로 열린다.
+3. 관제센터를 다시 시작한 뒤 터미널에서 `agent-office connect`를 실행하면 휴대폰용 주소(`https://<이름>:4600/<토큰>/`)가 QR 코드와 함께 나온다. 휴대폰 카메라로 QR을 찍으면 바로 열린다(스크립트로 실행하면 같은 내용이 JSON 한 줄의 `tailnet_urls`로 나온다). 처음 한 번 이 주소로 열면 토큰이 그 이름 전용 쿠키(HttpOnly·Secure)로 옮겨지고, 이후에는 `https://<이름>:4600/`만으로 열린다.
 
 `tailscale serve`가 HTTPS를 끝내므로 그 페이지의 Origin은 `https://<이름>`이다. 관제센터는 허용한 이름에 한해서만 이것을 같은 페이지로 본다.

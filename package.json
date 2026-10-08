@@ -26,10 +26,12 @@
     "playwright": "1.63.0",
     "@typesafe-ai/sdk": "0.6.0",
     "yaml": "2.9.1",
-    "web-push": "3.6.7"
+    "web-push": "3.6.7",
+    "qrcode-terminal": "0.12.0"
   },
   "devDependencies": {
     "@types/node": "22.20.3",
+    "@types/qrcode-terminal": "0.12.2",
     "@types/web-push": "3.6.4",
     "typescript": "7.0.2"
   },

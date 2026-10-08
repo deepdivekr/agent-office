@@ -178,7 +178,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       // A page opened through the capability path on the short host or a tailnet name keeps the token in a host-only cookie and continues at the short address.
       if((requestHost===shortHost||onTailnet)&&request.method==='GET'&&!/[/.]/u.test(suffix)&&String(request.headers.accept??'').includes('text/html')){response.writeHead(303,{'set-cookie':`${CAPABILITY_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict${onTailnet?'; Secure':''}`,location:`/${suffix}${url.search}`,'cache-control':'no-store'});response.end();return;}
     }else if((requestHost===shortHost||onTailnet)&&cookieValue(request.headers.cookie,CAPABILITY_COOKIE)===token)suffix=url.pathname.slice(1);
-    else{reply(response,404,requestHost===shortHost?'not found. Open the Control Center with: agent-office connect':'not found');return;}
+    else{reply(response,404,requestHost===shortHost||onTailnet?'not found. Open the Control Center with: agent-office connect':'not found');return;}
     if(settings.maintenanceRunning&&['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix)){reply(response,503,JSON.stringify({error:'CLI_UPDATE_IN_PROGRESS'}),'application/json; charset=utf-8');return;}
     const managementAction=request.method==='POST'||request.method==='GET'&&(['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix));
     if(managementAction)inflightMutations++;

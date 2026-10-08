@@ -99,3 +99,15 @@ test('runtime native the app icon is served behind the capability like the font,
     assert.match(html,/<link rel="apple-touch-icon" href="icon-180\.png">/u,page);assert.match(html,/<meta name="apple-mobile-web-app-title" content="Agent Office">/u,page);}
   assert.equal((await send(new URL('/icon-180.png',x.server.url).href)).status,404,'not outside the capability');
 });
+
+test('connect tells a person where to open Office: the short address here and, with Tailscale, a QR code and the phone address to scan or copy',async()=>{
+  const {connectSummaryText}=await import('../dist/onboarding/cli.js');
+  const phone='https://office-pc.tail0000.ts.net:4600/'+'a'.repeat(48)+'/';
+  const text=connectSummaryText({address:'http://office.localhost:4600/',tailnet_urls:[phone],connection:'connected',mcp_command:'agent-office mcp'});
+  const lines=text.split('\n');
+  assert.ok(lines.includes('  http://office.localhost:4600/'));assert.ok(lines.includes('  '+phone),'the phone address stands alone on its line, easy to select');
+  assert.ok(lines.filter(line=>/[▀▄█]/u.test(line)).length>=10,'a QR code to scan with the phone camera');
+  assert.doesNotMatch(text,/[{}"]/u,'no JSON for a person');
+  const plain=connectSummaryText({address:'http://office.localhost:4600/',connection:'awaiting_local_approval',mcp_command:'agent-office mcp'});
+  assert.match(plain,/Tailscale을 설정하세요/u);assert.match(plain,/승인해 주세요/u);assert.doesNotMatch(plain,/[▀▄█]/u);
+});
