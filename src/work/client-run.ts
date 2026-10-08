@@ -8,7 +8,7 @@ import {hashJson} from '../taskpack/adaptive-spec.js';
 import {classifyClientFailure} from '../integrations/client-failure.js';
 import {nativeProcessRunner,resolveSubscriptionClientExecutable,type SafeProcessRunner} from '../integrations/subscription-auth.js';
 import {sanitizeCodingReply} from '../coding/reply-safety.js';
-import {ownerMcpEnabled,windowsClientServers,type ClientRunMcpServer} from '../integrations/owner-mcp.js';
+import {ownerMcpEnabled,windowsClientServers,mcpServerAnswers,type ClientRunMcpServer} from '../integrations/owner-mcp.js';
 import {ownerEnvironmentContext} from '../integrations/client-environment.js';
 import {type WorkActivityMetadata} from './activity.js';
 import {workClientChoiceSchema,type WorkClientChoice} from './contracts.js';
@@ -29,10 +29,17 @@ type Verify=(checks:Check[],observations:WorkClientCheckpoint['observations'],cl
 
 // The owner's Windows-side MCP servers (Aside, their main browser, lives there) go to the client only in a process where the
 // owner's own MCP servers may be used: a service process, never a test reading the developer's home.
-const ownerServers=async(client:RunClient):Promise<ClientRunMcpServer[]>=>ownerMcpEnabled()?windowsClientServers(client):[];
-let enabled=false,runner:SafeProcessRunner=nativeProcessRunner,executable:(client:RunClient)=>string=client=>resolveSubscriptionClientExecutable(client),servers=ownerServers;
+// The owner's browser is asked for its tools before a run is told to use it; one that does not answer is marked, not passed.
+type OfferedServer=ClientRunMcpServer&{unavailable?:boolean};
+const OWNER_BROWSER=/aside/iu;
+const ownerServers=async(client:RunClient):Promise<OfferedServer[]>=>{
+  if(!ownerMcpEnabled())return [];
+  const found=await windowsClientServers(client);
+  return Promise.all(found.map(async server=>OWNER_BROWSER.test(server.id)&&!await mcpServerAnswers(server,Math.min(20,server.startup_timeout_sec??15)*1000)?{...server,unavailable:true}:server));
+};
+let enabled=false,runner:SafeProcessRunner=nativeProcessRunner,executable:(client:RunClient)=>string=client=>resolveSubscriptionClientExecutable(client),servers:(client:RunClient)=>Promise<OfferedServer[]>=ownerServers;
 /** Service entries make the client's own agent the Work executor; AGENT_OFFICE_CLIENT_RUN=off keeps the host-tool loop. */
-export function enableClientRun(options:{runner?:SafeProcessRunner;executable?:(client:RunClient)=>string;servers?:(client:RunClient)=>Promise<ClientRunMcpServer[]>}={}){
+export function enableClientRun(options:{runner?:SafeProcessRunner;executable?:(client:RunClient)=>string;servers?:(client:RunClient)=>Promise<OfferedServer[]>}={}){
   enabled=process.env.AGENT_OFFICE_CLIENT_RUN!=='off';
   if(options.runner)runner=options.runner;if(options.executable)executable=options.executable;if(options.servers)servers=options.servers;
 }
@@ -330,23 +337,28 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   // The owner's Windows-side servers are looked at only when the client actually runs.
   // A turn that left no completion report (one from before reports existed, or a resume with nothing new) is asked for it once.
   let askedReport=false;
-  let extra:ClientRunMcpServer[]|null=null,deliveryText=input.checkpoint?.client_session?deliveryMessage(input.folder,cp.summary):'';
+  let extra:OfferedServer[]|null=null,deliveryText=input.checkpoint?.client_session?deliveryMessage(input.folder,cp.summary):'';
   for(;;){
     if(next){
       input.guard();update({finished:false,direction_at:latest});extra??=await servers(client).catch(()=>[]);
       // A completion report is the turn's own: one left by an earlier turn never decides this one.
       try{rmSync(join(input.folder,COMPLETION_FILE),{force:true});}catch{/* none */}
       input.activity('supervisor.client_run',`${clientName(client)} · ${session().confirmed?'같은 세션을 이어서 실행합니다.':'사용자 설정 그대로 업무 폴더에서 실행을 시작합니다.'}`,meta({status:'running',model_continuity:session().confirmed?'resumed_session':'new_session'}));
-      if(extra.length)input.activity('tool.result',`windows_mcp · ${extra.map(server=>server.id).join(', ')}`,meta({tool_name:'windows_mcp',status:'succeeded'}));
+      const live=extra.filter(server=>!server.unavailable),down=extra.filter(server=>server.unavailable);
+      if(live.length)input.activity('tool.result',`windows_mcp · ${live.map(server=>server.id).join(', ')}`,meta({tool_name:'windows_mcp',status:'succeeded'}));
+      if(down.length)input.activity('tool.result',`windows_mcp · ${down.map(server=>server.id).join(', ')} 응답 없음 · 공개 페이지는 헤드리스 브라우저(Playwright)로 읽어요`,meta({tool_name:'windows_mcp',status:'failed'}));
       // Live (2026-10-03): given Aside, Codex still read Reddit and X with a headless browser and met their challenges.
-      const browser=extra.find(server=>/aside/iu.test(server.id)),serverNote=extra.length?`\n\nMCP servers from the owner's Windows side of this computer are connected to this run: ${extra.map(server=>server.id).join(', ')}.${browser?` "${browser.id}" is an MCP server, not a shell command: its tools drive the owner's own signed-in browser, and it is the browser for this run. Open every web page through it (X, Reddit, news sites, anything that blocks automated browsers or needs a sign-in), not with a headless browser, a web search, a shell command or a browser-driving script (Playwright, a Chrome collector) — the owner's own automation included: when one of its steps would open a browser itself, do that browsing through "${browser.id}" and keep the rest of the step.`:''}`:'';
+      // Live (2026-10-08): told Aside was its only browser, a run whose Aside closed during the handshake stopped instead of reading public feeds.
+      const browser=live.find(server=>OWNER_BROWSER.test(server.id)),lost=down.find(server=>OWNER_BROWSER.test(server.id));
+      const serverNote=(live.length?`\n\nMCP servers from the owner's Windows side of this computer are connected to this run: ${live.map(server=>server.id).join(', ')}.${browser?` "${browser.id}" is an MCP server, not a shell command: its tools drive the owner's own signed-in browser, and it is the browser for this run. Open every web page through it (X, Reddit, news sites, anything that blocks automated browsers or needs a sign-in), not with a headless browser, a web search, a shell command or a browser-driving script (Playwright, a Chrome collector) — the owner's own automation included: when one of its steps would open a browser itself, do that browsing through "${browser.id}" and keep the rest of the step. If its tools are missing in this run or a call to it fails (a closed connection, a timeout), do not stop: read public pages with a headless browser (Playwright) or a plain HTTPS fetch of the page or feed instead, and say in the result which pages were read that way. Only a page that needs the owner's sign-in waits for "${browser.id}".`:''}`:'')
+        +(lost?`\n\nThe owner's browser "${lost.id}" (an MCP server on the Windows side) did not answer when this run started, so it is not connected. Do not stop for it: read public pages with a headless browser (Playwright) or a plain HTTPS fetch of the page or feed, and say in the result which pages were read that way. A page that needs the owner's sign-in is left for later and named in the result.`:'');
       // The owner's pause or direction change aborts the run; the guard turns a lost lease or a changed Work into a stop.
       const before=new Set(producedFiles(input.folder,false).map(fileKey));
       const stop=new AbortController(),abort=()=>stop.abort();input.signal.addEventListener('abort',abort,{once:true});
       let guardFailure:unknown=null;const watch=setInterval(()=>{try{input.guard();}catch(error){guardFailure=error;stop.abort();}},5_000);watch.unref();
       let outcome:ClientRunOutcome;
       try{
-        outcome=await runClient({client,model:input.model,effort:input.effort,servers:extra,folder:input.folder,prompt:next+serverNote,session:session().session_id?{id:session().session_id!,resume:session().confirmed}:null,signal:stop.signal,
+        outcome=await runClient({client,model:input.model,effort:input.effort,servers:live,folder:input.folder,prompt:next+serverNote,session:session().session_id?{id:session().session_id!,resume:session().confirmed}:null,signal:stop.signal,
           onSession:id=>update({session_id:id,confirmed:true}),onEvent:event=>input.activity(event.kind,`${event.tool_name} · ${event.summary}`,meta({tool_name:event.tool_name,status:event.status}))});
       }catch(error){
         if(stop.signal.aborted){if(guardFailure)throw guardFailure;input.guard();throw Error('WORK_PAUSED');}
@@ -407,7 +419,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
     if(!report&&!askedReport&&session().confirmed&&session().session_id){
       askedReport=true;
       try{
-        await runClient({client,model:input.model,effort:input.effort,servers:extra??[],folder:input.folder,session:{id:session().session_id!,resume:true},signal:input.signal,
+        await runClient({client,model:input.model,effort:input.effort,servers:(extra??[]).filter(server=>!server.unavailable),folder:input.folder,session:{id:session().session_id!,resume:true},signal:input.signal,
           prompt:`Office decides completion from ${COMPLETION_FILE}. Check the files in the Work folder against each completion condition and write ${COMPLETION_FILE}: {"checks":[{"id":"<condition id>","met":true|false,"note":"<one line: what shows it, or what is missing>"}]}.\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}\n\nChange nothing else and reply in one line.`,
           onSession:()=>{},onEvent:event=>input.activity(event.kind,`${event.tool_name} · ${event.summary}`,meta({tool_name:event.tool_name,status:event.status}))});
       }catch(error){if(input.signal.aborted)throw error;/* no report: Office's own check below */}
@@ -416,6 +428,14 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
     if(report){
       const missing=report.checks.filter(item=>!item.met);
       input.activity('supervisor.verification',report.met?`${clientName(client)}가 완료 조건 ${report.checks.length}개를 모두 충족했다고 보고했어요. ${input.external_effect?'요청에 든 전송·제출은 앱이 자기 도구로 했고, 그 보고로 완료 처리해요.':'외부로 보내는 일이 없는 업무라 그 보고로 완료 처리해요.'}`:`${clientName(client)}가 충족하지 못한 조건 ${missing.length}개를 보고했어요: ${missing.map(item=>`${item.id}${item.note?` (${item.note})`:''}`).join('; ')}`.slice(0,1000),meta({stage_id:'completion.verify',status:report.met?'verified':'not_verified'}));
+      // Live 2026-10-08: a run whose browser failed reported its conditions unmet and went straight to the owner. The same
+      // session is first asked to finish with the next means it has, within the repair budget the verifier's denials use.
+      if(!report.met&&session().repairs<WORK_COMPLETION_REPAIR_BUDGET){
+        update({repairs:session().repairs+1});
+        input.activity('supervisor.client_run',`${clientName(client)} · 미충족 조건 ${missing.length}개를 다른 수단으로 마치도록 같은 세션에 요청합니다 (${session().repairs}/${WORK_COMPLETION_REPAIR_BUDGET})`,meta({status:'running',reason:'WORK_CLIENT_REPORTED_INCOMPLETE'}));
+        next=`Your ${COMPLETION_FILE} reports these conditions as not met: ${missing.map(item=>`${item.id}${item.note?` (${item.note})`:''}`).join('; ')}.\n\nDo not stop at a blocked means. If a tool, a browser or a connection failed, switch to the next one you have (the owner's browser, then a headless browser such as Playwright, then a plain HTTPS fetch of the page or feed) and finish the Work in the same folder. Do not repeat a send or submission that already happened. A condition only the owner can unblock (a sign-in, a payment, a decision) stays unmet: say in its note exactly what they need to do. Update DELIVERY.md, write ${COMPLETION_FILE} again and finish with the short reply.\n\n${officeOwns(input)}`;
+        continue;
+      }
       return report.met?{status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})}
         :{status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_REPORTED_INCOMPLETE',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})};
     }

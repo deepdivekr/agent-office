@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ownerMcpServers,refreshOwnerMcp,callOwnerMcp,enableOwnerMcp,disableOwnerMcp,ownerMcpSnapshot,windowsClientServers} from '../dist/integrations/owner-mcp.js';
+import {ownerMcpServers,refreshOwnerMcp,callOwnerMcp,enableOwnerMcp,disableOwnerMcp,ownerMcpSnapshot,windowsClientServers,mcpServerAnswers} from '../dist/integrations/owner-mcp.js';
 
 // Owner direction 2026-10-03: the MCP servers the owner already uses are taken along by themselves. What fits is
 // used, what does not is left out, and nothing is asked one server at a time.
@@ -114,4 +114,19 @@ test('runtime fixture Windows server selection reads TOML like Codex does and ne
   const found=await windowsClientServers('codex',{},[{side:'local',home:local},{side:'windows',home:windows}],{mount,reachable:async()=>true});
   assert.deepEqual(found.map(server=>[server.id,server.args]),[['color',['--color=#fff','tab\there','C:\\\\C#\\\\x']],['aside',[]],['dup',[]],['table',[]]]);
   assert.equal(found.find(server=>server.id==='dup').command,join(tools,'g.exe'),'a later working entry is used when the first cannot be started');
+});
+
+test('runtime unit a Windows server counts as usable only when it finishes the MCP handshake and lists its tools',async()=>{
+  // Live 2026-10-08: aside.exe existed but closed during initialize; the file check alone called it usable.
+  const server={id:'aside',command:'/mnt/c/Tools/aside.exe',args:['mcp']},closed=[];
+  const ok=async launch=>{assert.deepEqual(launch,{kind:'stdio',command:'/mnt/c/Tools/aside.exe',args:['mcp'],env:{}});return {client:{listTools:async()=>({tools:[{name:'open'}]}),close:async()=>{closed.push('ok');}}};};
+  assert.equal(await mcpServerAnswers(server,1000,ok),true);
+  assert.equal(await mcpServerAnswers(server,1000,async()=>{throw Error('connection closed: initialize response');}),false);
+  assert.equal(await mcpServerAnswers(server,1000,async()=>({client:{listTools:async()=>{throw Error('closed');},close:async()=>{closed.push('list');}}})),false);
+  const started=Date.now();let late;
+  assert.equal(await mcpServerAnswers(server,200,()=>new Promise(resolve=>{late=resolve;})),false,'a server that never answers is given up within the time');
+  assert.ok(Date.now()-started<1500);
+  late({client:{listTools:async()=>({tools:[]}),close:async()=>{closed.push('late');}}});await new Promise(resolve=>setTimeout(resolve,20));
+  assert.deepEqual(closed,['ok','list','late'],'every connection that opened is closed, a late one included');
+  assert.equal(await mcpServerAnswers({id:'docs',url:'https://docs.example/mcp'},1000,async launch=>{assert.deepEqual(launch,{kind:'http',url:'https://docs.example/mcp'});return {client:{listTools:async()=>({tools:[]}),close:async()=>{}}};}),true);
 });

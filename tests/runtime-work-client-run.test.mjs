@@ -293,8 +293,25 @@ test('runtime fixture the client run gets the owner Windows-side MCP servers and
   assert.match(x.runs[0].stdin,/Browse signed-in sites with Aside\./u);assert.doesNotMatch(x.runs[0].stdin,/Local rules the client loads itself|Claude only/u);
   assert.ok(activity(x).some(row=>row.summary==='windows_mcp · aside, docs'));
   assert.match(x.runs[0].stdin,/connected to this run: aside, docs\. "aside" is an MCP server, not a shell command: its tools drive the owner's own signed-in browser, and it is the browser for this run\. Open every web page through it[\s\S]*browser-driving script \(Playwright, a Chrome collector\)[\s\S]*do that browsing through "aside"/u);
+  // Live 2026-10-08: Aside closed during the handshake and the run stopped, told never to use anything else.
+  assert.match(x.runs[0].stdin,/If its tools are missing in this run or a call to it fails[\s\S]*do not stop: read public pages with a headless browser \(Playwright\) or a plain HTTPS fetch/u);
   const claude=clientRunArgs({id:'claude',model:null,effort:null},'/w',null,false,[{id:'aside',command:'/mnt/c/Tools/aside.exe',args:['mcp']},{id:'docs',url:'https://docs.example/mcp'}]);
   assert.deepEqual(JSON.parse(claude[claude.indexOf('--mcp-config')+1]),{mcpServers:{aside:{type:'stdio',command:'/mnt/c/Tools/aside.exe',args:['mcp']},docs:{type:'http',url:'https://docs.example/mcp'}}});
+});
+
+test('runtime fixture an owner browser that did not answer is left out and the run reads public pages another way',async t=>{
+  // Live 2026-10-08: aside.exe existed, closed during the MCP handshake, and the run was still told it was the only browser.
+  const x=await setup(t,{client:request=>codexTurn(request)});
+  enableClientRun({servers:async()=>[{id:'aside',command:'/mnt/c/Tools/aside.exe',args:['mcp'],unavailable:true},{id:'docs',url:'https://docs.example/mcp'}]});
+  x.supervisor.start(x.work.work_id,x.work.revision,true);x.supervisor.activate();x.supervisor.tick();
+  const end=await settle(x);assert.equal(end.state,'succeeded',JSON.stringify(end));
+  const args=x.runs[0].args;
+  assert.ok(!args.some(value=>value.startsWith('mcp_servers.aside.')),'the server that did not answer is not given to the client');
+  assert.ok(args.includes('mcp_servers.docs.url="https://docs.example/mcp"'));
+  assert.doesNotMatch(x.runs[0].stdin,/it is the browser for this run/u);
+  assert.match(x.runs[0].stdin,/"aside"[^.]*did not answer when this run started[\s\S]*Do not stop for it: read public pages with a headless browser \(Playwright\) or a plain HTTPS fetch/u);
+  assert.ok(activity(x).some(row=>row.summary==='windows_mcp · docs'));
+  assert.ok(activity(x).some(row=>/windows_mcp · aside 응답 없음/u.test(row.summary)));
 });
 
 test('runtime fixture the owner receives the client DELIVERY.md, not the verification record',async t=>{
@@ -347,6 +364,13 @@ test('runtime fixture the client report decides completion; an external Work sti
   short.supervisor.start(short.work.work_id,short.work.revision,true);short.supervisor.activate();short.supervisor.tick();
   const review=await settle(short);assert.equal(review.state,'awaiting_review');assert.equal(review.reason,'WORK_CLIENT_REPORTED_INCOMPLETE');assert.equal(short.model.verifications,0);
   assert.ok(activity(short).some(row=>/images \(세 장만 만들었다\)/u.test(row.summary)));
+  // Before the owner is asked, the same session is asked to finish with the next means, within the repair budget.
+  assert.equal(short.runs.length,4,'one run and three repair turns');
+  assert.match(short.runs[1].stdin,/reports these conditions as not met: images \(세 장만 만들었다\)[\s\S]*switch to the next one you have[\s\S]*Do not repeat a send or submission that already happened/u);
+  assert.ok(activity(short).some(row=>/미충족 조건 1개를 다른 수단으로 마치도록 같은 세션에 요청합니다 \(1\/3\)/u.test(row.summary)));
+  let turns=0;const healed=await setup(t,{client:request=>{turns++;report(request,turns>1);return codexTurn(request);}});
+  healed.supervisor.start(healed.work.work_id,healed.work.revision,true);healed.supervisor.activate();healed.supervisor.tick();
+  const fixed=await settle(healed);assert.equal(fixed.state,'succeeded',JSON.stringify(fixed));assert.equal(healed.runs.length,2,'the repair turn finished the Work');
   // Live 2026-10-06: a Work whose own helper sends outside is also decided by the client's report; Office cannot see that send.
   const outside=await setup(t,{client:request=>{report(request,true);return codexTurn(request);}});
   const row=outside.store.hermesState.prepare('SELECT spec FROM office_intake WHERE work_id=?').get(outside.work.work_id);
