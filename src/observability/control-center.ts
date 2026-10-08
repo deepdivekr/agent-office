@@ -2,7 +2,7 @@ import {serveUiAsset} from './ui-assets.js';
 import {defaultWorkClient} from '../work/client-run.js';
 import {FileExplorerRoutes} from './files-http.js';
 import {dirname} from 'node:path';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,randomUUID} from 'node:crypto';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {PackStore,type RuntimeActivity} from '../packs/store.js';
 import {workAutonomy,workDelegation,workModelDataApproved,type HostConfig} from '../interface/config.js';
@@ -38,7 +38,8 @@ import {type ServerProbe} from '../integrations/server-ssh.js';
 import {AddressImport} from '../work/import-address.js';
 import {type RemoteTransport} from '../integrations/remote-openclaw.js';
 import {WorkSupervisor,supervisorActionSchema,supervisorStatus} from '../work/supervisor.js';
-import {WorkResults} from '../work/results.js';
+import {WorkResults,type WorkResult} from '../work/results.js';
+import {createDeliveryConnector} from '../work/delivery-connectors.js';
 import {readWorkThread} from '../work/thread.js';
 import {WorkDeliverySettings,deliverySettingsUpdateSchema} from '../work/delivery-settings.js';
 import {readWorkIntakeOptions} from '../work/intake-options.js';
@@ -136,7 +137,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const fileRoutes=new FileExplorerRoutes(store.localFileExplorer(config.project.id,dirname(config.dbPath)));
   const hermesWork=new HermesWorkRuntime(store,config,options.hermes);
   const migrations=new HermesMigrationRuntime(store,config);
-  const addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server);
+  const addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,(id,text)=>serverNotice(id,text));
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
   const deliverySettings=WorkDeliverySettings.fromConfig(config),results=new WorkResults(store,[],deliverySettings,()=>workDelegation(config).notify);
   const deliveryJobs=new Map<string,Promise<void>>();
@@ -246,11 +247,11 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'REMOTE_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
     }
     // Server observation: register an SSH target, discover its services, link groups as Works, refresh on request.
-    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh'].includes(suffix)){
+    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh','work/server/checks'].includes(suffix)){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
       if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
       try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>24000)throw Error('SERVER_REQUEST_TOO_LARGE')}
-        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):await serverOffice.refresh(input);
+        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):await serverOffice.refresh(input);
         reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
     }
@@ -483,6 +484,13 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const address=server.address();if(address===null||typeof address==='string'){store.stopPresence(config.project.id,presence);store.close();throw Error('CONTROL_CENTER_BIND_FAILED');}host=`127.0.0.1:${address.port}`;shortHost=`${CONTROL_SHORT_HOST}:${address.port}`;hosts=controlHosts(address.port);activateReadySupervisor();const heartbeat=setInterval(()=>{try{store.heartbeatPresence(config.project.id,presence);activateReadySupervisor();}catch{}},2_000);heartbeat.unref();
   let lastBoard='',lastKeep=Date.now();const lightTick=setInterval(()=>{if(!lightClients.size)return;try{const board=readWorkBoard(store,config),payload=JSON.stringify({works:board.works,auth_attention_count:board.auth_attention_count});if(payload!==lastBoard){lastBoard=payload;for(const client of lightClients)if(!client.destroyed)client.write(`event: board\ndata: ${JSON.stringify(board)}\n\n`);}if(Date.now()-lastKeep>=15_000){lastKeep=Date.now();for(const client of lightClients)if(!client.destroyed)client.write(': keep-alive\n\n');}}catch{for(const client of lightClients)client.end();lightClients.clear();}},Math.max(1000,poll));lightTick.unref();
   const hermesTick=setInterval(()=>{if(runtimeReady())hermesWork.tick();},1000);hermesTick.unref();
+  // A server Work's state change goes to the messenger destinations the owner chose for that Work, as one short notice.
+  function serverNotice(id:string,text:string){
+    try{for(const targetId of results.selection(config.project.id,id).target_ids){if(targetId==='app')continue;const target=deliverySettings.target(targetId);if(!target)continue;
+      const notice:WorkResult={notice:text,id:randomUUID(),project_id:config.project.id,work_id:id,run_id:'server',source_kind:'client',work_revision:null,source_status:'notice',verification:'unverified',summary:text,text,artifacts:[],sources:[],content_sha256:'',created_at:new Date().toISOString(),work_completion_verified:false,work_title:'',deliveries:[]};
+      void createDeliveryConnector(target).send({result:notice,target_alias:targetId,idempotency_key:notice.id}).then(r=>workActivity(store,config.project.id,id,r.status==='delivered'?'server.notice_sent':'server.notice_failed',r.status==='delivered'?`${target.label}로 알림을 보냈습니다.`:`${target.label}로 알림을 보내지 못했습니다.`)).catch(()=>{});}
+    }catch{/* a notice never stops observation */}
+  }
   // Watched servers are read about every two minutes; a slow or unreachable server never blocks the Control Center.
   const serverTick=setInterval(()=>{if(runtimeReady())void serverOffice.refreshDue().catch(()=>{});},60_000);serverTick.unref();
   const deliveryTick=setInterval(()=>{if(!runtimeReady()||deliveryJobs.size>=4)return;try{for(const id of results.pendingWorkIds(config.project.id,4-deliveryJobs.size))deliverOutput(id);}catch{/* A failed stored configuration is surfaced by the settings/status route. */}},3000);deliveryTick.unref();

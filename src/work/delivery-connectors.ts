@@ -9,6 +9,7 @@ const ownerNeeded:Record<string,string>={waiting_auth:'로그인이 필요합니
 /** The message says which Work this is and whether it is done or needs the owner, then carries the result itself.
  * A result longer than the platform allows is cut at a line end with a note; the complete file stays in the app. */
 export function deliveryContent(result:WorkResult,limit=4000){
+  if(result.notice)return [...result.notice].slice(0,limit).join('');
   const head=result.work_completion_verified?'[완료] 검증을 통과했습니다.':ownerNeeded[result.source_status]?`[확인 필요] ${ownerNeeded[result.source_status]}`:`[진행 상황] ${result.source_status}`;
   const tail=`\n\nWork result ${result.id}`;
   // A result that carries the owner's message (a client run's DELIVERY.md) is sent as that message, nothing else

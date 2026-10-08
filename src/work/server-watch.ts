@@ -7,10 +7,15 @@
  */
 export type UnitKind='service'|'timer'|'container';
 export type UnitState='ok'|'problem'|'off';
-export type UnitNote='failed'|'stopped'|'last_run_failed'|'timer_inactive'|'unhealthy'|'exited'|'not_found'|null;
+export type UnitNote='failed'|'stopped'|'last_run_failed'|'timer_inactive'|'unhealthy'|'exited'|'not_found'|'no_recent_activity'|null;
 export interface ServerUnit {id:string;kind:UnitKind;description:string;state:UnitState;note:UnitNote;active:string;sub:string;restarts:number;since:number|null;last_run:number|null;next_run:number|null;job:string|null;links:string[];project:string|null}
-export interface ServerSnapshot {now:number;units:ServerUnit[];disabled:string[]}
-export interface RawSnapshot {format:number;now:number;timers:unknown;files:unknown;show:string;docker:string}
+export interface ServerSnapshot {now:number;units:ServerUnit[];disabled:string[];checks:Record<string,number>}
+export interface RawSnapshot {format:number;now:number;timers:unknown;files:unknown;show:string;docker:string;checks?:Record<string,number>|undefined}
+/**
+ * An activity check: a unit's journal must show a line matching the pattern within the window. It covers what systemd
+ * cannot see, such as a bot whose own scheduler stopped while its process stays up, or a report job that no longer runs.
+ */
+export interface ActivityCheck {id:string;label:string;unit:string;pattern:string;minutes:number}
 
 const OWN=/^\/etc\/systemd\/system\//u,UNIT=/^[A-Za-z0-9@._:-]+\.(?:service|timer)$/u;
 const record=(v:unknown)=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -46,7 +51,7 @@ export function parseServerSnapshot(raw:RawSnapshot):ServerSnapshot{
     units.push({id,kind:'container',description:status,state:running&&!unhealthy?'ok':'problem',note:!running?'exited':unhealthy?'unhealthy':null,active:String(c.State??''),sub:status,restarts:0,since:null,last_run:null,next_run:null,job:null,links:[],project});
   }
   const disabled=list(raw.files).filter(f=>f.state==='disabled'&&UNIT.test(String(f.unit_file))).map(f=>String(f.unit_file));
-  return {now:Number(raw.now)||0,units:units.sort((a,b)=>a.id.localeCompare(b.id)),disabled};
+  return {now:Number(raw.now)||0,units:units.sort((a,b)=>a.id.localeCompare(b.id)),disabled,checks:Object.fromEntries(Object.entries(raw.checks??{}).filter(([,n])=>Number.isInteger(n)&&n>=0))};
 }
 
 /** Groups to propose: units sharing a name prefix, a dependency or a compose project. The owner can move units. */
@@ -67,7 +72,7 @@ export function suggestServerGroups(snapshot:ServerSnapshot){
 }
 
 export type ServerStatus='service_ok'|'service_problem'|'service_unreachable'|'service_unobserved';
-export function serverHealth(snapshot:ServerSnapshot,watched:string[]){
+export function serverHealth(snapshot:ServerSnapshot,watched:string[],checks:ActivityCheck[]=[]){
   const byId=new Map(snapshot.units.map(u=>[u.id,u])),counts={service:0,timer:0,container:0},problems:Array<{id:string;note:UnitNote}>=[],off:string[]=[];
   for(const id of watched){
     const u=byId.get(id);
@@ -75,5 +80,7 @@ export function serverHealth(snapshot:ServerSnapshot,watched:string[]){
     counts[u.kind]++;
     if(u.state==='problem')problems.push({id,note:u.note});else if(u.state==='off')off.push(id);
   }
+  // A check the snapshot did not run yet (added since the last read) is not a problem.
+  for(const check of checks)if(snapshot.checks[check.id]===0)problems.push({id:check.label,note:'no_recent_activity'});
   return {status:(problems.length?'service_problem':'service_ok') as ServerStatus,counts,problems,off};
 }
