@@ -54,8 +54,9 @@ export function sidebarHtml(page:ShellPage){
 <div class="sec">업무</div>
 <a class="nav" href="./?view=all" data-view="all">전체<span class="n" data-count="all"></span></a>
 <a class="nav" href="./?view=attention" data-view="attention">확인 필요<span class="n warn" data-count="attention"></span></a>
-<a class="nav" href="./?view=active" data-view="active">진행 중<span class="n" data-count="active"></span></a>
-<a class="nav" href="./?view=waiting" data-view="waiting">대기<span class="n" data-count="waiting"></span></a>
+<a class="nav" href="./?view=active" data-view="active">실행 중<span class="n" data-count="active"></span></a>
+<a class="nav" href="./?view=recurring" data-view="recurring">반복 실행<span class="n" data-count="recurring"></span></a>
+<a class="nav" href="./?view=hold" data-view="hold">보류<span class="n" data-count="hold"></span></a>
 <a class="nav" href="./?view=done" data-view="done">종료된 업무<span class="n" data-count="done"></span></a>
 <div class="sec">도구</div>
 

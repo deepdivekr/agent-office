@@ -68,7 +68,7 @@ test('runtime fixture three same-origin browser tabs execute concurrently and ke
   await Promise.all(pages.map(page=>page.waitForFunction(()=>document.getElementById('work-tail-output')?.textContent.includes('supervisor.queued'),{},{timeout:7000})));
   x.release();await Promise.all(pages.map(page=>page.waitForFunction(()=>document.getElementById('work-tail-output')?.textContent.includes('supervisor.result'),{},{timeout:10000})));
   for(const work of x.works){const detail=await (await fetch(x.server.url+'work/detail?id='+work.work_id)).json();assert.equal(detail.supervisor.state,'succeeded');assert.equal(detail.runs.length,1);}
-  const page=pages[0];await page.locator('#back').click();await page.locator('#prompt').waitFor();
+  const page=pages[0];await page.locator('#back').click();await page.locator('#new-work').waitFor();
   let streams=await page.evaluate(()=>window.__workStreams);assert.equal(streams.active,1);assert.equal(streams.peak,1);assert.equal(streams.urls.at(-1),'work/events');
   await page.locator('[data-work="'+x.works[0].work_id+'"]').click();await page.locator('#work-timeline').waitFor();assert.equal(await page.locator('#work-tail-output').isVisible(),false);
   streams=await page.evaluate(()=>window.__workStreams);assert.equal(streams.active,1);assert.equal(streams.peak,1);assert.equal(streams.urls.at(-1),'work/events?work_id='+x.works[0].work_id);
