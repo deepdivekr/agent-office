@@ -23,8 +23,10 @@ This inventory was checked against the installed package metadata and lockfile o
 | `playwright` | `1.63.0` | Apache-2.0 | [Playwright](https://github.com/microsoft/playwright) |
 | `yaml` | `2.9.1` | ISC | [yaml](https://github.com/eemeli/yaml) |
 | `zod` | `4.4.3` | MIT | [Zod](https://github.com/colinhacks/zod) |
+| `web-push` | `3.6.7` | MPL-2.0 | [web-push](https://github.com/web-push-libs/web-push) |
+| `qrcode-terminal` | `0.12.0` | Apache-2.0 | [qrcode-terminal](https://github.com/gtanner/qrcode-terminal) |
 
-Build and test tooling: `typescript` `7.0.2` (Apache-2.0), `@types/node` `22.20.3` (MIT).
+Build and test tooling: `typescript` `7.0.2` (Apache-2.0), `@types/node` `22.20.3`, `@types/web-push` `3.6.4` and `@types/qrcode-terminal` `0.12.2` (MIT).
 
 ## Separately installed software and services
 
