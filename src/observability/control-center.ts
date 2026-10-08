@@ -36,6 +36,7 @@ import {RemoteOffice} from '../work/remote.js';
 import {type RemoteTransport} from '../integrations/remote-openclaw.js';
 import {WorkSupervisor,supervisorActionSchema,supervisorStatus} from '../work/supervisor.js';
 import {WorkResults} from '../work/results.js';
+import {readWorkThread} from '../work/thread.js';
 import {WorkDeliverySettings,deliverySettingsUpdateSchema} from '../work/delivery-settings.js';
 import {readWorkIntakeOptions} from '../work/intake-options.js';
 import {z} from 'zod';
@@ -428,6 +429,10 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(suffix==='work/client-default'){let settings=null;try{settings=readModelSettings(modelSettingsPath(config));}catch{}reply(response,200,JSON.stringify({client:defaultWorkClient(settings)}),'application/json; charset=utf-8');return;}
     if(suffix==='work/board'){reply(response,200,JSON.stringify(readWorkBoard(store,config)),'application/json; charset=utf-8');return;}
     if(suffix==='work/timeline'){reply(response,200,JSON.stringify(readWorkTimeline(store,config)),'application/json; charset=utf-8');return;}
+    if(suffix==='work/thread'){
+      const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
+      try{const rows=results.list(config.project.id,id,40).map(r=>({id:r.id,summary:r.summary,source_status:r.source_status,verification:r.verification,created_at:r.created_at,artifacts:r.artifacts.map(a=>({label:a.label,bytes:a.bytes}))}));reply(response,200,JSON.stringify(readWorkThread(store,config.project.id,id,rows)),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;
+    }
     if(suffix==='work/detail'){
       const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
       try{const detail=readWorkDetail(store,config,id);reply(response,200,JSON.stringify({...detail,...runtimeConfiguration(),intake_options:readWorkIntakeOptions(store,config.project.id,id),results:results.capture(config.project.id,id),delivery:results.selection(config.project.id,id),delivery_targets:deliverySettings.publicState().targets}),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;
