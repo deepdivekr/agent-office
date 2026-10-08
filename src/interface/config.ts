@@ -28,6 +28,9 @@ const BrowserSurfaceSchema=z.object({id:identifier,label:z.string().trim().min(1
 const ObservabilityConfigSchema=z.object({
   surfaces:z.array(z.discriminatedUnion('kind',[VncSurfaceSchema,BrowserSurfaceSchema])).max(32).default([]),
   frame_interval_ms:z.number().int().min(500).max(5000).default(1000),
+  // Names that reach the Control Center through `tailscale serve`, as the browser sends them (port included).
+  // MagicDNS names only: any other name could be pointed at this computer by someone else's DNS.
+  tailnet_hosts:z.array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})*\.ts\.net(?::\d{1,5})?$/u)).max(4).default([]),
 }).strict();
 export type ControlSurface=z.infer<typeof VncSurfaceSchema>|z.infer<typeof BrowserSurfaceSchema>;
 export type ObservabilityConfig=z.infer<typeof ObservabilityConfigSchema>;

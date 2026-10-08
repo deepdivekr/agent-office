@@ -7,7 +7,7 @@ import {createServer,request as httpRequest} from 'node:http';
 import {prepareLocalConnection} from '../dist/onboarding/connection.js';
 import {loadHostConfig} from '../dist/interface/config.js';
 import {startControlCenter} from '../dist/observability/control-center.js';
-import {DEFAULT_CONTROL_PORT,CONTROL_SHORT_HOST,CAPABILITY_COOKIE,shortControlUrl,cookieValue} from '../dist/onboarding/control-address.js';
+import {DEFAULT_CONTROL_PORT,CONTROL_SHORT_HOST,CAPABILITY_COOKIE,shortControlUrl,tailnetControlUrls,cookieValue} from '../dist/onboarding/control-address.js';
 
 async function setup(t,options={}){
   const root=await mkdtemp(join(tmpdir(),'office-address-'));
@@ -65,4 +65,28 @@ test('runtime native the short host moves the capability into a host-only cookie
   assert.equal(started.status,200,started.text);
   const crossOrigin=await send(base+'work/start',{host:short,method:'POST',headers:{...withCookie,'content-type':'application/json','x-agent-driver':'human-office',origin:`http://127.0.0.1:${x.port}`},body:JSON.stringify({request_id:'short-address-cross',prompt:'Summarize a sample file.'})});
   assert.equal(crossOrigin.status,403,'the origin must match the host the page was served from');
+});
+
+test('runtime native a configured tailnet name reaches Office through tailscale serve: cookie after the capability path, HTTPS origin, nothing else',async t=>{
+  const {readFile,writeFile}=await import('node:fs/promises');
+  const root=await mkdtemp(join(tmpdir(),'office-address-')),paths=await prepareLocalConnection(root),tailnet='office-pc.tail0000.ts.net:4600';
+  const raw=JSON.parse(await readFile(paths.runtimeConfig,'utf8'));await writeFile(paths.runtimeConfig,JSON.stringify({...raw,observability:{tailnet_hosts:[tailnet]}}));
+  const server=await startControlCenter(loadHostConfig(paths.runtimeConfig),{poll_ms:50,port:0});t.after(async()=>{await server.close();await rm(root,{recursive:true,force:true});});
+  const token=new URL(server.url).pathname.slice(1,-1),base=`http://127.0.0.1:${new URL(server.url).port}/`;
+  assert.deepEqual(tailnetControlUrls(server.url,[tailnet]),[`https://${tailnet}/${token}/`],'connect prints this address for the phone');
+  // tailscale serve keeps the browser's Host and terminates HTTPS, so the page's origin is https://<tailnet name>.
+  const bootstrap=await send(server.url+'?view=all',{host:tailnet,headers:{accept:'text/html'}});
+  assert.equal(bootstrap.status,303);assert.equal(bootstrap.headers.location,'/?view=all');
+  const cookie=bootstrap.headers['set-cookie'][0];assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; Secure/u);assert.match(cookie,/; SameSite=Strict/u);
+  const withCookie={cookie:`${CAPABILITY_COOKIE}=${token}`},page=await send(base,{host:tailnet,headers:{accept:'text/html',...withCookie}});
+  assert.equal(page.status,200);assert.doesNotMatch(page.text,/http:\/\/127\.0\.0\.1/u,'the page links nothing back to loopback');
+  assert.equal((await send(base+'work/board',{host:tailnet,headers:withCookie})).status,200);
+  const post=origin=>send(base+'work/start',{host:tailnet,method:'POST',headers:{...withCookie,'content-type':'application/json','x-agent-driver':'human-office',origin},body:JSON.stringify({request_id:'tailnet-'+origin.length,prompt:'Summarize a sample file.'})});
+  assert.equal((await post(`https://${tailnet}`)).status,200,'an action from the tailnet page');
+  assert.equal((await post(`https://other.tail0000.ts.net:4600`)).status,403);
+  assert.equal((await post(`http://127.0.0.1:${new URL(server.url).port}`)).status,403);
+  assert.equal((await send(base+'work/board',{host:'other.tail0000.ts.net:4600',headers:withCookie})).status,403,'only the configured name');
+  assert.equal((await send(base+'work/board',{host:tailnet})).status,404,'no cookie, no capability path: nothing');
+  // Only MagicDNS names: any other name could be pointed at this computer by someone else's DNS.
+  for(const host of ['example.com:4600','127.0.0.1:4600','office-pc.tail0000.ts.net.evil.com'])await writeFile(paths.runtimeConfig,JSON.stringify({...raw,observability:{tailnet_hosts:[host]}})).then(()=>assert.throws(()=>loadHostConfig(paths.runtimeConfig),undefined,host));
 });

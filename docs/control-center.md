@@ -67,3 +67,13 @@ agent-driver run trace 스토리보드와 같은 디자인 언어를 쓴다. 어
 업무 단계 수정은 같은 출처의 사용자 조작과 revision을 확인하고, 이미 실행한 후속 단계를 조용히 다시 쓰지 않는다. 화면·상태 API는 capability URL로 보호하며 작업 실행·외부 제출 권한을 만들지 않는다. 사이트 로그인 정보와 비밀번호는 snapshot·활동 로그에 기록하지 않는다.
 
 Ubuntu Browser VM의 새 기본 메모리 할당은 3GiB이며 필요하면 `vm launch --memory-mib`로 조절할 수 있다. 이 시험은 VM 부팅과 Chromium 제어 연결까지만 확인했다. 장시간 다중 탭 작업의 안정성이나 VM 자동 절전·재개는 아직 검증·구현하지 않았다.
+
+## 다른 기기에서 열기 (Tailscale)
+
+관제센터는 이 컴퓨터의 `127.0.0.1`에만 열린다. 휴대폰 같은 다른 기기에서 보려면 Tailscale을 쓴다. tailnet 안의 내 기기에서만 열리고, 접속 토큰은 그대로 열쇠로 남는다.
+
+1. `runtime-config.json`의 `observability.tailnet_hosts`에 이 컴퓨터의 MagicDNS 이름을 브라우저가 보내는 그대로(포트 포함) 넣는다. 예: `"observability": {"tailnet_hosts": ["my-pc.tail1234.ts.net:4600"]}`. 다른 DNS 이름은 받지 않는다. 남이 그 이름을 이 컴퓨터로 가리키게 할 수 있기 때문이다.
+2. Tailscale이 도는 쪽에서 HTTPS로 관제센터를 연다. WSL이면 Windows 쪽이다: `tailscale serve --bg --https=4600 http://127.0.0.1:4600`. Funnel은 인터넷 전체에 공개하므로 쓰지 않는다.
+3. 관제센터를 다시 시작하면 `agent-office connect` 출력의 `tailnet_urls`에 휴대폰용 주소(`https://<이름>:4600/<토큰>/`)가 나온다. 처음 한 번 이 주소로 열면 토큰이 그 이름 전용 쿠키(HttpOnly·Secure)로 옮겨지고, 이후에는 `https://<이름>:4600/`만으로 열린다.
+
+`tailscale serve`가 HTTPS를 끝내므로 그 페이지의 Origin은 `https://<이름>`이다. 관제센터는 허용한 이름에 한해서만 이것을 같은 페이지로 본다.
