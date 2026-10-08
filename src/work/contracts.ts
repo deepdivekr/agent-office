@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {referenceSelectionSchema} from './reference-selection.js';
+import {feedPostInput} from './feed.js';
 import {basePackFamilyId} from '../taskpacks/base-pack-catalog.js';
 import {browserPreferenceSchema} from '../browser/executor-contracts.js';
 import {hasBusinessStages,initialWorkPlan,modelWorkPlan,modelWorkPlanSchema,validateWorkPlan,workPlanSchema} from './plan.js';
@@ -74,6 +75,7 @@ export const workTools={
   runtime_work_status:{schema:workStatusSchema,implemented:true,readOnly:true},
   runtime_work_results:{schema:workResultsListSchema,implemented:true,readOnly:true},
   runtime_work_result:{schema:workResultGetSchema,implemented:true,readOnly:true},
+  runtime_feed_post:{schema:feedPostInput,implemented:true,readOnly:false},
   runtime_work_context:{schema:workContextSchema,implemented:true,readOnly:true},
   runtime_work_list:{schema:workListSchema,implemented:true,readOnly:true},
   runtime_work_pause:{schema:workPauseSchema,implemented:true,readOnly:false},

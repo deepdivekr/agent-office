@@ -21,7 +21,7 @@ test('runtime fixture new Work shows Pack-owned Jev settings and can opt out on 
  await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));
  for(const width of [1280,390]){
   const work=await api.call('runtime_work_start',{request_id:'pack-default-'+width,prompt:'자료를 수집해 줘'});
-  await page.setViewportSize({width,height:1000});await page.goto(server.url);
+  await page.setViewportSize({width,height:1000});await page.goto(server.url+'?view=all');
   await page.locator('[data-work="'+work.work_id+'"]').click();
   await page.locator('.jev-policy').waitFor();
   assert.equal(await page.locator('.jev-policy').innerText(),'Task Pack 설정 사용');

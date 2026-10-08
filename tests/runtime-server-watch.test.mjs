@@ -104,7 +104,7 @@ test('runtime fixture the Control Center registers a server, links its groups an
   await page.locator('#server-discover').click();await page.locator('.server-group').first().waitFor();
   assert.deepEqual(await page.locator('.sg-name').evaluateAll(n=>n.map(i=>i.value)),['chat-relay-bot','ledger','notes-bot','shop-web']);
   await page.locator('[data-pick="web-session.service"]').uncheck();
-  await page.locator('#server-link').click();await page.locator('.htile.server .hrow').nth(3).waitFor();assert.deepEqual([await page.locator('.htile').count(),await page.locator('.htile.server .hrow').count()],[1,4],'home shows the server in one cell with a row per server Work');
+  await page.locator('#server-link').click();await page.locator('.feed-rail button').nth(3).waitFor();assert.equal(await page.locator('.feed-rail button').count(),4,'the feed lists the server with a row per server Work');
   await page.locator('[data-view="all"]').click();await page.locator('.tile').first().waitFor();
   assert.equal(await page.locator('.col .tile').count(),4);
   // shop-sync's last run failed and notes-browser failed: those two groups need the owner; the others are healthy.
@@ -159,4 +159,47 @@ test('runtime fixture checks reach the next read of the server and a change send
 test('a notice is delivered as written, without the result header and footer',async()=>{
   const {deliveryContent}=await import('../dist/work/delivery-connectors.js');
   assert.equal(deliveryContent({notice:'[회복] Shop web\nMain VM\n모든 서비스가 정상입니다.',summary:'x',text:'x',artifacts:[],work_title:'Shop web',source_status:'notice',id:'n'}),'[회복] Shop web\nMain VM\n모든 서비스가 정상입니다.');
+});
+test('a send record is read on the server as data, read-only: SQLite rows and JSONL lines newer than the cursor, at most 20, a new source its newest',async()=>{
+  const {snapshotScript}=await import('../dist/integrations/server-ssh.js'),{execFileSync}=await import('node:child_process'),{writeFileSync,mkdtempSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{DatabaseSync}=await import('node:sqlite');
+  const dir=mkdtempSync(join(tmpdir(),"feed source's ")),db=join(dir,'bot.sqlite3'),lines=join(dir,'sent.jsonl');
+  const sql=new DatabaseSync(db);sql.exec("CREATE TABLE outbox(key TEXT,sent_at TEXT,payload TEXT)");
+  for(let i=1;i<=25;i++)sql.prepare('INSERT INTO outbox VALUES(?,?,?)').run('k'+i,`2026-10-0${1+Math.floor(i/10)}T0${i%10}:00:00+00:00`,`리포트 ${i} '따옴표' $(touch /tmp/office-feed-pwned)`);
+  sql.prepare('INSERT INTO outbox VALUES(?,?,?)').run('unsent',null,'아직 안 보냄');sql.close();
+  writeFileSync(lines,[JSON.stringify({id:'a',at:'2026-10-09T01:00:00Z',text:'첫 알림'}),'not json',JSON.stringify({id:'b',at:'2026-10-09T02:00:00Z',title:'제목',text:'둘째 알림'})].join('\n'));
+  const query="SELECT key AS id, sent_at AS at, payload AS text FROM outbox WHERE sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 50";
+  const feeds=[{id:'f000000000001',kind:'sqlite',path:db,query,after:''},{id:'f000000000002',kind:'sqlite',path:db,query,after:'2026-10-02T07:00:00+00:00'},{id:'f000000000003',kind:'jsonl',path:lines,after:'2026-10-09T01:00:00Z'},
+    {id:'f000000000004',kind:'sqlite',path:db,query:"UPDATE outbox SET payload='x'",after:''},{id:'f000000000005',kind:'sqlite',path:join(dir,'missing.sqlite3'),query,after:''}];
+  const script=snapshotScript([],feeds),line=script.split('\n').find(l=>l.startsWith(`printf ',"feed"`));
+  assert.equal(script.includes(query),false,'the query travels base64-encoded');assert.equal(script.includes(dir),false);
+  const read=JSON.parse(Buffer.from(execFileSync('sh',['-c',line],{encoding:'utf8'}).match(/"feed":"([^"]*)"/u)[1],'base64').toString('utf8'));
+  assert.equal(read.f000000000001.rows.length,20);assert.equal(read.f000000000001.rows.at(-1).id,'k25','a new source starts with its newest rows, oldest first');
+  assert.deepEqual(read.f000000000002.rows.map(r=>r.id),['k18','k19','k20','k21','k22','k23','k24','k25'],'only rows newer than the cursor');
+  assert.match(read.f000000000001.rows[0].text,/'따옴표' \$\(touch/u,'text is data, never run');
+  assert.deepEqual(read.f000000000003.rows,[{id:'b',at:'2026-10-09T02:00:00Z',title:'제목',text:'둘째 알림'}]);
+  assert.equal(read.f000000000004.error,'OperationalError','a write is refused by the read-only connection');assert.ok(read.f000000000005.error);
+  const check=new DatabaseSync(db);assert.equal(check.prepare("SELECT COUNT(*) AS n FROM outbox WHERE payload='x'").get().n,0);check.close();
+});
+test('runtime fixture a server Work connects a send record; new rows become feed posts once, each source keeps its cursor and shows a read error',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js'),{listFeedPosts}=await import('../dist/work/feed.js');
+  const root=await mkdtemp(join(tmpdir(),'office-server-feed-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
+  const asked=[];let reply={};
+  const office=new ServerOffice(store,config,{async snapshot(target,checks=[],feeds=[]){asked.push(feeds.map(f=>f.id+'>'+f.after));return {...sample,...(feeds.length?{feed:Buffer.from(JSON.stringify(reply)).toString('base64')}:{})};}});
+  const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
+  const {work_ids:[web]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop web',units:['shop-web.service']}]});
+  assert.throws(()=>office.setFeed({work_id:web,sources:[{label:'x',kind:'sqlite',path:'/var/lib/bot.db',query:'DELETE FROM outbox'}]}),undefined,'only a SELECT');
+  assert.throws(()=>office.setFeed({work_id:web,sources:[{label:'x',kind:'jsonl',path:'relative/path.jsonl'}]}),undefined,'an absolute path');
+  const detail=office.setFeed({work_id:web,sources:[{label:'리포트',kind:'sqlite',path:'/var/lib/bot.db',query:'SELECT key AS id, sent_at AS at, payload AS text FROM outbox'}]}),id=detail.server.feed[0].id;
+  assert.deepEqual([detail.server.feed[0].last_at,detail.server.feed[0].error],[null,null]);
+  reply={[id]:{rows:[{id:'k1',at:'2026-10-09T07:13:30+00:00',title:null,text:'장 마감 리포트 1'},{id:'k2',at:'2026-10-09T08:00:00+00:00',title:null,text:'장 마감 리포트 2'}]}};
+  await office.refreshTarget(target);assert.deepEqual(asked.at(-1),[id+'>']);
+  const posts=listFeedPosts(store,config.project.id);assert.deepEqual(posts.map(p=>[p.work_id,p.source_label,p.text]),[[web,'리포트','장 마감 리포트 2'],[web,'리포트','장 마감 리포트 1']]);
+  await office.refreshTarget(target);assert.deepEqual(asked.at(-1),[id+'>2026-10-09T08:00:00+00:00'],'the next read starts after the newest row taken');
+  assert.equal(listFeedPosts(store,config.project.id).length,2,'a row read twice is one post');
+  reply={[id]:{error:'OperationalError'}};await office.refreshTarget(target);
+  assert.deepEqual(office.setFeed({work_id:web,sources:[{label:'리포트',kind:'sqlite',path:'/var/lib/bot.db',query:'SELECT key AS id, sent_at AS at, payload AS text FROM outbox'}]}).server.feed.map(f=>[f.last_at,f.error]),[['2026-10-09T08:00:00+00:00','OperationalError']],'saving the same source keeps its cursor');
+  assert.equal(JSON.parse(store.hermesState.prepare('SELECT snapshot FROM office_server_target WHERE id=?').get(target).snapshot).feed,undefined,'send records are not kept in the snapshot');
 });

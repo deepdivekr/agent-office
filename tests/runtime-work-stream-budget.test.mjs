@@ -70,7 +70,7 @@ test('runtime fixture three same-origin browser tabs execute concurrently and ke
   for(const work of x.works){const detail=await (await fetch(x.server.url+'work/detail?id='+work.work_id)).json();assert.equal(detail.supervisor.state,'succeeded');assert.equal(detail.runs.length,1);}
   const page=pages[0];await page.locator('#back').click();await page.locator('#new-work').waitFor();
   let streams=await page.evaluate(()=>window.__workStreams);assert.equal(streams.active,1);assert.equal(streams.peak,1);assert.equal(streams.urls.at(-1),'work/events');
-  await page.locator('[data-work="'+x.works[0].work_id+'"]').click();await page.locator('#work-timeline').waitFor();assert.equal(await page.locator('#work-tail-output').isVisible(),false);
+  await page.locator('[data-view="all"]').click();await page.locator('[data-work="'+x.works[0].work_id+'"]').click();await page.locator('#work-timeline').waitFor();assert.equal(await page.locator('#work-tail-output').isVisible(),false);
   streams=await page.evaluate(()=>window.__workStreams);assert.equal(streams.active,1);assert.equal(streams.peak,1);assert.equal(streams.urls.at(-1),'work/events?work_id='+x.works[0].work_id);
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{get:()=>true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));});
   assert.equal((await page.evaluate(()=>window.__workStreams)).active,0);

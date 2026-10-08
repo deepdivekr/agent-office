@@ -1,0 +1,99 @@
+// Feed: every output in one stream, newest first, read the way a news feed is read. A post is one result of a Work,
+// a row a server bot recorded as sent, a post an AI app made with runtime_feed_post, or a conversation's last reply.
+// Works that need the owner are pinned on top; what runs now, what runs next and the servers sit beside the stream.
+export const feedCss=`.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.feed{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.feed-main{flex:1 1 520px;max-width:700px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.feed-rail{flex:0 1 300px;min-width:260px;display:flex;flex-direction:column;gap:12px}
+.feed-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.feed-tools .chips{display:flex;gap:6px;flex-wrap:wrap}.feed-tools select{width:auto;max-width:220px}
+.feed-tools .chips button{min-height:34px;padding:0 12px;border-radius:999px;font:12px var(--mono);background:none;color:var(--dim);border:1px solid var(--line2)}
+.feed-tools .chips button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:var(--acc-a)}
+.feed-tools .push{margin-left:auto}
+.post{display:flex;flex-direction:column;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
+.post.new{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}.post.pin{border-color:var(--human);background:var(--human-a)}
+.post .ph{display:flex;align-items:center;gap:11px;min-width:0}.post .av{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font:600 13px var(--mono);color:#101317;flex:none}
+.post .who{display:flex;flex-direction:column;gap:2px;min-width:0}.post .who strong{font:600 14.5px/1.3 var(--sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.post .who span{font:11.5px var(--mono);color:var(--dim)}.post .tags{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%}
+.post .tag{font:11px var(--mono);border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--dim);white-space:nowrap}.post .tag.ok{color:var(--ok)}.post .tag.warn{color:var(--human);border-color:var(--human)}.post .tag.new{color:var(--accent);border-color:var(--accent)}
+.post h4{margin:0;font:600 16px/1.4 var(--sans)}
+.post .body{margin:0;font-size:14.5px;line-height:1.65;white-space:pre-line;overflow-wrap:anywhere;color:var(--text);opacity:.92;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;overflow:hidden}.post.open .body{display:block}
+.post .more{align-self:flex-start;border:0;background:none;padding:0;min-height:0;color:var(--dim);font:12.5px var(--sans);text-decoration:underline}
+.post .pics{display:grid;gap:6px;grid-template-columns:2fr 1fr;grid-template-rows:140px 140px;margin:0}.post .pics.n1{grid-template-columns:1fr;grid-template-rows:280px}.post .pics.n2{grid-template-columns:1fr 1fr;grid-template-rows:220px}
+.post .pics img{width:100%;height:100%;object-fit:cover;border-radius:10px;background:var(--bg);display:block}.post .pics .big{grid-row:span 2}.post .pics .plus{position:relative}.post .pics .plus b{position:absolute;inset:0;display:grid;place-items:center;background:rgba(16,19,23,.6);border-radius:10px;font:600 22px var(--mono);color:#e6e8eb}
+.post .acts{display:flex;gap:4px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px}.post .acts button{min-height:36px;border:0;background:none;color:var(--dim);font:12.5px var(--sans);padding:0 10px;border-radius:8px}.post .acts button:hover{background:var(--raise);color:var(--text)}
+.feed-day{display:flex;align-items:center;gap:12px;font:500 11.5px var(--mono);letter-spacing:.1em;color:var(--dim)}.feed-day::after{content:"";flex:1;height:1px;background:var(--line)}
+.feed-rail section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.feed-rail h3{margin:0;font:500 10.5px var(--mono);letter-spacing:.14em;color:var(--dim)}.feed-rail button{display:flex;align-items:center;gap:8px;border:0;background:none;padding:4px 0;min-height:30px;color:var(--text);font:13px var(--sans);text-align:left}
+.feed-rail .dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--line2)}.feed-rail .dot.ok{background:var(--ok)}.feed-rail .dot.run{background:var(--accent)}.feed-rail .dot.warn,.feed-rail .dot.err{background:var(--human)}
+.feed-rail button{width:100%;min-width:0}.feed-rail button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-rail time,.feed-rail em{margin-left:auto;flex:none;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11.5px var(--mono);font-style:normal;color:var(--dim)}
+.feed-end{align-self:center}
+@media(max-width:1000px){.feed-rail{display:none}}
+@media(max-width:760px){.post{border-radius:0;border-left:0;border-right:0;margin:0 -16px;padding:14px 16px}.post .tags{max-width:none}.post .pics{grid-template-rows:110px 110px}.post .pics.n1{grid-template-rows:220px}.post .acts button{min-height:44px}}`;
+
+export function feedScript(){return `
+let feed=null,feedAt=0,feedTried=0,feedLoading=false,feedFailed=false,feedKind='all',feedWork='',feedSeenAt='',feedOpen=new Set();
+try{feedSeenAt=localStorage.getItem('office-feed-seen')||''}catch{}
+const ff=pair=>pair[window.officeLang==='en'?1:0];
+async function loadFeed(){if(feedLoading)return;feedLoading=true;feedTried=Date.now();try{const response=await fetch('work/feed',{cache:'no-store'});if(!response.ok)throw Error();feed=await response.json();feedAt=Date.now();feedFailed=false}catch{feedFailed=true}finally{feedLoading=false}updateFeedCount();if(!selected&&!importOpen&&view==='feed')renderBoard()}
+async function loadMoreFeed(){if(!feed?.next_before||feedLoading)return;feedLoading=true;try{const response=await fetch('work/feed?before='+encodeURIComponent(feed.next_before),{cache:'no-store'});if(response.ok){const more=await response.json();feed.posts=feed.posts.concat(more.posts.filter(p=>!feed.posts.some(q=>q.id===p.id)));feed.next_before=more.next_before}}catch{}finally{feedLoading=false}renderBoard()}
+// What the owner has seen: the newest post when they last left the feed. Kept in this browser only.
+function markFeedSeen(){const newest=feed?.posts?.[0]?.at;if(!newest||newest<=feedSeenAt)return;feedSeenAt=newest;try{localStorage.setItem('office-feed-seen',newest)}catch{}updateFeedCount()}
+function updateFeedCount(){const n=(feed?.posts||[]).filter(p=>p.at>feedSeenAt).length,node=document.querySelector('[data-count="feed"]');if(node)node.textContent=feedSeenAt&&n?ff(['새 ','new '])+n:''}
+const plain=text=>String(text||'').replace(/^#{1,6}\\s*/gmu,'').replace(/\\*\\*([^*]+)\\*\\*/gu,'$1').replace(/\`([^\`]+)\`/gu,'$1').replace(/\\n\\s*\\n+/gu,'\\n').trim();
+const FEED_CHANNELS={telegram:['텔레그램','Telegram'],slack:['슬랙','Slack'],discord:['디스코드','Discord'],email:['이메일','email'],chat:['채팅','chat'],file:['파일','file'],other:['외부','external']};
+const FEED_COLORS=['#9fc0e3','#6CC08B','#f2c46d','#A99BE0','#E0708A','#6FA8DC','#c9a0dc','#8fd1c1'];
+function feedAvatar(id,name){let h=0;for(const c of String(id))h=(h*31+c.charCodeAt(0))>>>0;const mark=String(name||'?').trim().replace(/^[^\\p{L}\\p{N}]+/u,'').slice(0,2)||'?';return '<span class="av" style="background:'+FEED_COLORS[h%FEED_COLORS.length]+'" aria-hidden="true">'+esc(mark)+'</span>'}
+function feedDay(at){const d=new Date(at),today=new Date(),y=new Date(Date.now()-86400000);return d.toDateString()===today.toDateString()?ff(['오늘','Today']):d.toDateString()===y.toDateString()?ff(['어제','Yesterday']):d.toLocaleDateString(window.officeLang==='en'?'en-US':'ko-KR',{month:'long',day:'numeric',weekday:'short'})}
+function feedPics(post){const imgs=post.images||[];if(!imgs.length)return '';const n=Math.min(imgs.length,3),src=img=>'work/result/artifact?work_id='+encodeURIComponent(post.work_id)+'&amp;result_id='+encodeURIComponent(post.result_id)+'&amp;artifact_id='+encodeURIComponent(img.artifact_id);
+return '<div class="pics n'+n+'">'+imgs.slice(0,3).map((img,i)=>'<span class="'+(n===3&&i===0?'big':'')+(i===2&&post.image_count>3?' plus':'')+'"><img loading="lazy" alt="'+esc(img.label)+'" src="'+src(img)+'">'+(i===2&&post.image_count>3?'<b>+'+(post.image_count-3)+'</b>':'')+'</span>').join('')+'</div>'}
+function feedPostHtml(post,works){const work=works.get(post.work_id),name=post.work_title||post.source_label||ff(['AI 앱','AI app']),isNew=feedSeenAt&&post.at>feedSeenAt;
+const who=[post.kind==='external'?post.source_label:post.kind==='reply'?(post.client==='claude'?'Claude Code':'Codex')+ff([' 대화',' conversation']):work?kindLabel({...work,run:{kind:work.kind},client:work.client?{id:work.client}:null}):'',work&&post.kind==='result'?scheduleChip(work):'',ago(post.at)].filter(Boolean).join(' · ');
+const sent=(post.deliveries||[]).map(d=>'<span class="tag'+(d.status==='delivered'?' ok':['failed','reconciliation_required'].includes(d.status)?' warn':'')+'">'+(d.status==='delivered'?'✓ ':'')+esc(ff(FEED_CHANNELS[d.channel]||[d.channel,d.channel]))+'</span>').join('');
+const tags=(isNew?'<span class="tag new">'+esc(ff(['새','new']))+'</span>':'')+(post.kind==='external'?'<span class="tag">'+esc(ff(['직접 발송','sent directly']))+'</span>':'')+sent;
+const text=plain(post.text),long=text.split('\\n').length>8||text.length>600,open=feedOpen.has(post.id);
+const acts=(post.work_id?'<button type="button" data-feed-open="'+esc(post.work_id)+'">'+esc(post.kind==='reply'?ff(['대화 열기','Open conversation']):ff(['업무 열기','Open Work']))+'</button>':'')+(post.files?'<button type="button" data-feed-open="'+esc(post.work_id)+'">'+esc(ff(['파일 ','Files '])+post.files)+'</button>':'')+(post.work_id&&work&&!work.server?'<button type="button" data-feed-direct="'+esc(post.work_id)+'">'+esc(ff(['이 결과에 지시하기','Direct from this result']))+'</button>':'');
+return '<article class="post'+(isNew?' new':'')+(open?' open':'')+'" data-post="'+esc(post.id)+'"><div class="ph">'+feedAvatar(post.work_id||post.source_label,name)+'<span class="who"><strong data-i18n-skip>'+esc(name)+'</strong><span>'+esc(who)+'</span></span><span class="tags">'+tags+'</span></div>'
++(post.title?'<h4 data-i18n-skip>'+esc(post.title)+'</h4>':'')+(text?'<p class="body" data-i18n-skip>'+esc(text)+'</p>':'')+(long?'<button type="button" class="more" data-feed-more="'+esc(post.id)+'">'+esc(open?ff(['접기','Show less']):ff(['더 보기','Show more']))+'</button>':'')+feedPics(post)+(acts?'<div class="acts">'+acts+'</div>':'')+'</article>'}
+function feedPinHtml(work){return '<article class="post pin"><div class="ph">'+feedAvatar(work.id,work.title)+'<span class="who"><strong data-i18n-skip>'+esc(work.title)+'</strong><span>'+esc([kindLabel({...work,run:{kind:work.kind},client:work.client?{id:work.client}:null}),ago(work.last_event?.at||'')].filter(Boolean).join(' · '))+'</span></span><span class="tags"><span class="tag warn">'+esc(groups[0][1])+'</span></span></div><p class="body" data-i18n-skip>'+esc(work.note||(work.server?serverSummary(work):labels[work.status]||work.status))+'</p><div class="acts"><button type="button" data-feed-open="'+esc(work.id)+'">'+esc(ff(['열어서 처리하기','Open and handle']))+'</button></div></article>'}
+function feedRailHtml(works){const running=works.filter(w=>groupOf(w.status)==='active'),next=works.filter(w=>w.schedule?.enabled&&w.schedule.next_run_at).sort((a,b)=>a.schedule.next_run_at.localeCompare(b.schedule.next_run_at)).slice(0,5),servers=new Map();
+for(const w of works)if(w.server){const key=w.server.host+'|'+w.server.target;if(!servers.has(key))servers.set(key,{name:w.server.target,items:[]});servers.get(key).items.push(w)}
+return '<div class="feed-rail" role="region" aria-label="'+esc(ff(['지금 상태','Now']))+'">'+(running.length?'<section><h3>'+esc(ff(['지금 실행 중','RUNNING']))+'</h3>'+running.map(w=>'<button type="button" data-feed-open="'+esc(w.id)+'"><i class="dot run"></i><span data-i18n-skip>'+esc(w.title)+'</span><time>'+esc(ago(w.last_event?.at||''))+'</time></button>').join('')+'</section>':'')
++(next.length?'<section><h3>'+esc(ff(['다음 산출물','NEXT']))+'</h3>'+next.map(w=>'<button type="button" data-feed-open="'+esc(w.id)+'"><span data-i18n-skip>'+esc(w.title)+'</span><time>'+esc(clock(w.schedule.next_run_at))+'</time></button>').join('')+'</section>':'')
++[...servers.values()].map(s=>{const bad=s.items.filter(i=>groupOf(i.status)==='attention');return '<section><h3 data-i18n-skip>'+esc(s.name)+'</h3>'+s.items.map(i=>'<button type="button" data-feed-open="'+esc(i.id)+'"><i class="dot '+tone(i.status)+'"></i><span data-i18n-skip>'+esc(i.title)+'</span><em data-i18n-skip>'+esc(groupOf(i.status)==='attention'?serverSummary(i):'')+'</em></button>').join('')+(bad.length?'':'<em>'+esc(ff(['모두 정상','All healthy']))+'</em>')+'</section>'}).join('')+'</div>'}
+function renderFeed(q){if((!feed||Date.now()-feedAt>15000)&&Date.now()-feedTried>5000)loadFeed();if(!feed){app.innerHTML='<p class="muted keep">'+esc(feedFailed?ff(['피드를 불러오지 못했어요. 잠시 뒤 다시 시도해요.','The feed could not be loaded. Trying again shortly.']):ff(['피드를 모으는 중…','Gathering the feed…']))+'</p>';return}
+const works=new Map(feed.works.map(w=>[w.id,w])),match=post=>(!feedWork||post.work_id===feedWork)&&(feedKind==='all'||feedKind==='images'&&post.images?.length||feedKind==='text'&&post.kind!=='reply'&&!post.images?.length||feedKind==='reply'&&post.kind==='reply')&&(!q||String(post.work_title||post.source_label||'').toLowerCase().includes(q)||String(post.text).toLowerCase().includes(q));
+const pins=feed.works.filter(w=>groupOf(w.status)==='attention'&&(!feedWork||w.id===feedWork)),posts=feedKind==='attention'?[]:feed.posts.filter(match);let day='',stream='';
+for(const post of posts){const d=feedDay(post.at);if(d!==day){day=d;stream+='<div class="feed-day">'+esc(d)+'</div>'}stream+=feedPostHtml(post,works)}
+const authors=[...new Map(feed.works.map(w=>[w.id,w.title])).entries()];
+const tools='<div class="feed-tools"><div class="chips" role="group" aria-label="'+esc(ff(['산출물 거르기','Filter outputs']))+'">'+[['all',['전체','All']],['images',['이미지','Images']],['text',['글','Text']],['reply',['대화','Conversations']],['attention',['확인 필요','Needs you']]].map(([id,label])=>'<button type="button" data-feed-kind="'+id+'" aria-pressed="'+(feedKind===id)+'">'+esc(ff(label))+(id==='attention'&&pins.length?' '+pins.length:'')+'</button>').join('')+'</div><label class="sr-only" for="feed-work">'+esc(ff(['업무로 거르기','Filter by Work']))+'</label><select id="feed-work"><option value="">'+esc(ff(['모든 업무','All Works']))+'</option>'+authors.map(([id,title])=>'<option value="'+esc(id)+'"'+(feedWork===id?' selected':'')+' data-i18n-skip>'+esc(title)+'</option>').join('')+'</select><button type="button" class="push" id="feed-push">'+esc(pushLabel())+'</button></div>';
+app.innerHTML='<div class="feed"><div class="feed-main">'+tools+pins.map(feedPinHtml).join('')+(stream||(pins.length?'':'<div class="empty">'+esc(feedKind==='all'&&!feedWork&&!q?ff(['아직 산출물이 없어요. 업무가 결과를 내면 여기에 쌓여요.','No outputs yet. Results land here as your Works produce them.']):ff(['조건에 맞는 산출물이 없어요.','No output matches.']))+'</div>'))+(feed.next_before&&feedKind!=='attention'?'<button type="button" class="feed-end" id="feed-more">'+esc(ff(['이전 산출물 더 보기','Older outputs']))+'</button>':'')+'</div>'+feedRailHtml(feed.works)+'</div>'}
+app.addEventListener('click',event=>{if(view!=='feed'||selected)return;const t=event.target;
+const kind=t.closest('[data-feed-kind]');if(kind){feedKind=kind.dataset.feedKind;renderBoard();return}
+const more=t.closest('[data-feed-more]');if(more){const id=more.dataset.feedMore;feedOpen.has(id)?feedOpen.delete(id):feedOpen.add(id);renderBoard();return}
+const open=t.closest('[data-feed-open]');if(open){markFeedSeen();openWork(open.dataset.feedOpen);return}
+const direct=t.closest('[data-feed-direct]');if(direct){markFeedSeen();chatFocus=true;openWork(direct.dataset.feedDirect);return}
+if(t.closest('#feed-more')){loadMoreFeed();return}
+if(t.closest('#feed-push'))togglePush()});
+app.addEventListener('change',event=>{if(event.target.id==='feed-work'&&view==='feed'){feedWork=event.target.value;renderBoard()}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&view==='feed'&&!selected)markFeedSeen()});
+// A picture that cannot be served any more (its file was replaced) is left out rather than shown broken.
+app.addEventListener('error',event=>{const img=event.target;if(img?.tagName!=='IMG'||!img.closest('.pics,.rpics'))return;(img.closest('.pics>span')||img).hidden=true;const pics=img.closest('.pics');if(pics&&[...pics.children].every(c=>c.hidden))pics.hidden=true},true);
+// Push: the browser's own push service carries Office's notices to this device. On an iPhone it works in the app added to the home screen.
+let pushState='unknown';
+const pushSupported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+function pushLabel(){return pushState==='on'?ff(['알림 켜짐','Notifications on']):ff(['알림 받기','Get notifications'])}
+async function pushRegistration(){return navigator.serviceWorker.register('sw.js')}
+async function refreshPushState(){if(!pushSupported()){pushState='unsupported';return}try{const reg=await pushRegistration(),sub=await reg.pushManager.getSubscription();pushState=sub&&Notification.permission==='granted'?'on':'off'}catch{pushState='off'}const b=document.getElementById('feed-push');if(b)b.textContent=pushLabel()}
+const keyBytes=key=>{const padded=(key+'='.repeat((4-key.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(padded);return Uint8Array.from(raw,c=>c.charCodeAt(0))};
+async function pushPost(path,body){const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-agent-driver':'human-office'},body:JSON.stringify(body)});if(!response.ok)throw Error((await response.json().catch(()=>({}))).error||'PUSH_REQUEST_INVALID');return response.json()}
+async function togglePush(){
+ if(!pushSupported()){setMessage(ff(['이 브라우저에서는 알림을 켤 수 없어요. 아이폰은 Safari에서 홈 화면에 추가한 Agent Office 앱을 열어 켜 주세요.','This browser cannot take notifications. On an iPhone, open the Agent Office app added to the home screen from Safari.']));return}
+ try{const reg=await pushRegistration(),current=await reg.pushManager.getSubscription();
+  if(pushState==='on'&&current){if(!confirm(ff(['이 기기의 알림을 끌까요?','Turn notifications off on this device?'])))return;await pushPost('push/unsubscribe',{endpoint:current.endpoint});await current.unsubscribe();pushState='off';setMessage(ff(['이 기기의 알림을 껐어요.','Notifications are off on this device.']))}
+  else{const permission=await Notification.requestPermission();if(permission!=='granted'){setMessage(ff(['알림이 허용되지 않았어요. 기기 설정에서 Agent Office 알림을 허용해 주세요.','Notifications were not allowed. Allow them for Agent Office in the device settings.']));return}
+   const {public_key}=await (await fetch('push/key',{cache:'no-store'})).json(),sub=current||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(public_key)});
+   await pushPost('push/subscribe',{subscription:sub.toJSON()});await pushPost('push/test',{});pushState='on';setMessage(ff(['알림을 켰어요. 시험 알림을 보냈어요.','Notifications are on. A test notice is on its way.']))}}
+ catch(error){setMessage(ff(['알림을 켜지 못했어요: ','Could not turn notifications on: '])+String(error.message||error))}
+ const b=document.getElementById('feed-push');if(b)b.textContent=pushLabel()}
+refreshPushState();
+`;}

@@ -6,7 +6,8 @@ import {requireCondition} from '../core/contracts.js';
 import {migrationText as clean} from './hermes-source.js';
 import {initWorkExecution,workActivity} from './activity.js';
 import {assertWorkConnected,readWorkLifecycle} from './lifecycle.js';
-import {serverTargetSchema,SshServerProbe,type ServerProbe,type ServerTarget} from '../integrations/server-ssh.js';
+import {serverTargetSchema,SshServerProbe,type FeedSource,type ServerProbe,type ServerTarget} from '../integrations/server-ssh.js';
+import {addFeedPost} from './feed.js';
 import {parseServerSnapshot,serverHealth,suggestServerGroups,type ActivityCheck,type RawSnapshot,type ServerSnapshot,type ServerStatus} from './server-watch.js';
 
 const uuid=z.string().uuid(),unitId=z.string().regex(/^[A-Za-z0-9@._:-]{1,200}$/u),now=()=>new Date().toISOString();
@@ -14,24 +15,32 @@ export const serverDiscover=z.object({target_id:uuid}).strict();
 export const serverLink=z.object({target_id:uuid,acknowledged:z.literal(true),groups:z.array(z.object({name:z.string().trim().min(1).max(80),units:z.array(unitId).min(1).max(60)}).strict()).min(1).max(20)}).strict();
 export const serverRefresh=z.object({work_id:uuid}).strict();
 export const serverChecks=z.object({work_id:uuid,checks:z.array(z.object({label:z.string().trim().min(1).max(80),unit:unitId,pattern:z.string().min(1).max(200),minutes:z.number().int().min(1).max(20160)}).strict()).max(10)}).strict();
+// A bot's own send records, read into the Office feed: a SQLite table (query returns id, at, text and optionally
+// title) or a JSONL file with the same keys. Paths are absolute; the query runs on a read-only connection.
+const feedSourceInput=z.discriminatedUnion('kind',[
+  z.object({label:z.string().trim().min(1).max(80),kind:z.literal('sqlite'),path:z.string().regex(/^\/[^\0\n]{1,300}$/u),query:z.string().trim().min(1).max(2000).regex(/^(?:select|with)\b/iu)}).strict(),
+  z.object({label:z.string().trim().min(1).max(80),kind:z.literal('jsonl'),path:z.string().regex(/^\/[^\0\n]{1,300}$/u)}).strict()]);
+export const serverFeed=z.object({work_id:uuid,sources:z.array(feedSourceInput).max(5)}).strict();
+type StoredFeed=z.infer<typeof feedSourceInput>&{id:string;after:string;error?:string|null};
+const feedId=(work:string,s:z.infer<typeof feedSourceInput>)=>'f'+createHash('sha256').update(JSON.stringify([work,s.kind,s.path,s.kind==='sqlite'?s.query:''])).digest('hex').slice(0,12);
 // The same unit, pattern and window is one check on the server, whichever Work asked for it.
 const checkId=(c:{unit:string;pattern:string;minutes:number})=>'c'+createHash('sha256').update(JSON.stringify([c.unit,c.pattern,c.minutes])).digest('hex').slice(0,12);
 const NOTE_KO:Record<string,string>={failed:'실패',stopped:'멈춤',last_run_failed:'마지막 실행 실패',timer_inactive:'타이머 꺼짐',unhealthy:'상태 이상',exited:'종료됨',not_found:'찾을 수 없음',no_recent_activity:'최근 기록 없음'};
 // A snapshot older than this is shown as stale; Office reads each watched server about every two minutes.
 const STALE_MS=10*60_000;
 type TargetRow={id:string;definition:string;snapshot:string|null;observed_at:string|null;error:string|null};
-type WorkRow={work_id:string;target_id:string;units:string;last_status:string|null;checks:string|null};
+type WorkRow={work_id:string;target_id:string;units:string;last_status:string|null;checks:string|null;feed?:string|null};
 
 function init(store:PackStore){initWorkExecution(store);store.hermesState.exec(`
  CREATE TABLE IF NOT EXISTS office_server_target(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,snapshot TEXT,observed_at TEXT,error TEXT,UNIQUE(project_id,definition));
  CREATE TABLE IF NOT EXISTS office_server_work(work_id TEXT PRIMARY KEY REFERENCES office_work(id),project_id TEXT NOT NULL,target_id TEXT NOT NULL,units TEXT NOT NULL,last_status TEXT,created_at TEXT NOT NULL);
-`);try{store.hermesState.exec('ALTER TABLE office_server_work ADD COLUMN checks TEXT');}catch{/* already there */}}
+`);for(const column of ['checks','feed'])try{store.hermesState.exec(`ALTER TABLE office_server_work ADD COLUMN ${column} TEXT`);}catch{/* already there */}}
 const exists=(store:PackStore)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_server_work'").get());
 function watched(store:PackStore,project:string,id:string){
   if(!exists(store))return null;
   const work=store.hermesState.prepare('SELECT * FROM office_server_work WHERE project_id=? AND work_id=?').get(project,id) as WorkRow|undefined;if(!work)return null;
   const target=store.hermesState.prepare('SELECT id,definition,snapshot,observed_at,error FROM office_server_target WHERE project_id=? AND id=?').get(project,work.target_id) as TargetRow|undefined;if(!target)return null;
-  return {work,target,definition:JSON.parse(target.definition) as ServerTarget,units:JSON.parse(work.units) as string[],checks:work.checks?JSON.parse(work.checks) as ActivityCheck[]:[],snapshot:target.snapshot?parseServerSnapshot(JSON.parse(target.snapshot) as RawSnapshot):null};
+  return {work,target,definition:JSON.parse(target.definition) as ServerTarget,units:JSON.parse(work.units) as string[],checks:work.checks?JSON.parse(work.checks) as ActivityCheck[]:[],feed:work.feed?JSON.parse(work.feed) as StoredFeed[]:[],snapshot:target.snapshot?parseServerSnapshot(JSON.parse(target.snapshot) as RawSnapshot):null};
 }
 function judge(view:NonNullable<ReturnType<typeof watched>>){
   const health=view.snapshot?serverHealth(view.snapshot,view.units,view.checks):null;
@@ -52,7 +61,7 @@ export function serverDetail(store:PackStore,project:string,id:string){
   const work=store.officeWorkById(project,id),byId=new Map((view.snapshot?.units??[]).map(u=>[u.id,u]));
   const units=view.units.map(unit=>byId.get(unit)??{id:unit,kind:unit.endsWith('.timer')?'timer':unit.endsWith('.service')?'service':'container',state:view.snapshot?.disabled.includes(unit)?'off':'problem',note:view.snapshot?.disabled.includes(unit)?null:'not_found',description:'',active:'',sub:'',restarts:0,since:null,last_run:null,next_run:null,job:null,links:[],project:null});
   return {id,title:work.title,goal:work.goal,revision:0,run_status:status,completion_verified:false,updated_at:view.target.observed_at??work.updated_at,
-    server:{target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units,checks:view.checks.map(c=>({...c,count:view.snapshot?.checks[c.id]??null}))}};
+    server:{target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units,checks:view.checks.map(c=>({...c,count:view.snapshot?.checks[c.id]??null})),feed:view.feed.map(f=>({id:f.id,label:f.label,kind:f.kind,path:f.path,query:f.kind==='sqlite'?f.query:null,last_at:f.after||null,error:f.error??null}))}};
 }
 
 export class ServerOffice {
@@ -72,7 +81,8 @@ export class ServerOffice {
     const pending=this.running.get(targetId);if(pending)return pending as Promise<ServerSnapshot|null>;
     const task=(async()=>{const target=this.target(targetId);
       const checks=[...new Map(this.store.hermesState.prepare('SELECT checks FROM office_server_work WHERE project_id=? AND target_id=? AND checks IS NOT NULL').all(this.config.project.id,targetId).flatMap(row=>JSON.parse(String(row.checks)) as ActivityCheck[]).map(c=>[c.id,c])).values()];
-      try{const raw=await this.probe.snapshot(target,checks),snapshot=parseServerSnapshot(raw);this.store.hermesState.prepare('UPDATE office_server_target SET snapshot=?,observed_at=?,error=NULL WHERE project_id=? AND id=?').run(JSON.stringify(raw),now(),this.config.project.id,targetId);this.recordChanges(targetId);return snapshot;}
+      const feeds=(this.store.hermesState.prepare('SELECT work_id,feed FROM office_server_work WHERE project_id=? AND target_id=? AND feed IS NOT NULL').all(this.config.project.id,targetId) as Array<{work_id:string;feed:string}>).flatMap(row=>(JSON.parse(row.feed) as StoredFeed[]).map(f=>({id:f.id,kind:f.kind,path:f.path,query:f.kind==='sqlite'?f.query:undefined,after:f.after})));
+      try{const {feed,...raw}=await this.probe.snapshot(target,checks,feeds as FeedSource[]),snapshot=parseServerSnapshot(raw);this.store.hermesState.prepare('UPDATE office_server_target SET snapshot=?,observed_at=?,error=NULL WHERE project_id=? AND id=?').run(JSON.stringify(raw),now(),this.config.project.id,targetId);if(feed!==undefined)this.takeFeed(targetId,feed);this.recordChanges(targetId);return snapshot;}
       catch(error){const code=error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_CONNECTION_FAILED';this.store.hermesState.prepare('UPDATE office_server_target SET error=? WHERE project_id=? AND id=?').run(code,this.config.project.id,targetId);this.recordChanges(targetId);return null;}
     })().finally(()=>this.running.delete(targetId));
     this.running.set(targetId,task);return task;
@@ -110,6 +120,27 @@ export class ServerOffice {
       this.store.hermesState.exec('COMMIT');
     }catch(error){this.store.hermesState.exec('ROLLBACK');throw error;}
     this.recordChanges(input.target_id);return {work_ids:ids};
+  }
+  /** New rows from the server's send records become feed posts of their Work; each source remembers the newest row taken. */
+  private takeFeed(targetId:string,encoded:string){
+    let read:Record<string,{rows?:Array<{id:string;at:string;title:string|null;text:string}>;error?:string}>;try{read=JSON.parse(Buffer.from(encoded,'base64').toString('utf8'));}catch{return;}
+    const project=this.config.project.id;
+    for(const row of this.store.hermesState.prepare('SELECT work_id,feed FROM office_server_work WHERE project_id=? AND target_id=? AND feed IS NOT NULL').all(project,targetId) as Array<{work_id:string;feed:string}>){
+      const sources=JSON.parse(row.feed) as StoredFeed[];let changed=false;
+      for(const source of sources){const got=read[source.id];if(!got)continue;
+        const error=got.error?String(got.error).slice(0,80):null;if(error!==(source.error??null)){source.error=error;changed=true;}
+        for(const post of got.rows??[]){addFeedPost(this.store,project,{work_id:row.work_id,source:'server:'+source.id,source_label:source.label,external_id:String(post.id),title:post.title,text:String(post.text),at:String(post.at)});if(String(post.at)>source.after){source.after=String(post.at);changed=true;}}}
+      if(changed)this.store.hermesState.prepare('UPDATE office_server_work SET feed=? WHERE project_id=? AND work_id=?').run(JSON.stringify(sources),project,row.work_id);
+    }
+  }
+  /** The send records of one Work's bots; they are read with the next read of its server. A kept source keeps its place. */
+  setFeed(raw:unknown){
+    const input=serverFeed.parse(raw),project=this.config.project.id;assertWorkConnected(this.store,project,input.work_id);const view=watched(this.store,project,input.work_id);requireCondition(view,'SERVER_WORK_NOT_FOUND');
+    for(const s of input.sources)requireCondition(clean(s.label,80)===s.label,'SERVER_CREDENTIAL_LIKE_INPUT');
+    const old=new Map(view.feed.map(f=>[f.id,f])),sources:StoredFeed[]=input.sources.map(s=>{const id=feedId(input.work_id,s);return {...s,id,after:old.get(id)?.after??'',error:old.get(id)?.error??null};});
+    this.store.hermesState.prepare('UPDATE office_server_work SET feed=? WHERE project_id=? AND work_id=?').run(JSON.stringify(sources),project,input.work_id);
+    workActivity(this.store,project,input.work_id,'server.feed',`발송 기록 ${sources.length}개를 피드에 연결했습니다.`);
+    return serverDetail(this.store,project,input.work_id);
   }
   /** The owner's activity checks of one Work; they run with the next read of its server. */
   setChecks(raw:unknown){

@@ -10,7 +10,7 @@ export type UnitState='ok'|'problem'|'off';
 export type UnitNote='failed'|'stopped'|'last_run_failed'|'timer_inactive'|'unhealthy'|'exited'|'not_found'|'no_recent_activity'|null;
 export interface ServerUnit {id:string;kind:UnitKind;description:string;state:UnitState;note:UnitNote;active:string;sub:string;restarts:number;since:number|null;last_run:number|null;next_run:number|null;job:string|null;links:string[];project:string|null}
 export interface ServerSnapshot {now:number;units:ServerUnit[];disabled:string[];checks:Record<string,number>}
-export interface RawSnapshot {format:number;now:number;timers:unknown;files:unknown;show:string;docker:string;checks?:Record<string,number>|undefined}
+export interface RawSnapshot {format:number;now:number;timers:unknown;files:unknown;show:string;docker:string;checks?:Record<string,number>|undefined;feed?:string|undefined}
 /**
  * An activity check: a unit's journal must show a line matching the pattern within the window. It covers what systemd
  * cannot see, such as a bot whose own scheduler stopped while its process stays up, or a report job that no longer runs.

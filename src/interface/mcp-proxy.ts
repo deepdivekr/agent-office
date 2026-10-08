@@ -7,7 +7,7 @@ import {ensureMcpService} from './mcp-service-manager.js';
 /** What an agent needs to hand work to Agent Office and follow it. The full surface is 114 tools and about
  * 115 KB of descriptions (≈29k tokens) in every client session, and some clients cap the tool count. The other
  * tools keep their names and stay callable; `agent-office mcp --all-tools` or AGENT_OFFICE_MCP_TOOLS=all lists them. */
-export const COMPACT_MCP_TOOLS=new Set(['runtime_work_start','runtime_work_status','runtime_work_answer','runtime_work_control','runtime_work_list','runtime_work_result','runtime_work_execute','runtime_work_context','runtime_health','runtime_capabilities_list']);
+export const COMPACT_MCP_TOOLS=new Set(['runtime_work_start','runtime_work_status','runtime_work_answer','runtime_work_control','runtime_work_list','runtime_work_result','runtime_feed_post','runtime_work_execute','runtime_work_context','runtime_health','runtime_capabilities_list']);
 export const compactMcpTools=<T extends {name:string}>(tools:readonly T[])=>tools.filter(tool=>COMPACT_MCP_TOOLS.has(tool.name));
 export async function serveMcpProxy(configPath:string,options:{allTools?:boolean}={}){
   const allTools=options.allTools===true||process.env.AGENT_OFFICE_MCP_TOOLS==='all',listRequests=new Set<string|number>();
