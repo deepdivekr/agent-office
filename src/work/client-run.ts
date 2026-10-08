@@ -79,6 +79,14 @@ export function pinWorkClient(store:PackStore,project:string,workId:string,choic
   return workClientChoice(store,project,workId);
 }
 export const workFolder=(config:Pick<HostConfig,'dbPath'>,workId:string)=>join(dirname(config.dbPath),'work-folders',workId);
+/** The confirmed session the Work's latest earlier run on this client ended with, if any. */
+export function previousClientSession(store:PackStore,project:string,workId:string,runId:string,client:RunClient):string|null{
+  if(!store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_supervisor'").get())return null;
+  for(const row of store.hermesState.prepare('SELECT checkpoint FROM office_supervisor WHERE project_id=? AND work_id=? AND run_id!=? ORDER BY created_at DESC,rowid DESC LIMIT 5').all(project,workId,runId)){
+    try{const s=JSON.parse(String(row.checkpoint))?.client_session;if(s?.client===client&&s.confirmed===true&&typeof s.session_id==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(s.session_id))return s.session_id;}catch{/* a damaged record carries nothing */}
+  }
+  return null;
+}
 
 // API keys would move a subscription client onto paid API billing; Office's own and the calling session's variables are not the owner's.
 const withheld=/^(?:OPENAI_API_KEY|CODEX_API_KEY|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|AZURE_OPENAI_API_KEY|OPENROUTER_API_KEY|TYPESAFE_API_KEY|AGENT_DRIVER_\w+|AGENT_OFFICE_\w+|CLAUDECODE|CLAUDE_CODE_ENTRYPOINT|CLAUDE_CODE_SSE_PORT|CODEX_SANDBOX\w*|CODEX_THREAD_ID)$/u;
@@ -181,7 +189,8 @@ export async function runClient(request:{client:RunClient;model:string|null;effo
   const result=await runner.run({executable:executable(request.client),args:clientRunArgs({id:request.client,model:request.model,effort:request.effort},request.folder,request.session,codexHasOffice(),request.servers),cwd:request.folder,stdin:request.prompt,timeout_ms:request.timeout_ms??7_200_000,signal:request.signal,env:clientRunEnvironment(),keep_stdout:false,output_limit_bytes:8_388_608,onStdout:observe});
   observe('\n');
   const completed=result.code===0&&state.done&&!state.turnFailed;
-  return {session_id:state.session,final_message:state.final,completed,reason:completed?null:`CLIENT_${classifyClientFailure(`${state.failure}\n${result.stderr.slice(-4000)}`).toUpperCase()}`,counts:state.counts};
+  const failure=`${state.failure}\n${result.stderr.slice(-4000)}`,missing=Boolean(request.session?.resume)&&/no (?:conversation|session|thread) found|(?:session|conversation|thread)[^\n]{0,100}(?:not found|does not exist)/iu.test(failure);
+  return {session_id:state.session,final_message:state.final,completed,reason:completed?null:missing?'CLIENT_NATIVE_SESSION_MISSING':`CLIENT_${classifyClientFailure(failure).toUpperCase()}`,counts:state.counts};
 }
 
 const mediaTypes:Record<string,string>={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf','.md':'text/markdown','.txt':'text/plain','.csv':'text/csv','.json':'application/json','.html':'text/html','.mp4':'video/mp4','.mp3':'audio/mpeg','.zip':'application/zip','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation'};
@@ -255,6 +264,8 @@ export interface ClientRunInput {
   client:RunClient;model:string|null;effort:WorkClientChoice['effort'];work_id:string;run_id:string;folder:string;title:string;prompt:string;checks:Check[];
   /** What intake settled with the owner: answers, agreed scope, collection window, the host schedule. */
   context:Json;directions:Array<{instruction:string;created_at:string}>;
+  /** The session the previous run of a recurring Work ended with; this run continues it instead of starting anew. */
+  previous_session?:string|null;
   /** The Work's plan. An imported one is the owner's own automation (its steps, files, commands and tools), which the client follows. */
   plan?:{source:'request'|'pasted_import'|'project_scan';steps:Array<{id:string;goal:string;effect:string;tool_hints:string[]}>};
   /** The request itself includes a send or submission (its own helper or scripts), which is the client's part, not Office's. */
@@ -323,14 +334,19 @@ const latestTurn=(observations:WorkClientCheckpoint['observations'])=>{const sta
 /** Run the Work on its pinned client: start or resume its session, save what it made, verify, and send a denial back to the same session. */
 export async function executeClientRun(input:ClientRunInput):Promise<WorkClientResult>{
   const {client,work_id,run_id}=input,latest=input.directions.at(-1)?.created_at??null;
+  // Owner direction 2026-10-08: a recurring Work keeps one conversation. Its next run continues the session the previous
+  // run ended with (Claude answers a resume from another folder under a new ID, which onSession then keeps).
+  const carried=input.previous_session??null;
   let cp:WorkClientCheckpoint=input.checkpoint?.client_session?input.checkpoint:{format:1,work_id,run_id,binding:hashJson({work_id,run_id,client}),turn:0,pending:null,observations:[],summary:'',
-    client_session:{client,session_id:client==='claude'?randomUUID():null,confirmed:false,started_ms:Date.now(),finished:false,direction_at:latest,repairs:0}};
+    client_session:{client,session_id:carried??(client==='claude'?randomUUID():null),confirmed:Boolean(carried),started_ms:Date.now(),finished:false,direction_at:latest,repairs:0,...(carried?{carried:true}:{})}};
   const session=()=>cp.client_session!;
   const update=(changes:Partial<NonNullable<WorkClientCheckpoint['client_session']>>)=>{cp={...cp,client_session:{...session(),...changes}};input.save(cp);};
   const fresh=input.directions.filter(item=>!session().direction_at||item.created_at>session().direction_at!);
   // A new direction starts a new round of corrections, and so does the owner's resume or retry after they ran out.
   if(session().repairs&&(fresh.length||input.resumed&&session().repairs>=WORK_COMPLETION_REPAIR_BUDGET))update({repairs:0});
+  const newRun=()=>`This is a new run of the same Work. This session did its earlier runs; continue from what you know, but this run's folder is ${input.folder}: work there and leave this run's files there. Files of earlier runs are in their own folders and are not this run's result. The full instruction for this run follows.\n\n`;
   let next:string|null=!session().confirmed?initialPrompt(input)
+    :session().carried?newRun()+initialPrompt(input)
     :fresh.length?`The owner changed the instruction for this Work:\n${fresh.map(item=>`- ${item.instruction}`).join('\n')}\n\nContinue in the same folder with this change. Office passed it on as it is and did not change the Work. Where it changes what a completion condition asks, follow the direction and say so in that condition's note. Update DELIVERY.md, write ${COMPLETION_FILE} again, and finish with the same kind of short reply.`
     :!session().finished?'The run was interrupted. Continue the Work where you stopped, in the same folder, and finish with the short reply.':null;
   const meta=(extra:WorkActivityMetadata={}):WorkActivityMetadata=>({run_id,stage_id:'execution',model_provider:client,executor:client,...extra});
@@ -343,7 +359,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       input.guard();update({finished:false,direction_at:latest});extra??=await servers(client).catch(()=>[]);
       // A completion report is the turn's own: one left by an earlier turn never decides this one.
       try{rmSync(join(input.folder,COMPLETION_FILE),{force:true});}catch{/* none */}
-      input.activity('supervisor.client_run',`${clientName(client)} · ${session().confirmed?'같은 세션을 이어서 실행합니다.':'사용자 설정 그대로 업무 폴더에서 실행을 시작합니다.'}`,meta({status:'running',model_continuity:session().confirmed?'resumed_session':'new_session'}));
+      input.activity('supervisor.client_run',`${clientName(client)} · ${session().carried?'지난 회차의 세션을 이어서 실행합니다.':session().confirmed?'같은 세션을 이어서 실행합니다.':'사용자 설정 그대로 업무 폴더에서 실행을 시작합니다.'}`,meta({status:'running',model_continuity:session().confirmed?'resumed_session':'new_session'}));
       const live=extra.filter(server=>!server.unavailable),down=extra.filter(server=>server.unavailable);
       if(live.length)input.activity('tool.result',`windows_mcp · ${live.map(server=>server.id).join(', ')}`,meta({tool_name:'windows_mcp',status:'succeeded'}));
       if(down.length)input.activity('tool.result',`windows_mcp · ${down.map(server=>server.id).join(', ')} 응답 없음 · 공개 페이지는 헤드리스 브라우저(Playwright)로 읽어요`,meta({tool_name:'windows_mcp',status:'failed'}));
@@ -368,10 +384,16 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       }finally{clearInterval(watch);input.signal.removeEventListener('abort',abort);}
       if(!outcome.completed){
         const reason=outcome.reason??'CLIENT_PROVIDER_UNAVAILABLE';
+        // A carried session that is gone or full does not stop the run: this run starts a session of its own.
+        if(session().carried&&['CLIENT_NATIVE_SESSION_MISSING','CLIENT_CONTEXT_EXHAUSTED'].includes(reason)){
+          input.activity('supervisor.client_run',`${clientName(client)} · 지난 회차의 세션을 이어 쓰지 못해 새 세션으로 시작합니다: ${reason}`,meta({status:'running',reason}));
+          update({session_id:client==='claude'?randomUUID():null,confirmed:false,carried:false});next=initialPrompt(input);continue;
+        }
         input.activity('supervisor.client_run',`${clientName(client)} · 실행이 끝나지 않았습니다: ${reason}`,meta({status:'failed',reason}));
         // An outage of the client's provider is waited for with backoff, as the host path waits for a model.
         return {status:reason==='CLIENT_AUTH_EXPIRED'?'waiting_auth':['CLIENT_QUOTA_EXHAUSTED','CLIENT_RATE_LIMITED','CLIENT_PROVIDER_UNAVAILABLE','CLIENT_TIMEOUT'].includes(reason)?'waiting_model':['CLIENT_CONTEXT_EXHAUSTED','CLIENT_MODEL_UNSUPPORTED'].includes(reason)?'failed':'retryable_failure',summary:sanitizeCodingReply(outcome.final_message).text.slice(0,4000),reason,completion_verified:false,checkpoint:cp,model_calls:[]};
       }
+      if(session().carried)update({carried:false});
       input.guard();
       const files=producedFiles(input.folder),resultText=clientResultText(outcome.final_message,files),observedAt=new Date().toISOString();
       deliveryText=deliveryMessage(input.folder,outcome.final_message);

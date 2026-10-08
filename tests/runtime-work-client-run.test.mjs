@@ -424,3 +424,52 @@ test('runtime fixture the result is what the latest turn made; older files in th
   const results=await new WorkResults(x.store).capture(x.config.project.id,x.work.work_id),labels=results[0].artifacts.map(item=>item.label);
   assert.ok(labels.includes('today.png'),JSON.stringify(labels));assert.ok(!labels.includes('case-1.png'),'the first turn\'s picture is not part of this result');
 });
+
+// Owner direction 2026-10-08: Claude or Codex, a recurring Work keeps one conversation across its runs.
+// The next run of a recurring Work comes from its schedule: make the slot due and let the supervisor start it.
+let slots=0;
+async function nextRun(x,previous){
+  // Each call takes an earlier slot of its own; a slot already claimed does not run twice.
+  const back=(48+24*slots++)*3600_000;
+  x.store.hermesState.prepare('UPDATE office_work_schedule SET next_run_ms=?,anchor_ms=?,last_slot=NULL WHERE work_id=?').run(Date.now()-back,Date.now()-back-48*3600_000,x.work.work_id);x.supervisor.tick();
+  for(let i=0;i<200;i++){x.supervisor.tick();const s=supervisorStatus(x.store,x.config.project.id,x.work.work_id);if(s?.run_id!==previous&&['succeeded','failed','awaiting_review','waiting_model'].includes(s?.state))return s;await delay(25);}
+  assert.fail('the next run did not finish: '+JSON.stringify({status:supervisorStatus(x.store,x.config.project.id,x.work.work_id),schedule:x.store.hermesState.prepare('SELECT state,next_run_ms,last_slot FROM office_work_schedule WHERE work_id=?').get(x.work.work_id),recent:activity(x).slice(-6).map(r=>r.kind+' '+r.summary.slice(0,90))}));
+}
+const recurring={...proposal,recurrence:{kind:'recurring',rule:'매일 08:30과 21:30'}};
+test('runtime fixture the next run of a recurring Codex Work resumes the thread of the previous run in its own folder',async t=>{
+  const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded',JSON.stringify(second));
+  const run=x.runs.at(-1),folder=join(workFolder(x.config,x.work.work_id),second.run_id);
+  assert.deepEqual([run.args[1],run.args.slice(-6)],[folder,['exec','resume','--json','--skip-git-repo-check',thread,'-']]);
+  assert.match(run.stdin,/^This is a new run of the same Work\. This session did its earlier runs/u);
+  assert.ok(run.stdin.includes(folder));
+  assert.ok(activity(x).some(row=>row.summary.includes('지난 회차의 세션을 이어서 실행합니다')&&row.metadata.run_id===second.run_id));
+});
+test('runtime fixture a recurring Claude Work resumes the previous session and keeps the ID Claude answers with',async t=>{
+  const ids=['aaaaaaaa-1111-4111-8111-111111111111','bbbbbbbb-2222-4222-8222-222222222222','cccccccc-3333-4333-8333-333333333333'],seen=[];
+  const x=await setup(t,{proposal:recurring,choice:{id:'claude',model:null,effort:null},client:async(request,count)=>{
+    seen.push(request.args.includes('--resume')?['resume',request.args[request.args.indexOf('--resume')+1]]:['new',request.args[request.args.indexOf('--session-id')+1]]);
+    const id=count===1?request.args[request.args.indexOf('--session-id')+1]:ids[count-1];
+    writeFileSync(join(request.cwd,'case-1.png'),'png');
+    request.onStdout(line({type:'system',subtype:'init',session_id:id}));
+    request.onStdout(line({type:'result',subtype:'success',is_error:false,result:'case-1.png 를 만들었습니다.',session_id:id}));
+    return {code:0,stdout:'',stderr:''};
+  }});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
+  // Claude answers a resume from another folder under a new ID: the run keeps that ID, so the next run continues it.
+  assert.deepEqual(seen.map(s=>s[0]),['new','resume']);assert.equal(seen[1][1],seen[0][1]);
+  const kept=JSON.parse(x.store.hermesState.prepare('SELECT checkpoint FROM office_supervisor WHERE run_id=?').get(second.run_id).checkpoint).client_session;
+  assert.deepEqual([kept.session_id,kept.confirmed,kept.carried],[ids[1],true,false]);
+});
+test('runtime fixture a carried session the client cannot find gives the run a session of its own',async t=>{
+  const x=await setup(t,{proposal:recurring,client:(request,count)=>count===2?(request.onStdout(line({type:'error',message:'thread/resume failed: no rollout found for thread id'})),{code:1,stdout:'',stderr:'Error: thread not found'}):codexTurn(request)});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded');
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded',JSON.stringify(second));
+  assert.deepEqual(x.runs.slice(1).map(r=>r.args.includes('resume')),[true,false]);
+  assert.ok(activity(x).some(row=>row.summary.includes('새 세션으로 시작합니다: CLIENT_NATIVE_SESSION_MISSING')));
+});

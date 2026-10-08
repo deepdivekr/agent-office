@@ -20,7 +20,7 @@ import {workProposalSchema,workControlSchema as supervisorActionSchema,type Work
 import {validateOrCorrectWorkProposal,workPlanningContext,WORK_REPLANNING_INSTRUCTIONS,WORK_INTAKE_REQUIREMENTS_INSTRUCTIONS,WORK_COLLECTION_CONTRACT_INSTRUCTIONS} from './runtime.js';
 import {readWorkIntakeOptions} from './intake-options.js';
 import {BoundedWorkClientExecutor,appendWorkObservation,workProgress,boundWorkToolValue,workClientCheckpointSchema,type WorkClientCheckpoint,type WorkClientResult} from './client-executor.js';
-import {clientRunEligible,clientRunEnabled,defaultWorkClient,executeClientRun,pinWorkClient,workClientChoice,workFolder} from './client-run.js';
+import {clientRunEligible,clientRunEnabled,defaultWorkClient,executeClientRun,pinWorkClient,previousClientSession,workClientChoice,workFolder} from './client-run.js';
 import {packTools} from '../packs/contracts.js';
 import {type SwarmRunSnapshot} from '../swarm/contracts.js';
 import {activeSwarmWorkerCount,initWorkExecution,workActivity,withWorkActivityContext} from './activity.js';
@@ -563,7 +563,7 @@ export class WorkSupervisor {
       templateRuns=offered?.template_runs??0;
       script=offered?.template&&reusable&&!checkpoint?new ProcedureScript(offered.template,fastJudgment,calls=>countPaidJudgment(this.store,project,calls),summary=>workActivity(this.store,project,row.work_id,'procedure.handed_over',summary,{run_id:row.run_id,stage_id:'execution',status:'running'}),templateRuns>=TRUSTED_TEMPLATE_RUNS):null;
             if(offered&&row.attempts<=1&&!checkpoint)workActivity(this.store,project,row.work_id,'procedure.offered',`A procedure verified ${offered.successes} time${offered.successes===1?'':'s'} for a similar request guides this run.`,{run_id:row.run_id,stage_id:'execution',status:'offered'});
-      const result=client?await executeClientRun({client,model:pin!.model,effort:pin!.effort,work_id:row.work_id,run_id:row.run_id,folder:join(workFolder(this.config,row.work_id),row.run_id),title:spec.title,prompt:work.prompt,checks:spec.completion_checks,
+      const result=client?await executeClientRun({client,model:pin!.model,effort:pin!.effort,work_id:row.work_id,run_id:row.run_id,folder:join(workFolder(this.config,row.work_id),row.run_id),previous_session:hostSchedule?previousClientSession(this.store,project,row.work_id,row.run_id,client):null,title:spec.title,prompt:work.prompt,checks:spec.completion_checks,
           context:{...(userIntake.completion_condition?{completion_condition:userIntake.completion_condition}:{}),...(agreedScope?{agreed_scope:agreedScope}:{}),...(collectionWindow?{collection_window:collectionWindow}:{}),...(hostSchedule?{host_schedule:{definition:hostSchedule.definition,next_run_at:hostSchedule.next_run_at,meaning:'Office reruns this Work on this schedule; finish this run.'}}:{})},
           plan:{source:spec.plan.source,steps:spec.plan.steps.map(step=>({id:step.id,goal:step.goal,effect:step.effect,tool_hints:step.tool_hints}))},external_effect:spec.requested_effect==='external_effect_requested',
           directions,checkpoint:checkpoint as WorkClientCheckpoint|null,resumed:row.resume_wait===1,signal:controller.signal,guard,save:saveCheckpoint,

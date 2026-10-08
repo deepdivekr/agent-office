@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {delimiter,isAbsolute,join} from 'node:path';
 import {hashJson,modelCallBudget,type ModelCall,type StructuredModel} from '../taskpack/adaptive-spec.js';
 import {requireCondition} from '../core/contracts.js';
-import {classifyClientFailure,isInvalidClientOutput,isNonRetryableClientFailure,type ClientFailureReason} from './client-failure.js';
+import {classifyClientFailure,cliFailureText,isInvalidClientOutput,isNonRetryableClientFailure,type ClientFailureReason} from './client-failure.js';
 import {decisionClientCapabilities,supportsStructuredJudgment} from './client-capabilities.js';
 import {withDecisionSession,type DecisionSessionScope,type DecisionSessionTurn} from './decision-sessions.js';
 
@@ -415,7 +415,7 @@ function nativeSessionId(id:'codex'|'claude',stdout:string):string|null{
 function cliFailure(result:ProcessResult,session?:DecisionSessionTurn){
   // The CLI can put a generic line on stderr and its typed provider error on
   // stdout. Inspect both, but persist and expose only our bounded reason code.
-  const detail=result.stderr+'\n'+result.stdout;
+  const detail=cliFailureText(result.stdout,result.stderr);
   if(session?.session_id&&/(?:no (?:conversation|session|thread) found|(?:session|conversation|thread)[^\r\n]{0,100}(?:not found|does not exist))/iu.test(detail))throw Error('CLIENT_NATIVE_SESSION_MISSING');
   throw Error(`CLIENT_${classifyClientFailure(detail).toUpperCase()}`);
 }
