@@ -33,6 +33,8 @@ import {type StructuredModel} from '../taskpack/adaptive-spec.js';
 import {HermesWorkRuntime,type HermesWorkOptions} from '../work/hermes.js';
 import {HermesMigrationRuntime} from '../work/hermes-migration.js';
 import {RemoteOffice} from '../work/remote.js';
+import {ServerOffice} from '../work/server-office.js';
+import {type ServerProbe} from '../integrations/server-ssh.js';
 import {type RemoteTransport} from '../integrations/remote-openclaw.js';
 import {WorkSupervisor,supervisorActionSchema,supervisorStatus} from '../work/supervisor.js';
 import {WorkResults} from '../work/results.js';
@@ -126,14 +128,14 @@ export function controlCenterReloadBlockedReason(store:PackStore,project:string,
   if(db.prepare("SELECT 1 FROM swarm_run r,json_each(r.snapshot,'$.workers') w WHERE r.project_id=? AND json_extract(w.value,'$.status')='leased' AND json_extract(w.value,'$.lease_expires_at_ms')>? LIMIT 1").get(project,at))return 'WORK_EXECUTION_ACTIVE';
   return null;
 }
-export async function startControlCenter(config:HostConfig,options:{port?:number;poll_ms?:number;capability_token?:string;workModel?:StructuredModel;coding?:CodingRuntimeOptions;hermes?:HermesWorkOptions;remote?:RemoteTransport;onReload?:()=>Promise<void>;reloadStatus?:()=>ControlCenterReloadStatus;clientMaintenance?:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>}={}):Promise<ControlCenterServer>{
+export async function startControlCenter(config:HostConfig,options:{port?:number;poll_ms?:number;capability_token?:string;workModel?:StructuredModel;coding?:CodingRuntimeOptions;hermes?:HermesWorkOptions;remote?:RemoteTransport;server?:ServerProbe;onReload?:()=>Promise<void>;reloadStatus?:()=>ControlCenterReloadStatus;clientMaintenance?:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>}={}):Promise<ControlCenterServer>{
   if(options.capability_token!==undefined&&!/^[a-f0-9]{48}$/u.test(options.capability_token))throw Error('CONTROL_CENTER_CAPABILITY_INVALID');
   const token=options.capability_token??randomBytes(24).toString('hex'),store=new PackStore(config.dbPath);try{store.registerProject(config.project);}catch(error){store.close();throw error;}const presence=store.startPresence(config.project.id,'dashboard',{transport:'loopback-read-only'}),clients=new Set<ServerResponse>(),lightClients=new Set<ServerResponse>(),poll=options.poll_ms??500;let host='',shortHost='',hosts=new Set<string>(),done:()=>void=()=>undefined,stopped=false,reloading=false,inflightMutations=0;const closed=new Promise<void>(resolve=>done=resolve);
   const connections=new BrowserConnections(store,config,{reloadAvailable:Boolean(options.onReload)}),settings=new ControlSettings(config,undefined,undefined,undefined,undefined,undefined,undefined,undefined,options.clientMaintenance);
   const fileRoutes=new FileExplorerRoutes(store.localFileExplorer(config.project.id,dirname(config.dbPath)));
   const hermesWork=new HermesWorkRuntime(store,config,options.hermes);
   const migrations=new HermesMigrationRuntime(store,config);
-  const remoteOffice=new RemoteOffice(store,config,options.remote);
+  const remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server);
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
   const deliverySettings=WorkDeliverySettings.fromConfig(config),results=new WorkResults(store,[],deliverySettings,()=>workDelegation(config).notify);
   const deliveryJobs=new Map<string,Promise<void>>();
@@ -241,6 +243,15 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?remoteOffice.targets():suffix.endsWith('/register')?remoteOffice.register(input):suffix.endsWith('/discover')?await remoteOffice.discover(input):suffix.endsWith('/link')?await remoteOffice.link(input):await remoteOffice.action(input);
         reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'REMOTE_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
+    }
+    // Server observation: register an SSH target, discover its services, link groups as Works, refresh on request.
+    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh'].includes(suffix)){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>24000)throw Error('SERVER_REQUEST_TOO_LARGE')}
+        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):await serverOffice.refresh(input);
+        reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
+      }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
     }
     if(['work/migration/discover','work/migration/preview','work/migration/status','work/migration/apply','work/migration/undo'].includes(suffix)){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
@@ -462,8 +473,10 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const address=server.address();if(address===null||typeof address==='string'){store.stopPresence(config.project.id,presence);store.close();throw Error('CONTROL_CENTER_BIND_FAILED');}host=`127.0.0.1:${address.port}`;shortHost=`${CONTROL_SHORT_HOST}:${address.port}`;hosts=controlHosts(address.port);activateReadySupervisor();const heartbeat=setInterval(()=>{try{store.heartbeatPresence(config.project.id,presence);activateReadySupervisor();}catch{}},2_000);heartbeat.unref();
   let lastBoard='',lastKeep=Date.now();const lightTick=setInterval(()=>{if(!lightClients.size)return;try{const board=readWorkBoard(store,config),payload=JSON.stringify({works:board.works,auth_attention_count:board.auth_attention_count});if(payload!==lastBoard){lastBoard=payload;for(const client of lightClients)if(!client.destroyed)client.write(`event: board\ndata: ${JSON.stringify(board)}\n\n`);}if(Date.now()-lastKeep>=15_000){lastKeep=Date.now();for(const client of lightClients)if(!client.destroyed)client.write(': keep-alive\n\n');}}catch{for(const client of lightClients)client.end();lightClients.clear();}},Math.max(1000,poll));lightTick.unref();
   const hermesTick=setInterval(()=>{if(runtimeReady())hermesWork.tick();},1000);hermesTick.unref();
+  // Watched servers are read about every two minutes; a slow or unreachable server never blocks the Control Center.
+  const serverTick=setInterval(()=>{if(runtimeReady())void serverOffice.refreshDue().catch(()=>{});},60_000);serverTick.unref();
   const deliveryTick=setInterval(()=>{if(!runtimeReady()||deliveryJobs.size>=4)return;try{for(const id of results.pendingWorkIds(config.project.id,4-deliveryJobs.size))deliverOutput(id);}catch{/* A failed stored configuration is surfaced by the settings/status route. */}},3000);deliveryTick.unref();
   const maintenanceTick=setInterval(()=>{if(!stopped&&!reloading)void settings.tickMaintenance().catch(()=>{});},60_000);maintenanceTick.unref();
   const maintenanceStartup=setTimeout(()=>{if(!stopped&&!reloading)void settings.tickMaintenance('startup').catch(()=>{});},1000);maintenanceStartup.unref();
-  const close=async()=>{if(stopped)return closed;stopped=true;clearInterval(heartbeat);clearInterval(lightTick);clearInterval(hermesTick);clearInterval(deliveryTick);clearInterval(maintenanceTick);clearTimeout(maintenanceStartup);await settings.close();codingRuntime.close();codingDialog.close();await supervisor.close();await dispatcher.close();await hermesWork.close();await remoteOffice.drain();await Promise.allSettled([...deliveryJobs.values()]);store.stopPresence(config.project.id,presence);for(const client of clients)client.end();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await codingRuntime.drain();await codingDialog.drain();await connections.close();store.close();done()};return {url:`http://${host}/${token}/`,closed,close};
+  const close=async()=>{if(stopped)return closed;stopped=true;clearInterval(heartbeat);clearInterval(lightTick);clearInterval(hermesTick);clearInterval(serverTick);clearInterval(deliveryTick);clearInterval(maintenanceTick);clearTimeout(maintenanceStartup);await settings.close();codingRuntime.close();codingDialog.close();await supervisor.close();await dispatcher.close();await hermesWork.close();await remoteOffice.drain();await Promise.allSettled([...deliveryJobs.values()]);store.stopPresence(config.project.id,presence);for(const client of clients)client.end();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await codingRuntime.drain();await codingDialog.drain();await connections.close();store.close();done()};return {url:`http://${host}/${token}/`,closed,close};
 }

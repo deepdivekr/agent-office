@@ -13,6 +13,7 @@ import {type ProjectScan} from '../work/project-scan.js';
 import {importedCodingReadiness,importedConnectionReadiness,projectJevRecommendations} from '../work/import-runtime.js';
 import {hermesBoardRow,hermesWorkDetail} from '../work/hermes.js';
 import {remoteBoard,remoteDetail} from '../work/remote.js';
+import {serverBoard,serverDetail} from '../work/server-office.js';
 import {workObservation,workTail,shortWorkTitle} from '../work/activity.js';
 import {workDispatchOptions} from '../work/dispatch.js';
 import {supervisorStatus} from '../work/supervisor.js';
@@ -43,8 +44,8 @@ function boardRow(row:OfficeRow){
 export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
   const project=config.project.id;store.expireCodingStages(project);store.expireCodingDialogTurns(project);store.expireCodingDialogAdvice(project);
   const files=store.localFileExplorer(project,dirname(config.dbPath));
-  const works=store.officeWorkSummaries(project,limit).map(row=>{const base=boardRow(row),file=files.activity(row.id);const connection=importedConnectionReadiness(store,config,row.id);return {...base,client:workClientChoice(store,project,row.id),lifecycle:readWorkLifecycle(store,project,row.id),...(connection?{status:connection.state}:{}),...(!base.run&&file?{status:base.paused?'paused':file.status,file_activity:file}:{}),...(hermesBoardRow(store,project,row.id)??{}),...(remoteBoard(store,project,row.id)??{})};});
-  for(const work of works){if(work.lifecycle.state!=='connected'){Object.assign(work,{status:work.lifecycle.state,execution:{live:false,active_workers:0,basis:'office_control_disconnected'}});continue;}const adoption=importedWorkAdoption(store,config,work.id);if(adoption){Object.assign(work,{status:adoption.state,adoption,execution:{live:adoption.live,active_workers:adoption.live?1:0,basis:'original_runtime'}});continue;}if(work.run?.kind==='hermes'||work.run?.kind==='remote')continue;const observation=workObservation(store,project,work.id,String(work.status));Object.assign(work,{status:observation.status,execution:observation});const schedule=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_work_schedule'").get()?new WorkSchedules(store,project).status(work.id):null;if(schedule?.definition)Object.assign(work,{schedule});if(['succeeded','completed'].includes(observation.status)){if(schedule?.enabled)Object.assign(work,{status:'scheduled'});else if(schedule?.state==='disabled')Object.assign(work,{status:'schedule_off'});}const progress=workProgress(store,project,work.id,{status:String(work.status),recurring:Boolean(schedule?.enabled)});Object.assign(work,{progress:{...progress,note:progress.note?clean(progress.note,100):null}});}
+  const works=store.officeWorkSummaries(project,limit).map(row=>{const base=boardRow(row),file=files.activity(row.id);const connection=importedConnectionReadiness(store,config,row.id);return {...base,client:workClientChoice(store,project,row.id),lifecycle:readWorkLifecycle(store,project,row.id),...(connection?{status:connection.state}:{}),...(!base.run&&file?{status:base.paused?'paused':file.status,file_activity:file}:{}),...(hermesBoardRow(store,project,row.id)??{}),...(remoteBoard(store,project,row.id)??{}),...(serverBoard(store,project,row.id)??{})};});
+  for(const work of works){if(work.lifecycle.state!=='connected'){Object.assign(work,{status:work.lifecycle.state,execution:{live:false,active_workers:0,basis:'office_control_disconnected'}});continue;}const adoption=importedWorkAdoption(store,config,work.id);if(adoption){Object.assign(work,{status:adoption.state,adoption,execution:{live:adoption.live,active_workers:adoption.live?1:0,basis:'original_runtime'}});continue;}if(work.run?.kind==='hermes'||work.run?.kind==='remote'||work.run?.kind==='server')continue;const observation=workObservation(store,project,work.id,String(work.status));Object.assign(work,{status:observation.status,execution:observation});const schedule=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_work_schedule'").get()?new WorkSchedules(store,project).status(work.id):null;if(schedule?.definition)Object.assign(work,{schedule});if(['succeeded','completed'].includes(observation.status)){if(schedule?.enabled)Object.assign(work,{status:'scheduled'});else if(schedule?.state==='disabled')Object.assign(work,{status:'schedule_off'});}const progress=workProgress(store,project,work.id,{status:String(work.status),recurring:Boolean(schedule?.enabled)});Object.assign(work,{progress:{...progress,note:progress.note?clean(progress.note,100):null}});}
   const auth_attention_count=authSites(store,config).filter(site=>site.handoff||site.state!=='ready'&&site.state!=='retry_requested').length;
   return {format:1,project_id:project,generated_at:new Date().toISOString(),works,auth_attention_count,read_only:false,coverage:{runtime_only:true,unobserved_work:'not_shown'}};
 }
@@ -59,7 +60,7 @@ export function readWorkTimeline(store:PackStore,config:HostConfig,hours=24,now=
 export function readWorkDetail(store:PackStore,config:HostConfig,id:string){
   const detail=buildWorkDetail(store,config,id);
   const lifecycle=readWorkLifecycle(store,config.project.id,id),connected=lifecycle.state==='connected';
-  const special='hermes' in detail||'remote' in detail;
+  const special='hermes' in detail||'remote' in detail||'server' in detail;
   const status=String(detail.run_status??('work_status' in detail?detail.work_status:null)??'unobserved');
   const observation=special?null:workObservation(store,config.project.id,id,status);
   const supervisor=supervisorStatus(store,config.project.id,id,config),adoption=importedWorkAdoption(store,config,id);
@@ -135,6 +136,7 @@ export function readWorkDetail(store:PackStore,config:HostConfig,id:string){
 }
 function buildWorkDetail(store:PackStore,config:HostConfig,id:string){
   const remote=remoteDetail(store,config.project.id,id);if(remote)return remote;
+  const server=serverDetail(store,config.project.id,id);if(server)return server;
   const hermes=hermesWorkDetail(store,config.project.id,id);if(hermes)return hermes;
   const project=config.project.id;store.expireCodingStages(project);store.expireCodingDialogTurns(project);store.expireCodingDialogAdvice(project);
   const record=store.officeWorkById(project,id);
