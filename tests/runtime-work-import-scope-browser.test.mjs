@@ -29,7 +29,7 @@ test('runtime fixture scoped project import uses real HTTP/storage, bilingual re
  for(const lang of ['ko','en'])for(const width of [1280,390]){
   await page.setViewportSize({width,height:1000});await page.goto(server.url);
   await page.evaluate(({lang})=>{localStorage.setItem('office-lang',lang);localStorage.setItem('office-theme','dark');},{lang});await page.reload();
-  await page.locator('#open-import').click();
+  await page.locator('[data-nav="import"]').click();
   await page.waitForFunction(()=>document.querySelector('#migration-prompt').value.length>0);
   const migrationPrompt=await page.locator('#migration-prompt').inputValue();
   if(lang==='en'){assert.match(migrationPrompt,/Do not run, change or stop the existing automation/u);assert.doesNotMatch(migrationPrompt,/[가-힣]/u);}
@@ -79,7 +79,7 @@ test('runtime fixture scoped project import uses real HTTP/storage, bilingual re
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  }
  // A changed request while a scan is in flight must never revive its old result.
- await page.goto(server.url);await page.locator('#open-import').click();await page.locator('[data-import-route="workflow"]').click();
+ await page.goto(server.url);await page.locator('[data-nav="import"]').click();await page.locator('[data-import-route="workflow"]').click();
  await page.locator('#import-path').fill(project);await page.locator('#import-scope').fill('Old request');
  gate=new Promise(resolve=>{release=resolve;});const before=calls.length;
  await page.locator('#scan-import').click();await page.waitForFunction(()=>document.getElementById('scan-import').disabled);

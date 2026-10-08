@@ -18,7 +18,7 @@ import {authSites,blockedAuthSites} from '../swarm/browser-auth.js';
 import {browserPreferenceSchema} from '../browser/executor-contracts.js';
 import {readOffice} from './office.js';
 import {workHtml} from './work-ui.js';
-import {readWorkBoard,readWorkDetail} from './work-view.js';
+import {readWorkBoard,readWorkDetail,readWorkTimeline} from './work-view.js';
 import {workStartActionSchema,workDefineSchema,workAnswerActionSchema,workReconnectSchema,workPauseActionSchema,workJevSchema} from '../work/contracts.js';
 import {WorkRuntime} from '../work/runtime.js';
 import {WorkDispatcher,workDispatchOptions,workExecuteSchema} from '../work/dispatch.js';
@@ -427,6 +427,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(suffix==='work/import/prompt'){reply(response,200,JSON.stringify(imports.prompt()),'application/json; charset=utf-8');return;}
     if(suffix==='work/client-default'){let settings=null;try{settings=readModelSettings(modelSettingsPath(config));}catch{}reply(response,200,JSON.stringify({client:defaultWorkClient(settings)}),'application/json; charset=utf-8');return;}
     if(suffix==='work/board'){reply(response,200,JSON.stringify(readWorkBoard(store,config)),'application/json; charset=utf-8');return;}
+    if(suffix==='work/timeline'){reply(response,200,JSON.stringify(readWorkTimeline(store,config)),'application/json; charset=utf-8');return;}
     if(suffix==='work/detail'){
       const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
       try{const detail=readWorkDetail(store,config,id);reply(response,200,JSON.stringify({...detail,...runtimeConfiguration(),intake_options:readWorkIntakeOptions(store,config.project.id,id),results:results.capture(config.project.id,id),delivery:results.selection(config.project.id,id),delivery_targets:deliverySettings.publicState().targets}),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;

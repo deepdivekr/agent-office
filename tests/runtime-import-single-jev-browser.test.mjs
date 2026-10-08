@@ -56,7 +56,7 @@ test('runtime fixture single Jev recommendation import UI works without candidat
  await mkdir('tests/evidence/phase68',{recursive:true});
  for(const width of [1280,390]){
   await page.setViewportSize({width,height:1000});await page.goto(server.url,{waitUntil:'domcontentloaded'});
-  await page.locator('#open-import').click();await page.locator('[data-import-route="workflow"]').click();
+  await page.locator('[data-nav="import"]').click();await page.locator('[data-import-route="workflow"]').click();
   await page.locator('#import-path').fill(project);await page.locator('#scan-import').click();
   await page.locator('.jev-recommendation').waitFor();assert.equal(await page.locator('.jev-recommendation').count(),1);
   assert.equal(await page.locator('#import-jev').count(),0);assert.equal(await page.locator('#import-cost').isChecked(),false);
@@ -69,7 +69,7 @@ test('runtime fixture single Jev recommendation import UI works without candidat
   await page.locator('#jev-cost').check();await page.locator('#jev-toggle').click();
   await page.waitForFunction(()=>document.getElementById('jev-toggle')?.textContent==='Jev 끄기');
   await page.locator('#jev-toggle').click();await page.waitForFunction(()=>document.getElementById('jev-toggle')?.textContent==='Jev 켜기');
-  await page.locator('#back').click();await page.locator('#open-import').click();await page.locator('[data-import-route="workflow"]').click();
+  await page.locator('#back').click();await page.locator('[data-nav="import"]').click();await page.locator('[data-import-route="workflow"]').click();
   await page.locator('#import-path').fill(plain);await page.locator('#scan-import').click();await page.locator('#accept-import').waitFor();
   assert.equal(await page.locator('.jev-recommendation').count(),0);assert.equal(await page.locator('#import-cost').count(),0);
   assert.match(await page.locator('#import-preview').innerText(),/Jev 없이 기존 AI와 코드로 진행해요/u);

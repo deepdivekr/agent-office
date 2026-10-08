@@ -160,7 +160,7 @@ test('runtime native Work import and detail retain compact right actions, readab
   for(const width of [1280,375])for(const lang of ['ko','en']){
     const context=await browser.newContext({viewport:{width,height:1000},colorScheme:'dark'}),page=await context.newPage(),errors=[];page.setDefaultTimeout(8000);
     await context.addInitScript(lang=>localStorage.setItem('office-lang',lang),lang);page.on('pageerror',error=>errors.push(error.message));
-    await page.goto(server.url);await page.locator('#open-import').click();await page.locator('#importer').waitFor({state:'visible'});
+    await page.goto(server.url);await page.locator('[data-nav="import"]').click();await page.locator('#importer').waitFor({state:'visible'});
     await compactButtons(page.locator('#import-external .action-grid button'));await rightEdge(page,'#copy-migration-prompt','#import-external');await rightEdge(page,'#paste-import','#import-external');await noOverflow(page);
     await page.locator('[data-import-route=workflow]').click();await compactButtons(page.locator('#scan-import'));await rightEdge(page,'#scan-import','#import-project');
     await page.locator('[data-import-route=hermes]').click();await rightEdge(page,'#migration-discover','#import-hermes');

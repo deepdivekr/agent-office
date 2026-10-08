@@ -21,6 +21,8 @@ import {WorkSchedules} from '../work/schedule.js';
 import {workImportExecutionOwner} from '../work/import-authority.js';
 import {readWorkLifecycle} from '../work/lifecycle.js';
 import {businessSteps,currentStageReports,stageBinding} from '../work/stages.js';
+import {workProgress} from '../work/progress.js';
+import {workTimeline} from '../work/timeline.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
 const verified=(worker:SwarmRunSnapshot['workers'][string])=>worker.status==='succeeded'&&worker.result?.readback?.verified===true&&worker.quality?.accepted===true;
@@ -42,9 +44,16 @@ export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
   const project=config.project.id;store.expireCodingStages(project);store.expireCodingDialogTurns(project);store.expireCodingDialogAdvice(project);
   const files=store.localFileExplorer(project,dirname(config.dbPath));
   const works=store.officeWorkSummaries(project,limit).map(row=>{const base=boardRow(row),file=files.activity(row.id);const connection=importedConnectionReadiness(store,config,row.id);return {...base,client:workClientChoice(store,project,row.id),lifecycle:readWorkLifecycle(store,project,row.id),...(connection?{status:connection.state}:{}),...(!base.run&&file?{status:base.paused?'paused':file.status,file_activity:file}:{}),...(hermesBoardRow(store,project,row.id)??{}),...(remoteBoard(store,project,row.id)??{})};});
-  for(const work of works){if(work.lifecycle.state!=='connected'){Object.assign(work,{status:work.lifecycle.state,execution:{live:false,active_workers:0,basis:'office_control_disconnected'}});continue;}const adoption=importedWorkAdoption(store,config,work.id);if(adoption){Object.assign(work,{status:adoption.state,adoption,execution:{live:adoption.live,active_workers:adoption.live?1:0,basis:'original_runtime'}});continue;}if(work.run?.kind==='hermes'||work.run?.kind==='remote')continue;const observation=workObservation(store,project,work.id,String(work.status));Object.assign(work,{status:observation.status,execution:observation});if(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_work_schedule'").get()){const schedule=new WorkSchedules(store,project).status(work.id);if(schedule?.enabled&&['succeeded','completed'].includes(observation.status))Object.assign(work,{status:'scheduled',schedule});}}
+  for(const work of works){if(work.lifecycle.state!=='connected'){Object.assign(work,{status:work.lifecycle.state,execution:{live:false,active_workers:0,basis:'office_control_disconnected'}});continue;}const adoption=importedWorkAdoption(store,config,work.id);if(adoption){Object.assign(work,{status:adoption.state,adoption,execution:{live:adoption.live,active_workers:adoption.live?1:0,basis:'original_runtime'}});continue;}if(work.run?.kind==='hermes'||work.run?.kind==='remote')continue;const observation=workObservation(store,project,work.id,String(work.status));Object.assign(work,{status:observation.status,execution:observation});const schedule=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_work_schedule'").get()?new WorkSchedules(store,project).status(work.id):null;if(schedule?.definition)Object.assign(work,{schedule});if(['succeeded','completed'].includes(observation.status)){if(schedule?.enabled)Object.assign(work,{status:'scheduled'});else if(schedule?.state==='disabled')Object.assign(work,{status:'schedule_off'});}const progress=workProgress(store,project,work.id,{status:String(work.status),recurring:Boolean(schedule?.enabled)});Object.assign(work,{progress:{...progress,note:progress.note?clean(progress.note,100):null}});}
   const auth_attention_count=authSites(store,config).filter(site=>site.handoff||site.state!=='ready'&&site.state!=='retry_requested').length;
   return {format:1,project_id:project,generated_at:new Date().toISOString(),works,auth_attention_count,read_only:false,coverage:{runtime_only:true,unobserved_work:'not_shown'}};
+}
+
+/** The board's Works over the last hours: one bar per cycle and marks for owner actions, for the timeline view. */
+export function readWorkTimeline(store:PackStore,config:HostConfig,hours=24,now=Date.now()){
+  const from=now-hours*3_600_000,live=new Set(['running','leased','queued','advising','retry_wait','defining']);
+  const works=readWorkBoard(store,config).works.map(work=>({id:work.id,...workTimeline(store,config.project.id,work.id,{from,to:now,running:live.has(String(work.status))})}));
+  return {from:new Date(from).toISOString(),to:new Date(now).toISOString(),works};
 }
 
 export function readWorkDetail(store:PackStore,config:HostConfig,id:string){

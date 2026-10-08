@@ -78,6 +78,8 @@ test('runtime native import entry is visibly linked and import text/actions have
   const server=await startControlCenter(f.config),browser=await chromium.launch({headless:true});t.after(async()=>{await browser.close();await server.close();});
   for(const width of [1280,375]){
     const page=await browser.newPage({viewport:{width,height:1000},colorScheme:'dark'});await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));await page.goto(server.url);
+    // With Work on the board the intake form, and its import link, opens from "+ New work".
+    await page.locator('#new-work').click();
     const link=page.locator('#open-import');const style=await link.evaluate(e=>({color:getComputedStyle(e).color,underline:getComputedStyle(e).textDecorationLine}));assert.equal(style.underline,'underline');assert.equal(style.color,'rgb(111, 168, 220)');
     await link.click();await page.locator('#importer').waitFor({state:'visible'});
     const rowStyle=await page.locator('#import-external .row').first().evaluate(e=>({top:getComputedStyle(e).marginTop,bottom:getComputedStyle(e).marginBottom}));assert.deepEqual(rowStyle,{top:'12px',bottom:'12px'});

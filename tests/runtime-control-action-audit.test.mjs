@@ -77,7 +77,7 @@ test('runtime fixture Work UI: Start records the consent, Jev toggle and pause p
   assert.equal(await x.page.locator('.tile').count(),0);
   await x.page.locator('#search').fill('');
   await x.page.locator('[data-layout="board"]').click();
-  await x.page.locator('[data-view="waiting"]').click();
+  await x.page.locator('[data-view="hold"]').click();
   assert.equal(await x.page.locator('.tile').count(),0);
   await x.page.locator('[data-view="attention"]').click();
   assert.equal(await x.page.locator('.tile').count(),1);
