@@ -72,7 +72,7 @@ test('runtime fixture confirmation tags render on board, list, detail and site l
       return route.continue();
     });
     const expected=lang==='ko'?'사용자 확인 필요':'User confirmation needed';
-    await page.goto(server.url);
+    await page.goto(server.url+'?view=all');
     const tile=page.locator('[data-work="'+id+'"]');
     await tile.locator('.badge').filter({hasText:expected}).waitFor().catch(async error=>{throw Error(error.message+'; fixture badges='+JSON.stringify(await page.locator('.badge').allTextContents())+'; lang='+await page.locator('html').getAttribute('lang'),{cause:error});});
     assert.equal(await tile.locator('.badge').textContent(),expected);

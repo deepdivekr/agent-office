@@ -19,7 +19,7 @@ label{display:block;margin:12px 0 4px;color:var(--dim);font-size:13px}h1,h2,h3,h
 .lbl{font:500 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
 .app{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:100vh;background:linear-gradient(to right,var(--side) 223px,var(--line) 223px 224px,var(--bg) 224px)}
 .side{background:var(--side);padding:22px 14px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow:auto}
-.brand{display:flex;align-items:center;gap:3px;font:600 19px var(--mono);letter-spacing:-.02em;padding:0 6px}.brand i{display:inline-block;width:8px;height:19px;background:var(--accent)}
+.brand{display:flex;align-items:center;gap:3px;font:600 19px var(--mono);letter-spacing:-.02em;padding:0 6px;color:var(--text);text-decoration:none}.brand i{display:inline-block;width:8px;height:19px;background:var(--accent)}
 @media(prefers-reduced-motion:no-preference){.brand i,.caret{animation:ao-blink 1.1s steps(1) infinite}}@keyframes ao-blink{50%{opacity:0}}
 .brand-sub{font:11.5px var(--mono);color:var(--dim);padding:4px 6px 12px}
 .side .sec{font:500 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);padding:14px 8px 6px}
@@ -50,8 +50,9 @@ export type ShellPage='work'|'settings'|'connections';
 /** Sidebar links are plain anchors so every view is one click away and pages stay independent. */
 export function sidebarHtml(page:ShellPage){
   const current=(value:ShellPage)=>page===value?' aria-current="page"':'';
-  return `<aside class="side" aria-label="메뉴"><div class="brand">agent-office<i aria-hidden="true"></i></div><div class="brand-sub">로컬 연결 · MCP</div>
+  return `<aside class="side" aria-label="메뉴"><a class="brand" href="./" aria-label="홈">agent-office<i aria-hidden="true"></i></a><div class="brand-sub">로컬 연결 · MCP</div>
 <div class="sec">업무</div>
+<a class="nav" href="./" data-view="home">홈</a>
 <a class="nav" href="./?view=all" data-view="all">전체<span class="n" data-count="all"></span></a>
 <a class="nav" href="./?view=attention" data-view="attention">확인 필요<span class="n warn" data-count="attention"></span></a>
 <a class="nav" href="./?view=active" data-view="active">실행 중<span class="n" data-count="active"></span></a>
@@ -124,7 +125,7 @@ const scan=root=>{for(const sel of (root.querySelectorAll?root.querySelectorAll(
 const start=()=>{scan(document);new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1){if(n.matches&&n.matches('select[data-slider]'))slider(n);scan(n);}}).observe(document.body,{childList:true,subtree:true});};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();})();`;
 // Which AI apps are connected to Office, from the same check the settings page shows (settings/mcp).
-const agentsCss=`.agents{display:flex;flex-direction:column;gap:2px;padding:2px 8px}.agent{display:flex;align-items:center;gap:9px;padding:3px 0;font:12.5px var(--mono);color:var(--text)}.agent i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}.agent.on i{background:var(--ok)}.agent.warn i{background:var(--accent)}.agent small{margin-left:auto;font-size:11px;color:var(--dim)}`;
+const agentsCss=`.agents{display:flex;flex-direction:column;gap:2px;padding:2px 8px}.agent{display:flex;align-items:center;gap:9px;padding:3px 0;font:12.5px var(--mono);color:var(--text)}.agent i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}.agent.on i{background:var(--ok)}.agent.warn i{background:var(--accent)}.agent small{margin-left:auto;font-size:11px;color:var(--dim)}@media(max-width:760px){.side .agents{display:none}}`;
 const agentsScript=`(()=>{const box=document.getElementById('side-agents');if(!box)return;const names={codex:'Codex',claude:'Claude Code',hermes:'Hermes',opencode:'OpenCode',cursor:'Cursor'},t=(ko,en)=>window.officeCopy?window.officeCopy(ko,en):ko;
 fetch('settings/mcp',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(view=>{if(!view?.clients)return;box.replaceChildren(...view.clients.filter(c=>['codex','claude','hermes'].includes(c.id)||c.registration==='registered').map(c=>{const row=document.createElement('div'),dot=document.createElement('i'),name=document.createElement('span'),note=document.createElement('small'),on=c.installed&&c.registration==='registered';row.className='agent'+(on?' on':c.installed?' warn':'');name.textContent=names[c.id]||c.id;note.textContent=on?'MCP':c.installed?t('미연결','Not connected'):t('설치 안 됨','Not installed');row.title=on?t('Office에 연결됨','Connected to Office'):c.installed?t('설치됨 · Office에 연결 안 됨','Installed · not connected to Office'):t('설치되지 않음','Not installed');row.append(dot,name,note);return row}))}).catch(()=>{});})();`;
 export const uiCss=baseUiCss+pressFeedbackCss+segmentCss+sliderCss+agentsCss;

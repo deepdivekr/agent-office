@@ -116,7 +116,7 @@ test('desktop and mobile Work conversation preserves full reply and sends only a
       }
       return route.fulfill({status:404,body:'not found'});
     });
-    await page.goto('https://office.test/');
+    await page.goto('https://office.test/?view=all');
     await page.locator('.tile').click();
     await page.getByText('Codex 답변').waitFor();
     assert.equal(await page.locator('.coding-answer pre').first().textContent(),reply);
@@ -154,7 +154,7 @@ test('reviewed Git reconciliation is a separate local action and never replays t
     }
     return route.fulfill({status:404,body:'not found'});
   });
-  await page.goto('https://office.test/');await page.locator('.tile').click();
+  await page.goto('https://office.test/?view=all');await page.locator('.tile').click();
   assert.equal(await page.locator('#coding-accept-reconciliation').count(),0);
   await page.locator('#coding-reconcile').click();
   await page.locator('#coding-accept-reconciliation').waitFor();

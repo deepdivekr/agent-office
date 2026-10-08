@@ -48,7 +48,7 @@ test('the timeline layout draws one row per Work with its bars, marks and state,
   const context=await browser.newContext({viewport:{width:1280,height:900}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
   const page=await context.newPage(),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
   await page.route('**/*',route=>{const path=new URL(route.request().url()).pathname;if(path==='/')return route.fulfill({contentType:'text/html',body:workHtml('n')});if(path==='/work/board')return route.fulfill(json(board));if(path==='/work/timeline')return route.fulfill(json(timeline));if(/events/.test(path))return route.abort();return route.fulfill(json({}));});
-  await page.goto('http://office.test/');await page.locator('[data-layout="timeline"]').click();
+  await page.goto('http://office.test/?view=all');await page.locator('[data-layout="timeline"]').click();
   await page.locator('.tl-row[data-work]').waitFor();
   assert.equal(await page.locator('.tl-row[data-work] .bar').count(),2);
   assert.equal(await page.locator('.tl-row[data-work] .bar.problem').count(),1);
