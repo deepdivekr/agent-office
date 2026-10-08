@@ -112,7 +112,7 @@ test('runtime fixture the feed page: pinned needs-you first, then outputs by day
   await page.goto(server.url+'settings');await page.locator('a.brand').click();await page.locator('.post').first().waitFor();
   // The installable app and its push plumbing.
   const html=await (await fetch(server.url)).text(),headers=(await fetch(server.url)).headers.get('content-security-policy');
-  assert.match(html,/<link rel="manifest" href="manifest\.webmanifest">/u);assert.match(headers,/worker-src 'self'/u);assert.match(headers,/manifest-src 'self'/u);
+  assert.match(html,/<link rel="manifest" href="manifest\.webmanifest" crossorigin="use-credentials">/u,'the manifest fetch carries the cookie');assert.match(headers,/worker-src 'self'/u);assert.match(headers,/manifest-src 'self'/u);
   const manifest=await (await fetch(server.url+'manifest.webmanifest')).json(),token=new URL(server.url).pathname;
   assert.deepEqual([manifest.display,manifest.start_url,manifest.scope],['standalone',token,token],'a home screen app starts on the capability path, so it signs itself in');
   const sw=await fetch(server.url+'sw.js');assert.match(sw.headers.get('content-type'),/javascript/u);assert.equal(sw.headers.get('cache-control'),'no-cache');assert.match(await sw.text(),/showNotification/u);
