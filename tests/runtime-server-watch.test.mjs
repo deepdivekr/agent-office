@@ -111,6 +111,7 @@ test('runtime fixture the Control Center registers a server, links its groups an
   assert.deepEqual(await page.locator('.col').evaluateAll(cols=>cols.map(c=>c.querySelectorAll('.tile').length)),[3,0,1,0,0]);
   await page.locator('.tile',{hasText:'chat-relay-bot'}).click();await page.locator('.server-table').waitFor();
   assert.match(await page.locator('.server-table tbody').innerText(),/chat-relay-bot\.service/u);
+  assert.equal(await page.locator('.server-chat #server-chat-input').count(),1,'a server Work has a conversation to direct changes');
   assert.equal(await page.locator('.server-table tbody tr').count(),1,'the unchecked unit is not watched');
   // The name cell holds only the unit; every cell stays on one line and a wide table scrolls sideways, even on a phone.
   const row=page.locator('.server-units .server-table tbody tr').first();
@@ -202,4 +203,35 @@ test('runtime fixture a server Work connects a send record; new rows become feed
   reply={[id]:{error:'OperationalError'}};await office.refreshTarget(target);
   assert.deepEqual(office.setFeed({work_id:web,sources:[{label:'리포트',kind:'sqlite',path:'/var/lib/bot.db',query:'SELECT key AS id, sent_at AS at, payload AS text FROM outbox'}]}).server.feed.map(f=>[f.last_at,f.error]),[['2026-10-09T08:00:00+00:00','OperationalError']],'saving the same source keeps its cursor');
   assert.equal(JSON.parse(store.hermesState.prepare('SELECT snapshot FROM office_server_target WHERE id=?').get(target).snapshot).feed,undefined,'send records are not kept in the snapshot');
+});
+test('runtime fixture a server Work conversation: the first message starts a session that knows the server, later ones continue it, its turns are read back',async t=>{
+  const {mkdtemp,rm,mkdir,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js'),{ServerChat}=await import('../dist/work/server-chat.js'),{enableClientRun,disableClientRun}=await import('../dist/work/client-run.js');
+  enableClientRun();t.after(()=>disableClientRun());
+  const root=await mkdtemp(join(tmpdir(),'office-server-chat-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig),roots={claude:join(root,'claude'),codex:join(root,'codex')};
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
+  const office=new ServerOffice(store,config,{async snapshot(){return sample;}});
+  const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:2222});await office.discover({target_id:target});
+  const {work_ids:[web]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop web',units:['shop-web.service']}]});
+  const session='11111111-2222-4333-8444-555555555555',runs=[];let release;
+  const run=async request=>{runs.push(request);request.onSession(session);
+    const dir=join(roots.claude,'-office-server-chat');await mkdir(dir,{recursive:true});
+    await writeFile(join(dir,session+'.jsonl'),[{type:'user',cwd:request.folder,timestamp:'2026-10-09T00:00:00Z',message:{role:'user',content:'리포트에 국내 소식이 섞여요'}},{type:'assistant',timestamp:'2026-10-09T00:01:00Z',message:{role:'assistant',content:[{type:'tool_use',name:'Bash',input:{command:'ssh -p 2222 root@203.0.113.7 cat /opt/bot/news.py'}},{type:'text',text:'필터를 넣고 백업해 뒀어요.'}]}}].map(l=>JSON.stringify(l)).join('\n'));
+    await new Promise(resolve=>release=resolve);release=null;return {completed:true};};
+  const finish=async()=>{while(!release)await new Promise(resolve=>setTimeout(resolve,10));release();await new Promise(resolve=>setTimeout(resolve,30));};
+  const chat=new ServerChat(store,config,roots,run,()=>'claude');
+  assert.deepEqual(chat.view(web),{client:'claude',messages:[],sending:false,can_send:true});
+  assert.deepEqual(chat.send({work_id:web,text:'리포트에 국내 소식이 섞여요'}),{accepted:true,client:'claude'});
+  const first=runs[0];assert.equal(first.session,null,'the first message starts a session');
+  assert.match(first.prompt,/ssh -p 2222 root@203\.0\.113\.7/u);assert.match(first.prompt,/shop-web\.service/u);assert.match(first.prompt,/백업/u);assert.match(first.prompt,/리포트에 국내 소식이 섞여요$/u);
+  assert.match(first.folder,/work-folders\/.+\/server-chat$/u);
+  assert.throws(()=>chat.send({work_id:web,text:'하나 더'}),/SESSION_BUSY/u,'one message at a time');
+  await finish();
+  const view=chat.view(web);assert.equal(view.sending,false);
+  assert.deepEqual(view.messages.map(m=>[m.role,m.text]),[['user','리포트에 국내 소식이 섞여요'],['tool','Bash · ssh -p 2222 root@203.0.113.7 cat /opt/bot/news.py'],['assistant','필터를 넣고 백업해 뒀어요.']]);
+  chat.send({work_id:web,text:'재시작도 해 줘'});
+  assert.deepEqual([runs[1].session,runs[1].prompt],[{id:session,resume:true},'재시작도 해 줘'],'later messages continue the same session as written');
+  await finish();
+  assert.throws(()=>chat.send({work_id:'00000000-0000-4000-8000-000000000000',text:'x'}));
 });

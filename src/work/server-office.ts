@@ -55,6 +55,9 @@ export function serverBoard(store:PackStore,project:string,id:string){
   return {status,run:{kind:'server',id,status},pack:null,has_contract:true,server:{target:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,stale,counts:health?.counts??null,problems:health?.problems.slice(0,3)??[],off:health?.off.length??0,units:view.units.length}};
 }
 
+/** The server and units a server Work watches, for a conversation that works on them. */
+export function serverWorkContext(store:PackStore,project:string,id:string){const view=watched(store,project,id);return view?{target:view.definition,units:view.units,title:store.officeWorkById(project,id).title}:null;}
+
 /** Detail for a server Work: every watched unit with its last observed state. */
 export function serverDetail(store:PackStore,project:string,id:string){
   const view=watched(store,project,id);if(!view)return null;const {status,health,stale}=judge(view);

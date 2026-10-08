@@ -20,6 +20,7 @@ import {readOffice} from './office.js';
 import {workHtml} from './work-ui.js';
 import {setWorkHidden} from '../work/hidden.js';
 import {WorkPush} from '../work/push.js';
+import {ServerChat} from '../work/server-chat.js';
 import {FeedPushWatcher} from './feed-push.js';
 import {readWorkBoard,readWorkDetail,readFeed,readWorkTimeline} from './work-view.js';
 import {workStartActionSchema,workDefineSchema,workAnswerActionSchema,workReconnectSchema,workPauseActionSchema,workJevSchema} from '../work/contracts.js';
@@ -39,7 +40,7 @@ import {RemoteOffice} from '../work/remote.js';
 import {ServerOffice} from '../work/server-office.js';
 import {type ServerProbe} from '../integrations/server-ssh.js';
 import {AddressImport} from '../work/import-address.js';
-import {SessionMirror,type SessionRoots} from '../work/session-mirror.js';
+import {SessionMirror,defaultSessionRoots,type SessionRoots} from '../work/session-mirror.js';
 import {type RemoteTransport} from '../integrations/remote-openclaw.js';
 import {WorkSupervisor,supervisorActionSchema,supervisorStatus} from '../work/supervisor.js';
 import {WorkResults,type WorkResult} from '../work/results.js';
@@ -141,7 +142,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const fileRoutes=new FileExplorerRoutes(store.localFileExplorer(config.project.id,dirname(config.dbPath)));
   const hermesWork=new HermesWorkRuntime(store,config,options.hermes);
   const migrations=new HermesMigrationRuntime(store,config);
-  const push=new WorkPush(store,config),pushWatcher=new FeedPushWatcher(store,config,push);
+  const push=new WorkPush(store,config),pushWatcher=new FeedPushWatcher(store,config,push),serverChat=new ServerChat(store,config,options.sessions??defaultSessionRoots());
   const sessionMirror=new SessionMirror(store,config,options.sessions,options.sessions?.temporary??false),addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,(id,text)=>serverNotice(id,text));
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
   const deliverySettings=WorkDeliverySettings.fromConfig(config),results=new WorkResults(store,[],deliverySettings,()=>workDelegation(config).notify);
@@ -266,6 +267,14 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):suffix.endsWith('/feed')?serverOffice.setFeed(input):await serverOffice.refresh(input);
         reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
+    }
+    // A conversation with the owner's AI app about a server Work's services; the app works on the server over SSH.
+    if(suffix==='work/server/chat'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>12000)throw Error('SERVER_REQUEST_TOO_LARGE');}if(rejectStopped())return;
+        reply(response,200,JSON.stringify(serverChat.send(JSON.parse(body))),'application/json; charset=utf-8');
+      }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8');}return;
     }
     // Push to the owner's devices: the page subscribes through its browser's push service.
     if(suffix==='push/key'&&request.method==='GET'){reply(response,200,JSON.stringify({public_key:push.publicKey(),devices:push.count()}),'application/json; charset=utf-8');return;}
@@ -498,7 +507,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     }
     if(suffix==='work/detail'){
       const id=url.searchParams.get('id');if(!id||id.length>128){reply(response,400,'work id required');return;}
-      try{const detail=readWorkDetail(store,config,id);reply(response,200,JSON.stringify({...detail,...runtimeConfiguration(),intake_options:readWorkIntakeOptions(store,config.project.id,id),results:results.capture(config.project.id,id),delivery:results.selection(config.project.id,id),delivery_targets:deliverySettings.publicState().targets}),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;
+      try{const detail=readWorkDetail(store,config,id);reply(response,200,JSON.stringify({...detail,...('server' in detail&&detail.server?{chat:serverChat.view(id)}:{}),...runtimeConfiguration(),intake_options:readWorkIntakeOptions(store,config.project.id,id),results:results.capture(config.project.id,id),delivery:results.selection(config.project.id,id),delivery_targets:deliverySettings.publicState().targets}),'application/json; charset=utf-8');}catch{reply(response,404,'work not found');}return;
     }
     if(suffix==='work/events'){
       if(request.method!=='GET'){reply(response,405,'method not allowed');return;}
