@@ -40,13 +40,17 @@ export function threadFromRecords(input:ThreadInput):WorkThread{
     // The cycle starts when its trigger happened; without one it continues from the previous reply.
     return {result_id:r.id,at:r.created_at,since:started?.at??previous,trigger:started?{kind:started.kind,text:started.text}:{kind:'continued' as const,text:null},title:firstLine(r.summary),files:r.artifacts.map(a=>basename(a.label)).slice(0,8),status:r.source_status,verified:r.verification==='verified',tools:0};
   }).reverse();
-  const log=input.events.filter(e=>!/^(?:tool|model)\./u.test(e.kind)).map(e=>{
+  return {turns,items,log:refinedLog(input.events)};
+}
+
+/** Office's own log of a Work without tool and model events, in the order given. The home screen shows its newest lines. */
+export function refinedLog(events:EventRow[]):WorkThread['log']{
+  return events.filter(e=>!/^(?:tool|model)\./u.test(e.kind)).map(e=>{
     const s=status(e);
     const path:Path|null=owner.test(e.kind)?'human':e.kind==='supervisor.verification.calls'?'llm':e.kind==='result.saved'||e.kind==='supervisor.verification'||e.kind.startsWith('delivery.')?'code':e.kind.includes('jev')?'jev':null;
     const problem=Boolean(s&&(s==='failed'||needsOwner.has(s)))||['delivery.failed','delivery.blocked','delivery.reconciliation_required'].includes(e.kind);
     return {at:e.created_at,kind:e.kind,text:firstLine(e.summary.replace(/^[a-z_]+ · /u,'')),path,problem};
   });
-  return {turns,items,log};
 }
 
 /** The Work's thread for the detail screen: the last 30 replies (the most WorkResults.list returns) and the log since the oldest of them. */

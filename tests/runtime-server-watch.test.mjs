@@ -104,7 +104,7 @@ test('runtime fixture the Control Center registers a server, links its groups an
   await page.locator('#server-discover').click();await page.locator('.server-group').first().waitFor();
   assert.deepEqual(await page.locator('.sg-name').evaluateAll(n=>n.map(i=>i.value)),['chat-relay-bot','ledger','notes-bot','shop-web']);
   await page.locator('[data-pick="web-session.service"]').uncheck();
-  await page.locator('#server-link').click();await page.locator('.htile').nth(3).waitFor();assert.equal(await page.locator('.htile').count(),4,'home shows each server Work');
+  await page.locator('#server-link').click();await page.locator('.htile.server .hrow').nth(3).waitFor();assert.deepEqual([await page.locator('.htile').count(),await page.locator('.htile.server .hrow').count()],[1,4],'home shows the server in one cell with a row per server Work');
   await page.locator('[data-view="all"]').click();await page.locator('.tile').first().waitFor();
   assert.equal(await page.locator('.col .tile').count(),4);
   // shop-sync's last run failed and notes-browser failed: those two groups need the owner; the others are healthy.
