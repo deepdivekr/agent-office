@@ -7,7 +7,7 @@
 
 Nothing fails silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 
-**English** · [한국어](README.ko.md) · [v0.4.0 release notes](docs/releases/v0.4.0.md)
+**English** · [한국어](README.ko.md) · [v0.5.0 release notes](docs/releases/v0.5.0.md)
 
 It is also a local MCP server, so Codex, Claude Code, Cursor, OpenCode, Hermes or another MCP client can hand it work.
 Install and run it as `agent-office`. The old `agent-driver` command remains a compatibility alias.
@@ -31,7 +31,7 @@ A real run of a made-up sample task (summarise a three-month sales log into `rep
 
 ## Supported environments
 
-See [Work operation](docs/work-operation.md) for the execution loop and [release verification](docs/release-readiness-v0.4.0.md) for tested scope and remaining limits.
+See [Work operation](docs/work-operation.md) for the execution loop and [release verification](docs/release-readiness-v0.5.0.md) for tested scope and remaining limits.
 
 | Environment | Status |
 |---|---|
@@ -52,7 +52,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.4.0/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.5.0/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
@@ -195,7 +195,7 @@ Installations with private workflow code need a [compatibility review](docs/loca
 - Queued Work does not allocate a VM per task. Active browsers and model CLIs consume additional resources.
 - Keep local connection tokens, API keys, and private workflow data out of shared files.
 
-[Release validation](docs/release-readiness-v0.4.0.md) · [AI settings](docs/control-settings.md) · [Browser routing](docs/browser-executor-routing.md) · [Memory and process lifecycle](docs/mcp-resource-lifecycle.md)
+[Release validation](docs/release-readiness-v0.5.0.md) · [AI settings](docs/control-settings.md) · [Browser routing](docs/browser-executor-routing.md) · [Memory and process lifecycle](docs/mcp-resource-lifecycle.md)
 
 ## Development and license
 

@@ -38,9 +38,9 @@ try{
   const baselineSource=join(base,'source');
   await run('git',['clone','--quiet','--no-hardlinks','--no-tags',repo,baselineSource]);
   for(const baseline of ['v0.1.0','v0.1.1','v0.2.0','v0.3.0'])await run('git',['-C',baselineSource,'fetch','--quiet','--no-tags','origin',`refs/tags/${baseline}:refs/tags/${baseline}`]);
-  // The immediately previous public version may not have been fetched into
+  // The public versions under the agent-office name may not have been fetched into
   // this development checkout. Keep that tag in the disposable clone only.
-  await run('git',['-C',baselineSource,'fetch','--quiet','--no-tags','https://github.com/deepdivekr/agent-office.git','refs/tags/v0.3.1:refs/tags/v0.3.1']);
+  for(const baseline of ['v0.3.1','v0.4.0'])await run('git',['-C',baselineSource,'fetch','--quiet','--no-tags','https://github.com/deepdivekr/agent-office.git',`refs/tags/${baseline}:refs/tags/${baseline}`]);
   if(!published){
     source=baselineSource;
     // Public release tags may already exist on later CI runs. Do not import
@@ -52,9 +52,9 @@ try{
     env.AGENT_DRIVER_ALLOW_LOCAL_FIXTURE='1';
   }
   env.AGENT_DRIVER_REPOSITORY_URL=source;
-  for(const scenario of ['upgrade-0.1.0','upgrade-0.1.1','upgrade-0.2.0','upgrade-0.3.0','upgrade-0.3.1','fresh']){
+  for(const scenario of ['upgrade-0.1.0','upgrade-0.1.1','upgrade-0.2.0','upgrade-0.3.0','upgrade-0.3.1','upgrade-0.4.0','fresh']){
     const baseline=scenario.startsWith('upgrade-')?scenario.slice('upgrade-'.length):null;
-    const sameIdentity=baseline==='0.3.1';
+    const sameIdentity=baseline==='0.3.1'||baseline==='0.4.0';
     const home=join(base,scenario);await mkdir(home);
     const installed=join(home,'.local/share/agent-office'),legacyInstalled=sameIdentity?installed:join(home,'.local/share/agent-driver'),state=join(home,!baseline||sameIdentity?'.agent-office':'.agent-driver');
     const childEnv={...env,HOME:home,AGENT_DRIVER_CONNECTION_ROOT:state};
