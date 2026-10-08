@@ -4,8 +4,9 @@ import {type IncomingMessage,type ServerResponse} from 'node:http';
 export const pretendardAsset='fonts/pretendard-1.3.9.woff2';
 export const iconAsset='icon-180.png';
 export const serviceWorkerAsset='sw.js';
-// The app icon for the phone home screen (iOS takes PNG only) and the browser tab, and the name under it.
-export const iconHead=`<link rel="icon" type="image/png" href="${iconAsset}"><link rel="apple-touch-icon" href="${iconAsset}"><meta name="apple-mobile-web-app-title" content="Agent Office"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#101317">`;
+// The app icon for the phone home screen (iOS takes PNG only) and the browser tab, and the name under it. The manifest
+// is fetched with the cookie (use-credentials): on a cookie address it is behind the capability like the page.
+export const iconHead=`<link rel="icon" type="image/png" href="${iconAsset}"><link rel="apple-touch-icon" href="${iconAsset}"><meta name="apple-mobile-web-app-title" content="Agent Office"><link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials"><meta name="theme-color" content="#101317">`;
 // The service worker is checked for updates on every load; the rest never changes under its name.
 const assets:Record<string,{file:string;type:string;fresh?:boolean}>={[pretendardAsset]:{file:'fonts/PretendardVariable.woff2',type:'font/woff2'},[iconAsset]:{file:'icons/agent-office-180.png',type:'image/png'},'icon-512.png':{file:'icons/agent-office-512.png',type:'image/png'},[serviceWorkerAsset]:{file:'sw.js',type:'text/javascript; charset=utf-8',fresh:true}};
 const loaded=new Map<string,Promise<Buffer>>();

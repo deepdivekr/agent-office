@@ -174,6 +174,9 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     // tailscale serve terminates HTTPS for a tailnet name, so that page's origin is https://<name>: the same page the checks below expect as http://<name>.
     if(onTailnet&&request.headers.origin===`https://${requestHost}`)request.headers.origin=`http://${requestHost}`;
     const url=new URL(request.url??'/',`http://${requestHost}`),base=`/${token}/`;let suffix:string;
+    // The app icon carries nothing private, and a phone fetches it without the page's cookie when it adds Office to its home screen.
+    const icon=({'/icon-180.png':'icon-180.png','/icon-512.png':'icon-512.png','/apple-touch-icon.png':'icon-180.png','/apple-touch-icon-precomposed.png':'icon-180.png'} as Record<string,string>)[url.pathname];
+    if(icon&&await serveUiAsset(request,response,icon))return;
     if(url.pathname.startsWith(base)){suffix=url.pathname.slice(base.length);
       // A page opened through the capability path on the short host or a tailnet name keeps the token in a host-only cookie and continues at the short address.
       if((requestHost===shortHost||onTailnet)&&request.method==='GET'&&!/[/.]/u.test(suffix)&&String(request.headers.accept??'').includes('text/html')){response.writeHead(303,{'set-cookie':`${CAPABILITY_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict${onTailnet?'; Secure':''}`,location:`/${suffix}${url.search}`,'cache-control':'no-store'});response.end();return;}
@@ -185,7 +188,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     try{
     if(await serveUiAsset(request,response,suffix))return;
     // The installable app: its start address carries the capability, because a phone's home screen app keeps its own cookies.
-    if(suffix==='manifest.webmanifest'&&request.method==='GET'){const cookieHost=requestHost===shortHost||onTailnet;reply(response,200,JSON.stringify({name:'Agent Office',short_name:'Office',start_url:`/${token}/`,scope:cookieHost?'/':`/${token}/`,display:'standalone',background_color:'#101317',theme_color:'#101317',icons:[{src:'icon-180.png',sizes:'180x180',type:'image/png'},{src:'icon-512.png',sizes:'512x512',type:'image/png',purpose:'any'}]}),'application/manifest+json; charset=utf-8');return;}
+    if(suffix==='manifest.webmanifest'&&request.method==='GET'){const cookieHost=requestHost===shortHost||onTailnet;reply(response,200,JSON.stringify({name:'Agent Office',short_name:'Agent Office',start_url:`/${token}/`,scope:cookieHost?'/':`/${token}/`,display:'standalone',background_color:'#101317',theme_color:'#101317',icons:[{src:'icon-180.png',sizes:'180x180',type:'image/png'},{src:'icon-512.png',sizes:'512x512',type:'image/png',purpose:'any'}]}),'application/manifest+json; charset=utf-8');return;}
     if(rejectStopped())return;
     if(suffix==='learned/status'){
       if(request.method!=='GET'){reply(response,405,'method not allowed');return;}

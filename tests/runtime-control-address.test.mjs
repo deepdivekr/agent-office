@@ -96,8 +96,11 @@ test('runtime native the app icon is served behind the capability like the font,
   const icon=await new Promise((resolve,reject)=>{const target=new URL(x.server.url+'icon-180.png');httpRequest({hostname:'127.0.0.1',port:target.port,path:target.pathname},response=>{const chunks=[];response.on('data',c=>chunks.push(c));response.on('end',()=>resolve({status:response.statusCode,type:response.headers['content-type'],body:Buffer.concat(chunks)}));}).on('error',reject).end();});
   assert.deepEqual([icon.status,icon.type,icon.body.subarray(1,4).toString()],[200,'image/png','PNG']);
   for(const page of ['','settings','connections']){const html=(await send(x.server.url+page,{headers:{accept:'text/html'}})).text;
-    assert.match(html,/<link rel="apple-touch-icon" href="icon-180\.png">/u,page);assert.match(html,/<meta name="apple-mobile-web-app-title" content="Agent Office">/u,page);}
-  assert.equal((await send(new URL('/icon-180.png',x.server.url).href)).status,404,'not outside the capability');
+    assert.match(html,/<link rel="apple-touch-icon" href="icon-180\.png">/u,page);assert.match(html,/<link rel="manifest" href="manifest\.webmanifest" crossorigin="use-credentials">/u,page);assert.match(html,/<meta name="apple-mobile-web-app-title" content="Agent Office">/u,page);}
+  // A phone fetches the icon without the page's cookie when it adds Office to its home screen; the icon is public, the manifest is not.
+  for(const path of ['/icon-180.png','/apple-touch-icon.png','/icon-512.png'])assert.equal((await send(new URL(path,x.server.url).href)).status,200,path);
+  assert.equal((await send(new URL('/manifest.webmanifest',x.server.url).href)).status,404,'the manifest carries the capability, so it stays behind it');
+  assert.equal((await send(new URL('/icon-180.png',x.server.url).href,{host:'untrusted.test'})).status,403);
 });
 
 test('connect tells a person where to open Office: the short address here and, with Tailscale, a QR code and the phone address to scan or copy',async()=>{

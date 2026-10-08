@@ -24,6 +24,10 @@ test('runtime fixture Hide takes a Work off the feed, the board and the counts i
   assert.deepEqual([await page.locator('[data-count="all"]').innerText(),await page.locator('[data-count="hidden"]').innerText()],['1','1']);
   await page.locator('[data-view="all"]').click();await page.locator('.tile').first().waitFor();
   assert.deepEqual(await page.locator('.tile').evaluateAll(n=>n.map(t=>t.dataset.work)),[shown]);
+  // On a phone a list row stacks: the title gets the line, column headers are not drawn.
+  await page.locator('[data-layout="list"]').click();await page.setViewportSize({width:390,height:844});
+  const row=await page.locator('.rows .tile').first().evaluate(t=>({title:t.querySelector('strong').getBoundingClientRect().width,head:getComputedStyle(document.querySelector('.list-head')).display,fits:document.documentElement.scrollWidth<=innerWidth}));
+  assert.ok(row.title>150&&row.head==='none'&&row.fits,JSON.stringify(row));await page.setViewportSize({width:1280,height:900});await page.locator('[data-layout="board"]').click();
   await page.locator('[data-view="hidden"]').click();await page.waitForFunction(()=>document.querySelectorAll('.tile').length===1);
   assert.deepEqual(await page.locator('.tile').evaluateAll(n=>n.map(t=>t.dataset.work)),[personal],'the Hidden view holds only hidden Works');
   await page.locator('.tile[data-work="'+personal+'"]').click();await page.locator('[data-work-hide="show"]').click();await page.locator('[data-work-hide="hide"]').waitFor();
