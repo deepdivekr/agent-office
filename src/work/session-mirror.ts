@@ -31,7 +31,7 @@ function readRange(file:string,start:number,length:number){const fd=openSync(fil
 /** The first lines of a session file (a large one is read in part). */
 function head(file:string,bytes=131_072){const size=statSync(file).size;const text=readRange(file,0,Math.min(size,bytes));return (size>bytes?text.slice(0,text.lastIndexOf('\n')):text).split('\n').filter(Boolean);}
 /** The last lines of a session file, without the partial first one. */
-function tail(file:string,bytes=1_048_576){const size=statSync(file).size,start=Math.max(0,size-bytes),text=readRange(file,start,size-start);return (start?text.slice(text.indexOf('\n')+1):text).split('\n').filter(Boolean);}
+export function tail(file:string,bytes=1_048_576){const size=statSync(file).size,start=Math.max(0,size-bytes),text=readRange(file,start,size-start);return (start?text.slice(text.indexOf('\n')+1):text).split('\n').filter(Boolean);}
 const parse=(line:string)=>{try{const value=JSON.parse(line);return value&&typeof value==='object'?value as Record<string,any>:null;}catch{return null;}};
 // System text the clients put in the user's turn (reminders, local command output, environment notes) is not the owner's.
 const ownerText=(text:unknown)=>typeof text==='string'&&text.trim()&&!/^\s*</u.test(text)?text.trim():null;
