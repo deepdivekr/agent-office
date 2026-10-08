@@ -57,7 +57,7 @@ test('runtime fixture Pretendard renders Korean on Work, settings and connection
   for(const width of [1440,390])for(const suffix of ['', detailSuffix,'settings','connections']){
     await page.setViewportSize({width,height:1000});await page.goto(server.url+suffix);
     if(suffix===detailSuffix)await page.getByRole('heading',{name:'주간 기술 소식',exact:true}).waitFor();
-    else if(!suffix)await page.locator('.tile').waitFor();
+    else if(!suffix)await page.locator('.htile').waitFor();
     await page.locator('h1').waitFor({state:'visible'});
     await page.evaluate(async()=>{await document.fonts.load('600 20px "Pretendard Variable"','업무 연결 설정');await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});
     assert.equal(await page.evaluate(()=>[...document.fonts].some(f=>f.family==='Pretendard Variable'&&f.status==='loaded')),true);

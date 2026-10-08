@@ -23,8 +23,10 @@ import {WorkSchedules} from '../work/schedule.js';
 import {workImportExecutionOwner} from '../work/import-authority.js';
 import {readWorkLifecycle} from '../work/lifecycle.js';
 import {businessSteps,currentStageReports,stageBinding} from '../work/stages.js';
-import {workProgress} from '../work/progress.js';
+import {workProgress,type WorkProgress} from '../work/progress.js';
 import {workTimeline} from '../work/timeline.js';
+import {refinedLog} from '../work/thread.js';
+import {imageType,type WorkResults} from '../work/results.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
 const verified=(worker:SwarmRunSnapshot['workers'][string])=>worker.status==='succeeded'&&worker.result?.readback?.verified===true&&worker.quality?.accepted===true;
@@ -39,7 +41,7 @@ function boardRow(row:OfficeRow){
   const intake=row.intake_status===null?null:{status:row.intake_status,revision:row.intake_revision??0,mode:row.mode,paused:Boolean(row.paused)};
   const run=row.source_id?{kind:row.source_kind,id:row.source_id,status:row.source_kind==='pack'?row.pack_status:['coding','coding_dialog'].includes(row.source_kind??'')?row.coding_status:row.swarm_status}:null;
   const state=intake?.paused?'paused':run?.status??intake?.status??'unobserved';
-  return {id:row.id,title:shortWorkTitle(row.title),full_title:clean(row.title,160),pack:row.pack_family??null,status:state,work_status:intake?.status??null,run,run_revision:row.run_revision,updated_at:row.display_updated_at,has_contract:Boolean(intake),paused:Boolean(intake?.paused)};
+  return {id:row.id,title:shortWorkTitle(row.title),full_title:clean(row.title,160),pack:row.pack_family??null,status:state,work_status:intake?.status??null,run,run_revision:row.run_revision,created_at:row.created_at,updated_at:row.display_updated_at,has_contract:Boolean(intake),paused:Boolean(intake?.paused)};
 }
 
 export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
@@ -49,6 +51,32 @@ export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
   for(const work of works){if(work.lifecycle.state!=='connected'){Object.assign(work,{status:work.lifecycle.state,execution:{live:false,active_workers:0,basis:'office_control_disconnected'}});continue;}const adoption=importedWorkAdoption(store,config,work.id);if(adoption){Object.assign(work,{status:adoption.state,adoption,execution:{live:adoption.live,active_workers:adoption.live?1:0,basis:'original_runtime'}});continue;}if(work.run?.kind==='hermes'||work.run?.kind==='remote'||work.run?.kind==='server'||work.run?.kind==='session')continue;const observation=workObservation(store,project,work.id,String(work.status));Object.assign(work,{status:observation.status,execution:observation});const schedule=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_work_schedule'").get()?new WorkSchedules(store,project).status(work.id):null;if(schedule?.definition)Object.assign(work,{schedule});if(['succeeded','completed'].includes(observation.status)){if(schedule?.enabled)Object.assign(work,{status:'scheduled'});else if(schedule?.state==='disabled')Object.assign(work,{status:'schedule_off'});}const progress=workProgress(store,project,work.id,{status:String(work.status),recurring:Boolean(schedule?.enabled)});Object.assign(work,{progress:{...progress,note:progress.note?clean(progress.note,100):null}});}
   const auth_attention_count=authSites(store,config).filter(site=>site.handoff||site.state!=='ready'&&site.state!=='retry_requested').length;
   return {format:1,project_id:project,generated_at:new Date().toISOString(),works,auth_attention_count,read_only:false,coverage:{runtime_only:true,unobserved_work:'not_shown'}};
+}
+
+/**
+ * The home screen: one cell per Work with what the owner reads at a glance. Its state (schedule, stop reason, the
+ * newest event while it runs), its latest output (the delivered text, up to four images, an attached conversation's
+ * last reply or a server Work's health) and the last three lines of Office's own log. Built from stored records only;
+ * the cell's sentence is composed by the page so it follows the page language.
+ */
+export function readWorkFeed(store:PackStore,config:HostConfig,results:WorkResults){
+  const project=config.project.id,hasActivity=Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get());
+  const recent=hasActivity?store.hermesState.prepare('SELECT kind,summary,created_at,metadata FROM office_activity WHERE project_id=? AND work_id=? ORDER BY id DESC LIMIT 60'):null;
+  return {generated_at:new Date().toISOString(),items:readWorkBoard(store,config).works.map(work=>{
+    const events=recent?(recent.all(project,work.id) as Array<{kind:string;summary:string;created_at:string;metadata:string|null}>).map(e=>({...e,summary:clean(e.summary,300)})):[];
+    // readWorkBoard adds these with Object.assign, after the row type is fixed.
+    const added=work as typeof work&{schedule?:ReturnType<WorkSchedules['status']>;progress?:WorkProgress};
+    const schedule=added.schedule?{enabled:Boolean(added.schedule.enabled),state:added.schedule.state,definition:added.schedule.definition,next_run_at:added.schedule.next_run_at??null}:null;
+    const base={id:work.id,title:work.title,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),created_at:work.created_at,updated_at:work.updated_at,client:work.client?.id??null,
+      schedule,note:added.progress?.note??null,last_event:events[0]?refinedLog([{...events[0],kind:'event'}])[0]!:null,log:refinedLog(events).slice(0,3)};
+    if('server' in work&&work.server)return {...base,server:work.server,output:null};
+    if('session' in work&&work.session){const last=sessionDetail(store,project,work.id)?.session.messages.filter(m=>m.role==='assistant').at(-1);return {...base,session:{client:work.session.client,last:last?clean(last.text,800):null,at:last?.at??null},output:null};}
+    let latest;try{latest=results.list(project,work.id,1)[0];}catch{latest=undefined;}
+    if(!latest)return {...base,output:null};
+    const images=latest.artifacts.filter(a=>a.download_available&&imageType(a.label)).slice(0,4).map(a=>({artifact_id:a.id,label:a.label}));
+    return {...base,output:{result_id:latest.id,at:latest.created_at,status:latest.source_status,verified:latest.work_completion_verified,text:clean(latest.delivery_text||latest.text||latest.summary,800),images,files:latest.artifacts.length,
+      deliveries:latest.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))}};
+  })};
 }
 
 /** The board's Works over the last hours: one bar per cycle and marks for owner actions, for the timeline view. */

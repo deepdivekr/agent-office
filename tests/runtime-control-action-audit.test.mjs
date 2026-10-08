@@ -70,6 +70,7 @@ test('runtime fixture Work UI: Start records the consent, Jev toggle and pause p
   assert.equal((await read()).supervisor.current_run_only,false,'The UI approval delegates (B1): the run is not limited to this one execution.');
   await x.page.locator('#stage-close').click();
   await x.page.locator('#back').click();
+  await x.page.locator('[data-view="all"]').click();
   await x.page.locator('[data-layout="list"]').click();
   await x.page.locator('.tile').waitFor();
   assert.equal(await x.page.locator('.tile').count(),1);

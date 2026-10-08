@@ -15,7 +15,7 @@ import {importHermesWork} from '../dist/work/hermes.js';
 async function assertDisclosures(page,minimum){
   const values=await page.locator('details>summary').evaluateAll(items=>items.map(s=>({color:getComputedStyle(s).color,underline:getComputedStyle(s).textDecorationLine})));
   assert.ok(values.length>=minimum);
-  const light=await page.evaluate(()=>document.documentElement.dataset.theme==='light'||!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme:light)').matches);
+  const light=await page.evaluate(()=>document.documentElement.dataset.theme==='light');
   assert.ok(values.every(s=>s.color===(light?'rgb(47, 111, 174)':'rgb(111, 168, 220)')&&s.underline==='underline'),JSON.stringify(values));
 }
 

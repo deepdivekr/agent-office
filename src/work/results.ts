@@ -1,7 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {constants} from 'node:fs';
 import {open,realpath} from 'node:fs/promises';
-import {basename,dirname,extname,isAbsolute,relative,resolve,sep} from 'node:path';
+import {basename,dirname,isAbsolute,relative,resolve,sep} from 'node:path';
 import {z} from 'zod';
 import {type PackStore} from '../packs/store.js';
 import {assertWorkConnected,readWorkLifecycle} from './lifecycle.js';
@@ -49,6 +49,8 @@ const boundedJson=(value:unknown)=>safe(JSON.stringify(value,null,2)??'',24000);
 const table=(store:PackStore,name:string)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
 
 /** Work outputs are durable receipts. Publishing one never marks the Work complete. */
+/** An image type from a file name; SVG is left out, since it can carry script. */
+export function imageType(name:string){const ext=/\.([a-z0-9]+)$/iu.exec(name)?.[1]?.toLowerCase();return ext==='png'?'image/png':ext==='jpg'||ext==='jpeg'?'image/jpeg':ext==='gif'?'image/gif':ext==='webp'?'image/webp':null;}
 export class WorkResults {
   private readonly connectors:Map<string,ResultDeliveryConnector>;
   constructor(readonly store:PackStore,connectors:ResultDeliveryConnector[]=[],readonly settings?:WorkDeliverySettings,private readonly notifyLevel:()=>NotifyLevel=()=>'results'){
@@ -246,11 +248,11 @@ export class WorkResults {
     const claim=db.prepare("UPDATE office_result_delivery SET status='sending',attempts=attempts+1,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND status IN ('pending','failed')").run(at(),deliveryId,revision);requireCondition(claim.changes===1,'RESULT_DELIVERY_ALREADY_CLAIMED');
     this.activity(project,workId,'delivery.sending','저장한 결과를 보내는 중이에요.');
     // The pictures the result made go with it to a channel that shows them; one the host cannot reread intact is left out.
-    const images:DeliveryImage[]=[],imageTypes:Record<string,string>={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif'};
+    const images:DeliveryImage[]=[];
     // A saved artifact may carry no media type (a client run's files did not); the file name decides then.
-    const imageType=(artifact:WorkResultArtifact)=>/^image\/(?:png|jpeg|webp|gif)$/u.test(artifact.media_type??'')?artifact.media_type!:artifact.media_type?null:imageTypes[extname(artifact.label).toLowerCase()]??null;
-    for(const artifact of result.artifacts.filter(item=>item.download_available&&imageType(item)&&(item.bytes??0)<=10*1024*1024).slice(0,10)){
-      try{const file=await this.readArtifact(project,workId,resultId,artifact.id,[dirname(this.store.databasePath)]);images.push({name:artifact.label,media_type:imageType(artifact)!,bytes:file.bytes});}catch{/* left out */}
+    const deliverable=(artifact:WorkResultArtifact)=>/^image\/(?:png|jpeg|webp|gif)$/u.test(artifact.media_type??'')?artifact.media_type!:artifact.media_type?null:imageType(artifact.label);
+    for(const artifact of result.artifacts.filter(item=>item.download_available&&deliverable(item)&&(item.bytes??0)<=10*1024*1024).slice(0,10)){
+      try{const file=await this.readArtifact(project,workId,resultId,artifact.id,[dirname(this.store.databasePath)]);images.push({name:artifact.label,media_type:deliverable(artifact)!,bytes:file.bytes});}catch{/* left out */}
     }
     let outcome:Awaited<ReturnType<ResultDeliveryConnector['send']>>;
     let timer:NodeJS.Timeout|undefined;
@@ -301,6 +303,6 @@ export class WorkResults {
     const artifact=(JSON.parse(String(row.body)).artifacts as Array<{id:string;path:string;label:string;sha256:string;bytes:number|null;media_type:string|null}>).find(value=>value.id===artifactId);requireCondition(artifact&&isAbsolute(artifact.path),'RESULT_ARTIFACT_NOT_FOUND');
     const delegated=await Promise.all(roots.filter(isAbsolute).map(root=>realpath(root))),resolved=await realpath(artifact.path);
     requireCondition(delegated.some(root=>{const path=relative(root,resolved);return path!==''&&!isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep);}), 'RESULT_ARTIFACT_OUT_OF_SCOPE');
-    const handle=await open(resolved,constants.O_RDONLY|constants.O_NOFOLLOW);try{const stat=await handle.stat();requireCondition(stat.isFile()&&stat.size<=16*1024*1024,'RESULT_ARTIFACT_SIZE_INVALID');requireCondition(artifact.bytes===null||artifact.bytes===stat.size,'RESULT_ARTIFACT_CHANGED');const bytes=await handle.readFile();requireCondition(sha(bytes)===artifact.sha256,'RESULT_ARTIFACT_CHANGED');return {bytes,filename:basename(resolve(resolved)).replace(/[\r\n"\\]/gu,'_'),media_type:artifact.media_type??'application/octet-stream',sha256:artifact.sha256};}finally{await handle.close();}
+    const handle=await open(resolved,constants.O_RDONLY|constants.O_NOFOLLOW);try{const stat=await handle.stat();requireCondition(stat.isFile()&&stat.size<=16*1024*1024,'RESULT_ARTIFACT_SIZE_INVALID');requireCondition(artifact.bytes===null||artifact.bytes===stat.size,'RESULT_ARTIFACT_CHANGED');const bytes=await handle.readFile();requireCondition(sha(bytes)===artifact.sha256,'RESULT_ARTIFACT_CHANGED');return {bytes,filename:basename(resolve(resolved)).replace(/[\r\n"\\]/gu,'_'),media_type:artifact.media_type??imageType(artifact.label)??'application/octet-stream',sha256:artifact.sha256};}finally{await handle.close();}
   }
 }

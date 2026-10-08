@@ -26,18 +26,18 @@ test('runtime native theme changes immediately without losing a draft and persis
   const {page,server,errors}=await setup(t),posts=[],bootstrapRequests=new Set();
   page.on('request',request=>{if(request.method()==='POST')posts.push(request);});
   await page.goto(server.url);
-  await color(page,light);
-  await page.locator('#prompt').fill('Keep this unsent work draft');
-  await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
+  // Dark is the default even when the system asks for light.
   await color(page,dark);
+  await page.locator('#prompt').fill('Keep this unsent work draft');
+  await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
+  await color(page,light);
   assert.equal(await page.locator('#prompt').inputValue(),'Keep this unsent work draft');
-  assert.equal(await page.evaluate(()=>localStorage.getItem('office-theme')),'dark');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('office-theme')),'light');
   assert.deepEqual(posts.map(request=>request.url()),[]);
   await page.emulateMedia({colorScheme:'dark'});
-  await page.emulateMedia({colorScheme:'light'});
-  await color(page,dark);
+  await color(page,light);
   await page.reload();
-  await color(page,dark);
+  await color(page,light);
   for(const route of ['settings','connections','']){
     // Settings performs one read-only connection probe on initialization. Bind
     // that exact request to this navigation instead of blaming asynchronous
@@ -45,25 +45,26 @@ test('runtime native theme changes immediately without losing a draft and persis
     const bootstrap=route==='settings'?page.waitForRequest(request=>request.method()==='POST'&&request.url()===server.url+'settings/refresh'):null;
     await page.goto(server.url+route);
     if(bootstrap)bootstrapRequests.add(await bootstrap);
-    await color(page,dark);
-    assert.equal(await page.getByRole('button',{name:'Switch to light mode',exact:true}).count(),1);
+    await color(page,light);
+    assert.equal(await page.getByRole('button',{name:'Switch to dark mode',exact:true}).count(),1);
   }
-  await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
-  await page.emulateMedia({colorScheme:'dark'});
-  await color(page,light);
+  await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
+  await page.emulateMedia({colorScheme:'light'});
+  await color(page,dark);
   await page.reload();
-  await color(page,light);
+  await color(page,dark);
   assert.equal(bootstrapRequests.size,1);
   assert.deepEqual(posts.filter(request=>!bootstrapRequests.has(request)).map(request=>request.url()),[]);
   assert.deepEqual(errors,[]);
 });
 
-test('runtime native theme follows the system until chosen and ignores invalid saved values',async t=>{
+test('runtime native theme stays dark until chosen whatever the system asks and ignores invalid saved values',async t=>{
   const {context,page,server,errors}=await setup(t);
   await context.addInitScript(()=>{localStorage.setItem('office-theme','invalid-theme');});
   await page.goto(server.url+'settings');
-  await color(page,light);
+  await color(page,dark);
   await page.emulateMedia({colorScheme:'dark'});
+  await page.emulateMedia({colorScheme:'light'});
   await color(page,dark);
   await page.getByRole('button',{name:'Switch to light mode',exact:true}).focus();
   await page.keyboard.press('Enter');
@@ -79,11 +80,11 @@ test('runtime native theme remains usable when browser storage is denied',async 
     for(const name of ['getItem','setItem'])Object.defineProperty(Storage.prototype,name,{value(){throw new DOMException('Storage denied','SecurityError');}});
   });
   await page.goto(server.url+'settings');
-  await color(page,light);
-  await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
   await color(page,dark);
   await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
   await color(page,light);
+  await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
+  await color(page,dark);
   assert.deepEqual(errors,[]);
 });
 
@@ -92,12 +93,12 @@ test('runtime native theme syncs tabs and keeps localized controls visible on a 
   await page.goto(server.url+'settings');
   const other=await context.newPage();
   await other.goto(server.url+'connections');
-  await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
-  await color(other,dark);
+  await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
+  await color(other,light);
   await page.locator('#lang-toggle').click();
   await page.getByRole('heading',{name:'연결 및 설정',exact:true}).waitFor();
-  await color(page,dark);
-  assert.equal(await page.getByRole('button',{name:'라이트 모드로 전환',exact:true}).count(),1);
+  await color(page,light);
+  assert.equal(await page.getByRole('button',{name:'다크 모드로 전환',exact:true}).count(),1);
   for(const route of ['settings','connections','']){
     await page.goto(server.url+route);
     const theme=await page.locator('#theme-toggle').boundingBox(),lang=await page.locator('#lang-toggle').boundingBox();
@@ -106,10 +107,8 @@ test('runtime native theme syncs tabs and keeps localized controls visible on a 
     assert.ok(lang.x+lang.width<=theme.x);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   }
-  await page.getByRole('button',{name:'라이트 모드로 전환',exact:true}).click();
-  await color(other,light);
+  // Clearing the choice in another tab returns both to the dark default.
   await page.evaluate(()=>localStorage.removeItem('office-theme'));
-  await other.emulateMedia({colorScheme:'dark'});
   await color(other,dark);
   assert.deepEqual(errors,[]);
 });

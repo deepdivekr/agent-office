@@ -74,7 +74,7 @@ test('board uses a short Work title and detail retains the full instruction',asy
   const server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
   t.after(async()=>{await browser.close();await server.close()});
   const page=await koPage(browser,{viewport:{width:1280,height:800}});
-  await page.goto(server.url);
+  await page.goto(server.url+'?view=all');
   await page.locator('.tile strong').waitFor();
   const short=await page.locator('.tile strong').textContent();
   assert.ok(short.length<80);
@@ -93,7 +93,7 @@ test('minimal Work desk shows live stage truth without visual previews or invent
   const x=await setup(t),run=begin(x),server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
   t.after(async()=>{await browser.close();await server.close()});
   const page=await koPage(browser,{viewport:{width:1280,height:850}});
-  await page.goto(server.url);
+  await page.goto(server.url+'?view=all');
   await page.locator('.tile').waitFor();
   assert.equal(await page.locator('.tile').count(),1);
   await page.locator('.tile').click();

@@ -7,7 +7,7 @@ import {workHtml} from '../dist/observability/work-ui.js';
 
 test('runtime fixture semantic stage activity is labeled as dated history without changing timeline event meaning',async t=>{
   const server=createServer((req,res)=>{
-    if(req.url==='/'){res.writeHead(200,{'content-type':'text/html'});res.end(workHtml('fixture'));return;}
+    if(req.url.split('?')[0]==='/'){res.writeHead(200,{'content-type':'text/html'});res.end(workHtml('fixture'));return;}
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({works:[],targets:[],default_target_ids:['app']}));
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -25,7 +25,7 @@ test('runtime fixture semantic stage activity is labeled as dated history withou
   ]){
     const page=await browser.newPage({viewport:{width:390,height:844}});
     await page.addInitScript(value=>localStorage.setItem('office-lang',value),lang);
-    await page.goto(base+'/');
+    await page.goto(base+'/?view=all');
     // The empty board renders after its fetch; inject the card only then so that render cannot replace it.
     await page.locator('#app .empty').waitFor();
     const rendered=await page.evaluate(value=>{

@@ -20,6 +20,7 @@ async function fixture(t,{language='ko',width=1280,reject=null}={}){
     if(request.method==='GET'){
       if(path===''){response.writeHead(200,{'content-type':'text/html'});response.end(workHtml('lifecycle-fixture'));return}
       if(path==='work/board'){json(response,board());return}
+      if(path==='work/feed'){json(response,{generated_at:board().generated_at,items:board().works.map(w=>({id:w.id,title:w.title,status:w.status,kind:'work',updated_at:w.updated_at,client:null,output:null}))});return}
       if(path==='work/detail'){json(response,value);return}
       if(path==='settings/status'){json(response,{work_model_data:{editable:true,approved:true}});return}
       if(path==='work/events'){response.writeHead(200,{'content-type':'text/event-stream'});streams.add(response);emit();response.on('close',()=>streams.delete(response));return}

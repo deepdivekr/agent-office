@@ -82,7 +82,7 @@ test('runtime fixture the import pane analyses an address and creates the chosen
   await page.locator('.addr-card').first().waitFor({timeout:15000});
   assert.equal(await page.locator('.addr-card').count(),2);
   assert.deepEqual(await page.locator('[data-address-pick]').evaluateAll(n=>n.map(i=>i.checked)),[true,false]);
-  await page.locator('#import-address-attach').click();await page.locator('.tile').first().waitFor({timeout:15000});
+  await page.locator('#import-address-attach').click();await page.locator('.htile',{hasText:'매일 새 글 정리'}).waitFor({timeout:5000});
   const store=new PackStore(config.dbPath);const titles=store.officeWorkSummaries(config.project.id,10).map(w=>w.title);store.close();
   assert.deepEqual(titles,['매일 새 글 정리']);
   await page.locator('[data-nav="import"]').click();await page.fill('#import-address-value','ops@203.0.113.7');await page.locator('#import-address-start').click();
