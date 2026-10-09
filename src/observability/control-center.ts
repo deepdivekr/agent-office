@@ -1,7 +1,8 @@
 import {serveUiAsset} from './ui-assets.js';
 import {defaultWorkClient} from '../work/client-run.js';
 import {FileExplorerRoutes} from './files-http.js';
-import {dirname} from 'node:path';
+import {dirname,join} from 'node:path';
+import {pruneWorkFolders} from '../work/storage.js';
 import {createReadStream} from 'node:fs';
 import {inlineType} from '../work/artifact-kind.js';
 import {randomBytes,randomUUID} from 'node:crypto';
@@ -586,6 +587,10 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   }catch{/* left for the owner in the Work */}};
   // The first look waits for holders to beat after a start.
   const reprepareTimer=setInterval(reprepare,60_000);reprepareTimer.unref();setTimeout(reprepare,20_000).unref();
+  // Old runs' working files are cleared once a day, the first time ten minutes after a start; what the owner reads stays.
+  const prune=()=>{if(stopped)return;try{const report=pruneWorkFolders(join(dirname(config.dbPath),'work-folders'));
+    for(const [work,r] of Object.entries(report.works))try{workActivity(store,config.project.id,work,'storage.pruned',`지난 실행의 작업 파일 ${r.files}개(${(r.freed_bytes/1048576).toFixed(1)}MB)를 정리했어요. 결과물과 기록은 그대로예요.`);}catch{/* a Work no longer here */}}catch{/* next day */}};
+  const pruneTimer=setInterval(prune,24*3_600_000);pruneTimer.unref();setTimeout(prune,10*60_000).unref();
   const heartbeat=setInterval(()=>{try{store.heartbeatPresence(config.project.id,presence);activateReadySupervisor();}catch{}},2_000);heartbeat.unref();
   let lastBoard='',lastKeep=Date.now();const lightTick=setInterval(()=>{if(!lightClients.size)return;try{const board=readWorkBoard(store,config),payload=JSON.stringify({works:board.works,auth_attention_count:board.auth_attention_count});if(payload!==lastBoard){lastBoard=payload;for(const client of lightClients)if(!client.destroyed)client.write(`event: board\ndata: ${JSON.stringify(board)}\n\n`);}if(Date.now()-lastKeep>=15_000){lastKeep=Date.now();for(const client of lightClients)if(!client.destroyed)client.write(': keep-alive\n\n');}}catch{for(const client of lightClients)client.end();lightClients.clear();}},Math.max(1000,poll));lightTick.unref();
   const hermesTick=setInterval(()=>{if(runtimeReady())hermesWork.tick();},1000);hermesTick.unref();
@@ -603,5 +608,5 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const deliveryTick=setInterval(()=>{if(!runtimeReady()||deliveryJobs.size>=4)return;try{for(const id of results.pendingWorkIds(config.project.id,4-deliveryJobs.size))deliverOutput(id);}catch{/* A failed stored configuration is surfaced by the settings/status route. */}},3000);deliveryTick.unref();
   const maintenanceTick=setInterval(()=>{if(!stopped&&!reloading)void settings.tickMaintenance().catch(()=>{});},60_000);maintenanceTick.unref();
   const maintenanceStartup=setTimeout(()=>{if(!stopped&&!reloading)void settings.tickMaintenance('startup').catch(()=>{});},1000);maintenanceStartup.unref();
-  const close=async()=>{if(stopped)return closed;stopped=true;clearInterval(heartbeat);clearInterval(reprepareTimer);clearInterval(lightTick);clearInterval(hermesTick);clearInterval(serverTick);clearInterval(pushTick);addressImport.close();clearInterval(deliveryTick);clearInterval(maintenanceTick);clearTimeout(maintenanceStartup);await settings.close();codingRuntime.close();codingDialog.close();await supervisor.close();await dispatcher.close();await hermesWork.close();await remoteOffice.drain();await Promise.allSettled([...deliveryJobs.values()]);store.stopPresence(config.project.id,presence);for(const client of clients)client.end();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await codingRuntime.drain();await codingDialog.drain();await connections.close();store.close();done()};return {url:`http://${host}/${token}/`,closed,close};
+  const close=async()=>{if(stopped)return closed;stopped=true;clearInterval(heartbeat);clearInterval(reprepareTimer);clearInterval(pruneTimer);clearInterval(lightTick);clearInterval(hermesTick);clearInterval(serverTick);clearInterval(pushTick);addressImport.close();clearInterval(deliveryTick);clearInterval(maintenanceTick);clearTimeout(maintenanceStartup);await settings.close();codingRuntime.close();codingDialog.close();await supervisor.close();await dispatcher.close();await hermesWork.close();await remoteOffice.drain();await Promise.allSettled([...deliveryJobs.values()]);store.stopPresence(config.project.id,presence);for(const client of clients)client.end();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await codingRuntime.drain();await codingDialog.drain();await connections.close();store.close();done()};return {url:`http://${host}/${token}/`,closed,close};
 }
