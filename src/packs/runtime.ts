@@ -464,7 +464,12 @@ export class FamilyRuntime {
         const observedAt=source.evidence.at(-1)?.observed_at;
         requireCondition(observedAt,'WATCH_OBSERVATION_MISSING');
         const observation={cycle:cycle+1,rows:source.rows,evidence:source.evidence,observed_at:observedAt,before,after};
-        const settled=this.store.settleWatch(this.config.project.id,run.id,cycle+1,after,changed?'changed':before.error?'recovered':null,{before,after,evidence:source.evidence,external_notifications_sent:0},observation);
+        // A change keeps the rows on both sides (the last observation, else the first collection) so it can be shown as
+        // what changed, not only that the digest did.
+        const checkpoint=(this.store.packExecution(this.config.project.id,run.id)?.checkpoint??{}) as {watch_tick?:{rows?:unknown};sources?:Record<string,{result?:{rows?:unknown}}|null>};
+        const priorRaw=Array.isArray(checkpoint.watch_tick?.rows)?checkpoint.watch_tick.rows as Row[]:Object.entries(checkpoint.sources??{}).sort(([a],[b])=>Number(a)-Number(b)).flatMap(([,item])=>Array.isArray(item?.result?.rows)?item.result.rows as Row[]:[]);
+        const sides=changed&&priorRaw.length?{rows_before:deduplicate(applyFilters(priorRaw,recipe.filters),recipe.deduplicate_by).slice(0,50),rows_after:rows.slice(0,50)}:{};
+        const settled=this.store.settleWatch(this.config.project.id,run.id,cycle+1,after,changed?'changed':before.error?'recovered':null,{before,after,evidence:source.evidence,external_notifications_sent:0,...sides},observation);
         processed.push({run_id:run.id,status:settled?changed?'changed':'unchanged':'not_recorded',cycle:cycle+1,evidence:settled?source.evidence:[]});
       }catch(error){const code=safeError(error);this.store.settleWatch(this.config.project.id,run.id,cycle+1,{...before,error:code},before.error===code?null:'unavailable',{error:code});processed.push({run_id:run.id,status:'unavailable',cycle:cycle+1});}
     }

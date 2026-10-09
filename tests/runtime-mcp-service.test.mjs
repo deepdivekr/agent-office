@@ -103,14 +103,14 @@ test('runtime contract shared service isolates client sampling and human elicita
   const bindings=new Map();
   RuntimeApi.prototype.attachClientSampling=function(sampling){bindings.set(this,sampling);originalAttach.call(this,sampling);};
   const approvals=[];
-  RuntimeApi.prototype.call=async function(name,args){if(name!=='runtime_health')return originalCall.call(this,name,args);const approval=this.packs.providers.approval;approvals.push(approval);return {sample:await bindings.get(this).call('design','return test identity',{},{}),elicitation:await approval.client.elicitInput({mode:'form',message:'Test connection isolation only',requestedSchema:{type:'object',properties:{label:{type:'string'}}}})};};
+  RuntimeApi.prototype.call=async function(name,args){if(name!=='runtime_health')return originalCall.call(this,name,args);const approval=this.packs.providers.approval;approvals.push(approval);return {sample:await bindings.get(this).call('design','return test identity',{},{}),elicitation:await approval.channel.client.elicitInput({mode:'form',message:'Test connection isolation only',requestedSchema:{type:'object',properties:{label:{type:'string'}}}})};};
   cleanup(()=>{RuntimeApi.prototype.attachClientSampling=originalAttach;RuntimeApi.prototype.call=originalCall;});
   const service=await startMcpService(path,{token});cleanup(()=>service.close());
   const a=await connect(service.url,token,'A',{sampling:{},elicitation:{form:{}}}),b=await connect(service.url,token,'B',{sampling:{},elicitation:{form:{}}});
   for(const [c,label]of[[a,'A'],[b,'B']]){c.client.setRequestHandler(CreateMessageRequestSchema,async()=>({role:'assistant',model:'test-model',content:{type:'text',text:JSON.stringify({label})},stopReason:'endTurn'}));c.client.setRequestHandler(ElicitRequestSchema,async()=>({action:'accept',content:{label}}));await c.open();}
   cleanup(async()=>{await a.close().catch(()=>{});await b.close().catch(()=>{});});
   const [ar,br]=await Promise.all([a.client.callTool({name:'runtime_health',arguments:{}}),b.client.callTool({name:'runtime_health',arguments:{}})]);
-  assert.equal(JSON.parse(ar.content[0].text).sample.label,'A');assert.equal(JSON.parse(br.content[0].text).sample.label,'B');assert.notEqual(approvals[0],approvals[1]);
+  assert.equal(JSON.parse(ar.content[0].text).sample.label,'A');assert.equal(JSON.parse(br.content[0].text).sample.label,'B');assert.notEqual(approvals[0].channel,approvals[1].channel);assert.equal(approvals[0].feed,approvals[1].feed,'the feed holder is shared by the service');
   assert.equal(JSON.parse(ar.content[0].text).elicitation.content.label,'A');assert.equal(JSON.parse(br.content[0].text).elicitation.content.label,'B');
   await a.close();assert.equal(JSON.parse((await b.client.callTool({name:'runtime_health',arguments:{}})).content[0].text).sample.label,'B');
 });

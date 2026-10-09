@@ -133,6 +133,7 @@ test('runtime native monitor.watch persists across restart, emits one local chan
   let api=x.api();const started=await api.call('runtime_pack_run',{request_id:'watch-1',recipe:watch});assert.equal(started.status,'watching');api.close();await api.drain();
   await writeFile(x.data,JSON.stringify([{id:'flight',route:'ICN-NRT',price:90}]));api=x.api();
   const tick=await api.packs.tick(Date.now()+61000);assert.equal(tick.processed[0].status,'changed');let events=await api.call('runtime_pack_events',{after:0,limit:10});assert.equal(events.events.length,1);assert.equal(events.events[0].kind,'changed');assert.equal(events.events[0].body.external_notifications_sent,0);
+  assert.deepEqual([events.events[0].body.rows_before,events.events[0].body.rows_after],[[{id:'flight',route:'ICN-NRT',price:100}],[{id:'flight',route:'ICN-NRT',price:90}]],'a change keeps the rows on both sides');
   const duplicate=await api.packs.tick(Date.now()+122000);assert.equal(duplicate.processed[0].status,'unchanged');events=await api.call('runtime_pack_events',{after:0,limit:10});assert.equal(events.events.length,1);
   await api.call('runtime_pack_watch_pause',{run_id:started.run_id,paused:true});const paused=await api.packs.tick(Date.now()+200000);assert.deepEqual(paused.processed,[]);
 });

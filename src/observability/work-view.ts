@@ -120,7 +120,7 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
 /** The questions a Work waits on, for answering in the feed. */
 function ownerQuestions(store:PackStore,project:string,workId:string,status:string){
   if(status!=='awaiting_details')return {};
-  try{const work=store.intakeWork(project,workId);return {revision:work.revision,questions:(work.questions as Array<{id:string;prompt:string;options:Array<{id:string;label:string;detail?:string}>;recommended_id?:string;required?:boolean}>).filter(q=>!work.answers[q.id]).map(q=>({id:q.id,prompt:q.prompt,recommended_id:q.recommended_id??null,required:q.required!==false,options:q.options.map(o=>({id:o.id,label:o.label,needs_value:Boolean(o.detail)}))}))};}catch{return {};}
+  try{const work=store.intakeWork(project,workId);return {revision:work.revision,questions:(work.questions as Array<{id:string;prompt:string;options:Array<{id:string;label:string;detail?:string}>;recommended_id?:string;required?:boolean}>).filter(q=>!work.answers[q.id]).map(q=>({id:q.id,prompt:q.prompt,recommended_id:q.recommended_id??null,required:q.required!==false,options:q.options.map(o=>({id:o.id,label:o.label,needs_value:Boolean(o.detail),...(o.detail?{value_hint:o.detail}:{})}))}))};}catch{return {};}
 }
 /** A monitor's one line: when it last looked, when it looks next, and what it has found. */
 function watchStatus(store:PackStore,project:string,workId:string){
@@ -130,13 +130,13 @@ function watchStatus(store:PackStore,project:string,workId:string){
   const last=store.hermesState.prepare('SELECT kind FROM family_event WHERE run_id=? ORDER BY id DESC LIMIT 1').get(row.run_id) as {kind:string}|undefined;
   return {watch:{next_at:new Date(Number(row.next_ms)).toISOString(),checked_at:row.observed_at,paused:Boolean(row.paused),changes:Number(changes.n),last_change_at:changes.at,failing:last?.kind==='unavailable'}};
 }
-function changeSummary(body:{before?:unknown;after?:unknown;evidence?:unknown},config:HostConfig){
+function changeSummary(body:{before?:unknown;after?:unknown;evidence?:unknown;rows_before?:unknown;rows_after?:unknown},config:HostConfig){
   const lowest=(value:unknown)=>{const minima=(value as {minima?:Record<string,unknown>}|null)?.minima;const numbers=minima?Object.values(minima).filter((n):n is number=>typeof n==='number'&&Number.isFinite(n)):[];return numbers.length?Math.min(...numbers):null;};
   const before=lowest(body.before),after=lowest(body.after);
   const evidence=(Array.isArray(body.evidence)?body.evidence:[]) as Array<{source_id?:string;rows?:Array<Record<string,unknown>>}>,seen=evidence.find(item=>Array.isArray(item.rows)&&item.rows.length);
   const header=seen?Object.keys(seen.rows![0]!).slice(0,8):[];
   const source=seen?.source_id?config.packs?.sources.find(item=>item.id===seen.source_id):undefined,url=source&&'url' in source&&/^https:\/\/[^{}\s]+$/u.test(source.url)?source.url:null;
-  return {lowest_before:before!==null&&after!==null&&before!==after?before:null,lowest_after:before!==null&&after!==null&&before!==after?after:null,
+  return {diff:rowDiff(body.rows_before,body.rows_after),lowest_before:before!==null&&after!==null&&before!==after?before:null,lowest_after:before!==null&&after!==null&&before!==after?after:null,
     header:header.map(key=>clean(key,80)),rows:seen?seen.rows!.slice(0,5).map(row=>header.map(key=>clean(typeof row[key]==='string'?row[key] as string:JSON.stringify(row[key]??''),120))):[],total_rows:seen?.rows?.length??0,url};
 }
 
@@ -297,4 +297,21 @@ function buildWorkDetail(store:PackStore,config:HostConfig,id:string){
   // The steps an imported automation came with (review 2026-10-04: the spec plan can hold a later replan's steps).
   const importRecord=store.workImportForWork(project,id),importBody=importRecord?.kind==='pasted'?importRecord.body as {steps?:Array<{goal?:unknown}>}:null,imported_steps=Array.isArray(importBody?.steps)?{steps:importBody.steps.map(step=>({goal:String(step.goal??'')})).filter(step=>step.goal)}:null;
   return {format:1,id,client:workClientChoice(store,project,id),imported_steps,imported_connection:connection,file_activity:fileActivity,title:clean(record.title,160),goal:clean(record.goal,2000),prompt:intake?clean(intake.prompt,8000):null,work_status:intake?.status??null,mode:intake?.mode??null,revision:intake?.revision??null,paused:Boolean(intake?.paused||control?.paused),jev:intake?{enabled:intake.jev_enabled,cost_consent_at:intake.jev_cost_consent_at,optional:true,can_change:['ready','running'].includes(intake.status)}:null,jev_recommendations:jevRecommendations,jev_recommendation_status:jevRecommendationStatus,work_plan:workPlan,context_metrics:intake?workContextMetrics(store,project,id):null,imported_plan:importedPlan,imported_coding:importedCodingReadiness(store,config,id),coding_attach:codingAttach,coding_dialog:codingDialog,spec:intake?.spec??null,questions:intake?.questions??[],answers:intake?.answers??{},route:spec?.route??null,pack,run_id:latest?.source_id??null,run_status:runStatus,runs,swarm,coding,agent_count:stages.filter(stage=>stage.status==='leased'||stage.status==='running').length,verified_steps:verifiedSteps,total_steps:stages.length,progress_percent:progress,progress_basis:swarm?'독립 확인과 품질 승인된 단계만 계산':coding?'단계 실행·검증 완료 기준이며 업무 완료 조건은 별도 확인':'이 실행 경로는 단계별 독립 검증 진행률을 제공하지 않음',stages,control,work_control:workControl,events,updated_at:record.updated_at,completion_verified:false,completion_note:'Run 성공은 Work의 모든 완료조건 충족을 자동으로 뜻하지 않습니다.'};
+}
+
+/**
+ * What a monitor's change changed, row by row: rows are matched by their first column; a matched row shows the cells
+ * that differ with their old value, an unmatched one is new or gone. Null when the rows on either side are not known.
+ */
+function rowDiff(beforeRows:unknown,afterRows:unknown){
+  if(!Array.isArray(beforeRows)||!Array.isArray(afterRows))return null;
+  const rows=(list:unknown[])=>list.filter((row):row is Record<string,unknown>=>Boolean(row)&&typeof row==='object'&&!Array.isArray(row));
+  const before=rows(beforeRows),after=rows(afterRows),header=Object.keys(after[0]??before[0]??{}).slice(0,8);if(!header.length)return null;
+  const text=(value:unknown)=>clean(typeof value==='string'?value:JSON.stringify(value??''),120),key=(row:Record<string,unknown>)=>text(row[header[0]!]);
+  const old=new Map(before.map(row=>[key(row),row])),seen=new Set<string>(),changes:Array<{kind:'added'|'removed'|'changed';cells:Array<{value:string;old?:string}>}>=[];
+  for(const row of after){const id=key(row),prior=old.get(id);seen.add(id);
+    if(!prior)changes.push({kind:'added',cells:header.map(h=>({value:text(row[h])}))});
+    else if(header.some(h=>text(row[h])!==text(prior[h])))changes.push({kind:'changed',cells:header.map(h=>text(row[h])===text(prior[h])?{value:text(row[h])}:{value:text(row[h]),old:text(prior[h])})});}
+  for(const row of before)if(!seen.has(key(row)))changes.push({kind:'removed',cells:header.map(h=>({value:text(row[h])}))});
+  return {header:header.map(h=>clean(h,80)),changes:changes.slice(0,8),total:changes.length};
 }

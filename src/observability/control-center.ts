@@ -299,9 +299,9 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
       try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>8192)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
         const raw=JSON.parse(body) as unknown;let value:unknown;
-        if(suffix==='work/approval'){const decided=feedApprovals.decide(raw);let resumed=false;
+        if(suffix==='work/approval'){const decided=await feedApprovals.decide(raw);let resumed=false;
           // An approval lets the Work go on: it runs the approved snapshot once and reads it back.
-          if(decided.decision==='approve'&&decided.work_id)try{supervisor.action({work_id:decided.work_id,revision:store.intakeWork(config.project.id,decided.work_id).revision,action:'resume'});resumed=true;}catch{/* the owner resumes it in the Work */}
+          if(decided.decision==='approve'&&decided.applied&&decided.work_id)try{supervisor.action({work_id:decided.work_id,revision:store.intakeWork(config.project.id,decided.work_id).revision,action:'resume'});resumed=true;}catch{/* the owner resumes it in the Work */}
           value={...decided,resumed};}
         else{const press=suffix==='work/app/run'?appRunInput.parse(raw):null,input=press??appApproveInput.parse(raw);
           const file=await results.artifactFile(config.project.id,input.work_id,input.result_id,input.artifact_id,[dirname(config.dbPath),config.project.worktree]);
@@ -566,7 +566,18 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const bind=(port:number)=>new Promise<void>((resolve,reject)=>{const failed=(error:Error)=>reject(error);server.once('error',failed);server.listen(port,'127.0.0.1',()=>{server.off('error',failed);resolve();});});
   // The fixed default keeps the short address stable across restarts; a taken port falls back to any free one.
   try{await bind(options.port??DEFAULT_CONTROL_PORT);}catch(error){if(options.port!==undefined||(error as NodeJS.ErrnoException).code!=='EADDRINUSE'){store.stopPresence(config.project.id,presence);store.close();throw error;}await bind(0);}
-  const address=server.address();if(address===null||typeof address==='string'){store.stopPresence(config.project.id,presence);store.close();throw Error('CONTROL_CENTER_BIND_FAILED');}host=`127.0.0.1:${address.port}`;shortHost=`${CONTROL_SHORT_HOST}:${address.port}`;hosts=controlHosts(address.port);activateReadySupervisor();const heartbeat=setInterval(()=>{try{store.heartbeatPresence(config.project.id,presence);activateReadySupervisor();}catch{}},2_000);heartbeat.unref();
+  const address=server.address();if(address===null||typeof address==='string'){store.stopPresence(config.project.id,presence);store.close();throw Error('CONTROL_CENTER_BIND_FAILED');}host=`127.0.0.1:${address.port}`;shortHost=`${CONTROL_SHORT_HOST}:${address.port}`;hosts=controlHosts(address.port);activateReadySupervisor();
+  // An approval nobody holds any more (Office or the MCP service restarted, or it expired unseen) leaves its Work stopped.
+  // Each such Work prepares again, once per Office run, so a fresh card reaches the owner; preparing never submits.
+  const reprepared=new Set<string>();
+  const reprepare=()=>{if(stopped)return;for(const id of feedApprovals.orphanedWorks())try{
+    if(reprepared.has(id)||supervisorStatus(store,config.project.id,id,config)?.state!=='waiting_approval')continue;reprepared.add(id);
+    supervisor.action({work_id:id,revision:store.intakeWork(config.project.id,id).revision,action:'resume'});
+    workActivity(store,config.project.id,id,'approval.reprepared','승인을 기다리던 제출 화면이 사라져서 다시 준비해요.');
+  }catch{/* left for the owner in the Work */}};
+  // The first look waits for holders to beat after a start.
+  const reprepareTimer=setInterval(reprepare,60_000);reprepareTimer.unref();setTimeout(reprepare,20_000).unref();
+  const heartbeat=setInterval(()=>{try{store.heartbeatPresence(config.project.id,presence);activateReadySupervisor();}catch{}},2_000);heartbeat.unref();
   let lastBoard='',lastKeep=Date.now();const lightTick=setInterval(()=>{if(!lightClients.size)return;try{const board=readWorkBoard(store,config),payload=JSON.stringify({works:board.works,auth_attention_count:board.auth_attention_count});if(payload!==lastBoard){lastBoard=payload;for(const client of lightClients)if(!client.destroyed)client.write(`event: board\ndata: ${JSON.stringify(board)}\n\n`);}if(Date.now()-lastKeep>=15_000){lastKeep=Date.now();for(const client of lightClients)if(!client.destroyed)client.write(': keep-alive\n\n');}}catch{for(const client of lightClients)client.end();lightClients.clear();}},Math.max(1000,poll));lightTick.unref();
   const hermesTick=setInterval(()=>{if(runtimeReady())hermesWork.tick();},1000);hermesTick.unref();
   // A server Work's state change goes to the messenger destinations the owner chose for that Work, as one short notice.
