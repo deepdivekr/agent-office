@@ -37,3 +37,11 @@ Build and test tooling: `typescript` `7.0.2` (Apache-2.0), `@types/node` `22.20.
 - `docs/assets/validation/contact-draft.png` depicts the Browserbase public contact page as an execution record. Website content, logos, and trademarks remain their respective owners' property; the screenshot does not imply endorsement or relicense those elements.
 
 For the public source package, the lockfile is the exact version inventory. Before redistributing a bundled binary or hosted appliance, inspect the installed transitive dependencies and preserve the applicable notices as well.
+
+
+## Optional media executor (`executors/media`)
+
+Not bundled with Agent Office. Installed by the owner with pip extras:
+
+- faster-whisper — MIT License — https://github.com/SYSTRAN/faster-whisper
+- edge-tts — GNU Lesser General Public License v3.0 — https://github.com/rany2/edge-tts

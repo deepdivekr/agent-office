@@ -10,6 +10,7 @@ import {nativeProcessRunner,resolveSubscriptionClientExecutable,type SafeProcess
 import {sanitizeCodingReply} from '../coding/reply-safety.js';
 import {ownerMcpEnabled,windowsClientServers,mcpServerAnswers,type ClientRunMcpServer} from '../integrations/owner-mcp.js';
 import {ownerEnvironmentContext} from '../integrations/client-environment.js';
+import {mediaExecutorBrief} from './media-executor.js';
 import {type WorkActivityMetadata} from './activity.js';
 import {workClientChoiceSchema,type WorkClientChoice} from './contracts.js';
 import {type ModelSettings} from '../onboarding/model-settings.js';
@@ -303,6 +304,7 @@ function initialPrompt(input:ClientRunInput){
     `When the output is used rather than read, you may also save CARD.json for the Office feed: one card {"type":"compare","items":[{"title","lines":[],"url","recommended"}]} | {"type":"change","before","after","url"} | {"type":"metric","label","value","unit","delta"} | {"type":"draft","to","subject","body"} | {"type":"event","name","start":ISO,"location"} | {"type":"checklist","items":[{"text","done"}]}, with optional "title", "actions":[{"label","url":https}] and "replies":[{"label","text"}]. A script the owner should rerun with other values may come with NAME.app.json: {"title","command":[argv run in this folder],"inputs":[{"id","label","type":"select|toggle|text|number","options":[{"value","label"}],"default"}],"buttons":[{"id","label"}]}; the command reads {button,inputs} as JSON on stdin and prints plain text or {"text","table":{"header","rows"}}. The owner approves its command before the first run.`,
     `When the Work watches news, posts, filings or other dated items, also save RECORDS.json: [{"at":ISO time it was published,"source","author","title","summary":2-3 lines,"url","subject":ticker or topic}] for the items this run reported. Office keeps them as the Work's dated history after working files are cleared; an item already kept is not added twice.`,
     `Keep the Work folder lean: do not pack files that are already there into another archive, and keep page captures and raw collections only while the run needs them. Office clears older runs' working files and keeps delivered text, pictures, media, PDF, CARD.json, RECORDS.json and app files; state a later run must read belongs beside the run folders, not inside an old one.`,
+    ...(mediaExecutorBrief()?[mediaExecutorBrief()!]:[]),
     `Request from the owner:\n${input.prompt}`,
     ...importedPlan(input),
     // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as
