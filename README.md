@@ -67,12 +67,12 @@ See [Work operation](docs/work-operation.md) for the execution loop and [release
 | Environment | Status |
 |---|---|
 | Ubuntu 24.04 x86_64 | Browser, CLI, and file workflows |
-| Windows 11 + WSL2 Ubuntu 24.04 | Runs the same Linux runtime |
-| Native Windows desktop control | Experimental; executor and permission setup required |
+| Windows 11 + WSL2 Ubuntu 24.04 | Runs the same Linux runtime; browser, CLI and file workflows |
+| Operating apps installed on a Windows PC (outside the browser) | Experimental; executor and permission setup required |
 | macOS | Installation and native operation not validated |
 
 The default browser is a dedicated background Chromium. A VM is optional.
-It does not control every desktop app out of the box.
+Websites are handled in the browser; clicking and typing in apps installed on the PC, outside the browser, is still experimental.
 
 ## Get started
 
