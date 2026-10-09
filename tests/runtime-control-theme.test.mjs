@@ -135,3 +135,17 @@ test('runtime native on a phone the views are one row of tabs and the tools, lan
   await page.locator('header .display-options #lang-toggle').waitFor({timeout:5000}).catch(()=>{});assert.equal(await page.locator('header .display-options #lang-toggle').count(),1,'back in the header on a wide screen');
   assert.deepEqual(errors,[]);
 });
+
+test('runtime fixture on a phone a board with one column fills the screen; several columns slide sideways',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{chromium}=await import('playwright');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js'),{PackStore}=await import('../dist/packs/store.js'),{startControlCenter}=await import('../dist/observability/control-center.js');
+  const root=await mkdtemp(join(tmpdir(),'board-width-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);
+  for(const [key,status] of [['a','ready'],['b','needs_model'],['c','paused']]){const id=store.beginWork(config.project.id,'board-'+key,'업무 '+key,'quick').work.id;store.hermesState.prepare('UPDATE office_intake SET status=? WHERE work_id=?').run(status,id);}
+  store.close();const server=await startControlCenter(config),browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();await server.close();await rm(root,{recursive:true,force:true});});
+  const page=await browser.newPage({viewport:{width:390,height:844}});await page.addInitScript(()=>localStorage.setItem('office-layout','board'));
+  const widths=async view=>{await page.goto(server.url+'?view='+view);await page.locator('.kanban .col').first().waitFor();return page.evaluate(()=>({kanban:Math.round(document.querySelector('.kanban').getBoundingClientRect().width),cols:[...document.querySelectorAll('.kanban .col')].map(n=>Math.round(n.getBoundingClientRect().width)),page:document.documentElement.scrollWidth<=innerWidth}));};
+  const one=await widths('hold');assert.deepEqual([one.cols.length,one.cols[0],one.page],[1,one.kanban,true],'one column is as wide as the board');
+  const all=await widths('all');assert.ok(all.cols.length>1&&all.cols.every(w=>w<all.kanban&&w>all.kanban*.8),'each of several columns takes most of the screen and they slide');assert.equal(all.page,true,'the page itself never scrolls sideways');
+});
