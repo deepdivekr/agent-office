@@ -38,11 +38,17 @@ test('runtime contract renamed repository preserves installation identity and RE
     assert.ok(text.includes('~/.agent-office'));
     assert.ok(text.includes('cd agent-office'));
     assert.doesNotMatch(text,/deepdivekr\/agent-driver/u);
+    const english=path==='README.md';
     const hero=[...text.matchAll(/<img src="(docs\/images\/[^"]+\.gif)"/gu)].map(match=>match[1]);
     assert.equal(hero.length,1,'one animated hero at the top');
-    const screenshots=[...hero,...[...text.matchAll(/!\[[^\]]*\]\((docs\/images\/[^)]+)\)/gu)].map(match=>match[1])];
-    assert.equal(screenshots.length,3,'one animated hero and two live-run screenshots');
-    const english=path==='README.md';
+    const screenshots=[...hero,...[...text.matchAll(/!\[[^\]]*\]\((docs\/images\/[^)]+)\)/gu),...text.matchAll(/<img src="(docs\/images\/[^"]+\.png)"/gu)].map(match=>match[1])];
+    // Each picture is either from the live run (capture.json) or the real UI with everyday sample data (samples.json).
+    const folder=english?'docs/images/en/':'docs/images/';
+    const live=JSON.parse(await readFile(folder+'capture.json','utf8')).screens,samples=JSON.parse(await readFile(folder+'samples.json','utf8'));
+    assert.deepEqual([samples.sample_data,samples.live_task_run,samples.paid_model_calls,samples.language],[true,false,0,english?'en':'ko']);
+    const pictures=screenshots.filter(s=>s.endsWith('.png')).map(s=>s.slice(folder.length));
+    assert.ok(pictures.some(name=>live.includes(name)),'at least one live-run screenshot');
+    assert.ok(pictures.every(name=>live.includes(name)||samples.screens.includes(name)),'every screenshot has a receipt');
     assert.ok(screenshots.every(s=>english?s.startsWith('docs/images/en/'):!s.startsWith('docs/images/en/')),'README screenshots must match its language');
     const localized=JSON.parse(await readFile(english?'docs/images/en/capture.json':'docs/images/capture.json','utf8'));
     assert.equal(localized.language,english?'en':'ko');

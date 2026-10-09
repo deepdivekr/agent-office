@@ -34,8 +34,8 @@ try{
   assert.equal(await page.locator('.tile').count(),4);
   await page.locator('[data-layout="board"][aria-pressed="true"]').waitFor();
   await page.locator('.kanban').waitFor();
+  // The board picture comes from capture-readme-feed.mjs, with more everyday samples.
   await verifyScreen();
-  await page.screenshot({path:directory+'/work-overview.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
   await page.goto(receipt.detail_url);
   await page.getByRole('heading',{name:labels.title,exact:true}).waitFor();
@@ -62,8 +62,8 @@ try{
     source_version:receipt.version,ui_base_commit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
     captured_at:new Date().toISOString(),sample_data:true,live_task_run:false,paid_model_calls:0,
     viewport:{width:1440,overview_height:720,detail_height:1000,settings_height:1000},language,theme:'dark',layout:'board',
-    screens:['work-overview.png','work-detail.png','ai-connection.png'],
+    screens:['work-detail.png','ai-connection.png'],
     checks:['four queued/paused sample Works','board view selected','dark media and rendered background verified','localized UI and sample records','pause/resume changes state','API key blank; no settings saved','no page errors'],
   },null,2)+'\n');
-  console.log('Captured three current UI screens; pause/resume verified; no model calls.');
+  console.log('Captured the detail and AI connection screens; pause/resume verified; no model calls.');
 }finally{await browser.close();}
