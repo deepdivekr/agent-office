@@ -13,6 +13,7 @@ import {WorkDeliverySettings} from './delivery-settings.js';
 import {createDeliveryConnector} from './delivery-connectors.js';
 import {workActivity} from './activity.js';
 import {fileSha256} from './artifact-kind.js';
+import {addRecordsFile,isRecordsFile} from './records.js';
 
 const identity=z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/u);
 const digest=z.string().regex(/^[a-f0-9]{64}$/u);
@@ -163,6 +164,8 @@ export class WorkResults {
       if(notifies(this.notifyLevel(),waitReason.startsWith('WORK_CLIENT_WAIT_')?'waiting_connection':origin.status,body.completion_verified===true)&&!imported&&workImportExecutionOwner(this.store,project,input.work_id)!=='original_runtime'&&this.settings){const policy=db.prepare('SELECT target_ids FROM office_work_delivery_policy WHERE project_id=? AND work_id=?').get(project,input.work_id);if(policy)this.addPending(project,input.work_id,id,JSON.parse(String(policy.target_ids)) as string[]);}
       db.prepare('UPDATE office_work SET updated_at=? WHERE project_id=? AND id=?').run(time,project,input.work_id);db.exec('RELEASE office_result_record');
     }catch(error){db.exec('ROLLBACK TO office_result_record; RELEASE office_result_record');throw error;}
+    // Items the run reported (RECORDS.json) go to the Work's ledger, which outlives its working files.
+    for(const artifact of input.artifacts)if(isRecordsFile(artifact.label)&&isAbsolute(artifact.path))addRecordsFile(this.store,project,input.work_id,{path:artifact.path,sha256:artifact.sha256},id);
     return this.get(project,input.work_id,id);
   }
   list(project:string,workId:string,limit=10):WorkResult[]{

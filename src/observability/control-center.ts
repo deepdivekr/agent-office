@@ -23,6 +23,7 @@ import {workHtml} from './work-ui.js';
 import {setWorkHidden} from '../work/hidden.js';
 import {WorkPush} from '../work/push.js';
 import {FeedApprovals} from '../work/feed-approvals.js';
+import {countRecords,listRecords,recordsCsv} from '../work/records.js';
 import {appApproveInput,appRunInput,approveApp,readAppManifest,runApp} from '../work/feed-cards.js';
 import {ServerChat} from '../work/server-chat.js';
 import {FeedPushWatcher} from './feed-push.js';
@@ -535,6 +536,12 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(suffix==='work/import/prompt'){reply(response,200,JSON.stringify(imports.prompt()),'application/json; charset=utf-8');return;}
     if(suffix==='work/client-default'){let settings=null;try{settings=readModelSettings(modelSettingsPath(config));}catch{}reply(response,200,JSON.stringify({client:defaultWorkClient(settings)}),'application/json; charset=utf-8');return;}
     if(suffix==='work/board'){reply(response,200,JSON.stringify(readWorkBoard(store,config)),'application/json; charset=utf-8');return;}
+    // A Work's record ledger, newest first or as CSV.
+    if(suffix==='work/records'||suffix==='work/records.csv'){
+      try{const workId=z.string().uuid().parse(url.searchParams.get('work_id'));store.officeWorkById(config.project.id,workId);const q=url.searchParams.get('q')?.slice(0,100)||undefined,before=url.searchParams.get('before')?.slice(0,40)||undefined;
+        if(suffix==='work/records.csv'){const csv=recordsCsv(listRecords(store,config.project.id,workId,{limit:5000}));response.writeHead(200,{'content-type':'text/csv; charset=utf-8','content-disposition':`attachment; filename="records-${workId.slice(0,8)}.csv"`,...headers()});response.end(csv);}
+        else reply(response,200,JSON.stringify({records:listRecords(store,config.project.id,workId,{...(q?{q}:{}),...(before?{before}:{}),limit:Math.min(Number(url.searchParams.get('limit'))||100,500)}),total:countRecords(store,config.project.id,workId)}),'application/json; charset=utf-8');}
+      catch{reply(response,404,'records unavailable');}return;}
     if(suffix==='work/approval/capture'){try{const bytes=await feedApprovals.capture(url.searchParams.get('task_id')??'');response.writeHead(200,{'content-type':'image/png','content-length':bytes.length,...headers()});response.end(bytes);}catch{reply(response,404,'capture unavailable');}return;}
     if(suffix==='work/feed'){const before=url.searchParams.get('before');reply(response,200,JSON.stringify(readFeed(store,config,results,{approvals:feedApprovals,...(before&&before.length<=40?{before}:{})})),'application/json; charset=utf-8');return;}
     if(suffix==='work/timeline'){reply(response,200,JSON.stringify(readWorkTimeline(store,config)),'application/json; charset=utf-8');return;}
