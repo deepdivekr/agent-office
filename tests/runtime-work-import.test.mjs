@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseWorkImportDraft,validateWorkImportDraft,UNIVERSAL_WORK_MIGRATION_PROMPT,WORK_IMPORT_DRAFT_MAX_BYTES} from '../dist/work/import-draft.js';
+import {parseWorkImportDraft,validateWorkImportDraft,UNIVERSAL_WORK_MIGRATION_PROMPT,WORK_IMPORT_DRAFT_MAX_CHARS} from '../dist/work/import-draft.js';
 
 function reported(){
   return {
@@ -76,7 +76,16 @@ test('actual-looking credentials and multiple JSON blocks are rejected without e
   assert.throws(()=>parseWorkImportDraft(raw+'\n'+botToken),/WORK_IMPORT_SECRET_REJECTED/u);
   const fenced='```json\n'+raw+'\n```';
   assert.throws(()=>parseWorkImportDraft(fenced+'\n'+fenced),/WORK_IMPORT_MULTIPLE_JSON_BLOCKS/u);
-  assert.throws(()=>parseWorkImportDraft('x'.repeat(WORK_IMPORT_DRAFT_MAX_BYTES+1)),/WORK_IMPORT_TEXT_SIZE_INVALID/u);
+  assert.throws(()=>parseWorkImportDraft('x'.repeat(WORK_IMPORT_DRAFT_MAX_CHARS+1)),/WORK_IMPORT_TEXT_TOO_LONG/u);
+});
+
+test('a sentence around the answer is ignored; a cut-off answer and a non-JSON answer are told apart',()=>{
+  const raw=JSON.stringify(reported(),null,2);
+  assert.equal(parseWorkImportDraft('다음은 요청하신 JSON입니다.\n'+raw+'\n필요하면 더 알려 주세요.').goal.value,reported().goal.value);
+  assert.throws(()=>parseWorkImportDraft(raw.slice(0,Math.floor(raw.length*0.6))),/WORK_IMPORT_JSON_TRUNCATED/u);
+  assert.throws(()=>parseWorkImportDraft('```json\n'+raw.slice(0,200)+'\n```'),/WORK_IMPORT_JSON_TRUNCATED/u);
+  assert.throws(()=>parseWorkImportDraft("{'format':1}"),/WORK_IMPORT_JSON_INVALID/u);
+  assert.throws(()=>parseWorkImportDraft('옮길 자동화를 찾지 못했어요.'),/WORK_IMPORT_JSON_INVALID/u);
 });
 
 test('external claims cannot grant execution or activation authority',()=>{
