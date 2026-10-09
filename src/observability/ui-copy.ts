@@ -24,7 +24,7 @@ export const reviewedCopy: Record<string, readonly [string, string]> = {
   '결과 전달 대상': ['결과 받을 곳', 'Result destinations'],
   '전달 대상 추가': ['받을 곳 추가', 'Add destination'],
   '새 업무의 기본 전달 대상': ['새 업무의 기본 수신처', 'Default result destinations'],
-  '업무 결과를 확인할 곳을 연결하세요. 앱은 항상 사용할 수 있습니다.': ['결과를 받을 메신저를 연결해 주세요. 이 앱에서도 결과를 볼 수 있어요.', 'Connect a messenger to receive results. Results are also available in this app.'],
+  '업무 결과를 확인할 곳을 연결하세요. 앱은 항상 사용할 수 있습니다.': ['결과를 받을 메신저를 연결해 주세요. 결과는 피드에서도 볼 수 있어요.', 'Connect a messenger to receive results. Results are also in the Feed.'],
   '연결 정보는 저장 후 실제 전송 때 확인됩니다.': ['설정을 저장해도 연결이 확인된 것은 아니에요. 첫 전송 때 확인해요.', 'Saving settings does not verify the connection. It is checked on the first send.'],
   '업무 현황에서 업무별 전달 대상을 바꿀 수 있습니다.': ['업무 상세에서 결과 받을 곳을 바꿀 수 있어요.', 'Change result destinations in the work detail.'],
   '업무 보기': ['업무 보기', 'Open work'],
