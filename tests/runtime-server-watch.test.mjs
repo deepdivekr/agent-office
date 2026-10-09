@@ -241,3 +241,23 @@ test('runtime fixture a server Work conversation: the first message starts a ses
   await finish();
   assert.throws(()=>chat.send({work_id:'00000000-0000-4000-8000-000000000000',text:'x'}));
 });
+
+test('runtime fixture a failing timer job that runs again is one notice: no "recovered" while it runs, one when it succeeds',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js'),{readWorkBoard}=await import('../dist/observability/work-view.js');
+  const root=await mkdtemp(join(tmpdir(),'office-server-run-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
+  const timer=unit('shop-sync.timer',{SubState:'waiting',Triggers:'shop-sync.service'}),timers=[{unit:'shop-sync.timer',last:usec(now-600),next:usec(now+1200)}];
+  const job=extra=>unit('shop-sync.service',{UnitFileState:'static',TriggeredBy:'shop-sync.timer',...extra});
+  const failed=raw({show:[timer,job({ActiveState:'inactive',SubState:'dead',Result:'exit-code'})],timers}),running=raw({show:[timer,job({ActiveState:'activating',SubState:'start',Result:'success'})],timers}),done=raw({show:[timer,job({ActiveState:'inactive',SubState:'dead',Result:'success'})],timers});
+  assert.equal(parseServerSnapshot(running).units.find(u=>u.id==='shop-sync.timer').running,true);assert.equal(parseServerSnapshot(failed).units.find(u=>u.id==='shop-sync.timer').running,undefined);
+  let answer=done;const notices=[];const office=new ServerOffice(store,config,{async snapshot(){return answer;}});office.notify=(id,text)=>notices.push(text.split('\n')[0]);
+  const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
+  const {work_ids:[sync]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop sync',units:['shop-sync.timer']}]});
+  const status=()=>readWorkBoard(store,config).works.find(w=>w.id===sync).status;
+  for(const [snapshot,expected] of [[done,'service_ok'],[failed,'service_problem'],[running,'service_problem'],[failed,'service_problem'],[running,'service_problem'],[done,'service_ok'],[running,'service_ok']]){answer=snapshot;await office.refreshTarget(target);assert.equal(status(),expected);}
+  const kinds=store.hermesState.prepare("SELECT kind FROM office_activity WHERE work_id=? AND kind LIKE 'server.%' ORDER BY id").all(sync).map(r=>r.kind);
+  assert.deepEqual(kinds,['server.linked','server.problem','server.recovered'],'two failing runs are one problem; the success is one recovery');
+  assert.equal(notices.length,2);
+});
