@@ -8,7 +8,7 @@
 export type UnitKind='service'|'timer'|'container';
 export type UnitState='ok'|'problem'|'off';
 export type UnitNote='failed'|'stopped'|'last_run_failed'|'timer_inactive'|'unhealthy'|'exited'|'not_found'|'no_recent_activity'|null;
-export interface ServerUnit {id:string;kind:UnitKind;description:string;state:UnitState;note:UnitNote;active:string;sub:string;restarts:number;since:number|null;last_run:number|null;next_run:number|null;job:string|null;links:string[];project:string|null}
+export interface ServerUnit {id:string;kind:UnitKind;description:string;state:UnitState;note:UnitNote;running?:boolean;active:string;sub:string;restarts:number;since:number|null;last_run:number|null;next_run:number|null;job:string|null;links:string[];project:string|null}
 export interface ServerSnapshot {now:number;units:ServerUnit[];disabled:string[];checks:Record<string,number>}
 export interface RawSnapshot {format:number;now:number;timers:unknown;files:unknown;show:string;docker:string;checks?:Record<string,number>|undefined;feed?:string|undefined}
 /**
@@ -35,7 +35,9 @@ export function parseServerSnapshot(raw:RawSnapshot):ServerSnapshot{
     if(id.endsWith('.timer')){
       const jobId=words(b.Triggers)[0]??null,job=jobId?byId.get(jobId):undefined,t=timers.get(id),failed=Boolean(job&&job.Result&&job.Result!=='success'&&usec(t?.last));
       const state:UnitState=b.UnitFileState==='disabled'?'off':b.ActiveState!=='active'?'problem':failed?'problem':'ok';
-      units.push({...base,kind:'timer',state,note:state==='problem'?(b.ActiveState!=='active'?'timer_inactive':'last_run_failed'):null,last_run:usec(t?.last),next_run:usec(t?.next),job:jobId});
+      // While its job runs, systemd has already reset the job's result to success: the outcome is not known yet.
+      const running=Boolean(job&&['activating','deactivating','reloading'].includes(job.ActiveState??''));
+      units.push({...base,kind:'timer',state,note:state==='problem'?(b.ActiveState!=='active'?'timer_inactive':'last_run_failed'):null,...(running?{running}:{}),last_run:usec(t?.last),next_run:usec(t?.next),job:jobId});
       continue;
     }
     // A timer's job is shown with its timer; a static helper nobody schedules (an alert hook) is not a service to watch.
