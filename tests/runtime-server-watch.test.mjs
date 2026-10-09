@@ -99,10 +99,12 @@ test('runtime fixture the Control Center registers a server, links its groups an
   const context=await browser.newContext({viewport:{width:1280,height:900}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(server.url+'?import=1');await page.locator('[data-import-route="server"]').click();
-  await page.locator('#import-server details summary').click();
+  await page.locator('#import-server details:not(#server-edit) summary').click();
   await page.fill('#server-name','Main VM');await page.fill('#server-host','203.0.113.7');await page.fill('#server-user','ops');
   await page.locator('#server-register').click();await page.waitForFunction(()=>document.getElementById('server-target').options.length===1);
   assert.equal(await page.locator('#server-target option').innerText(),'Main VM','the server is named, its address kept out of sight');
+  await page.locator('#server-edit summary').click();
+  assert.deepEqual(await Promise.all(['name','host','user','port'].map(k=>page.locator('#server-edit-'+k).inputValue())),['Main VM','203.0.113.7','ops','22'],'the chosen server\'s settings are edited in the registration');
   await page.locator('#server-discover').click();await page.locator('.server-group').first().waitFor();
   assert.deepEqual(await page.locator('.sg-name').evaluateAll(n=>n.map(i=>i.value)),['chat-relay-bot','ledger','notes-bot','shop-web']);
   await page.locator('[data-pick="web-session.service"]').uncheck();
@@ -114,6 +116,7 @@ test('runtime fixture the Control Center registers a server, links its groups an
   assert.deepEqual(await page.locator('.col').evaluateAll(cols=>cols.map(c=>c.querySelectorAll('.tile').length)),[3,1,0,0,0]);
   await page.locator('.tile',{hasText:'chat-relay-bot'}).click();await page.locator('.server-table').waitFor();
   assert.match(await page.locator('.server-table tbody').innerText(),/chat-relay-bot\.service/u);
+  assert.equal(await page.locator('#server-rename').count(),0,'no per-Work rename: server settings live in the registration');
   assert.equal(await page.locator('.server-chat #server-chat-input').count(),1,'a server Work has a conversation to direct changes');
   assert.equal(await page.locator('.server-table tbody tr').count(),1,'the unchecked unit is not watched');
   // The name cell holds only the unit; every cell stays on one line and a wide table scrolls sideways, even on a phone.
@@ -298,5 +301,10 @@ test('runtime fixture server Works: timers make a Work recurring, services only 
   office.setMode({work_id:web,mode:'recurring'});assert.equal(board().get(web).status,'service_ok');assert.equal(readWorkDetail(store,config,web).server.mode_set,true);
   office.setMode({work_id:web,mode:'auto'});assert.equal(board().get(web).status,'service_standby');
   assert.throws(()=>office.setMode({work_id:web,mode:'sometimes'}));
-  office.renameTarget({target_id:target,name:'Shop server'});assert.equal(board().get(web).server.target,'Shop server');assert.equal(office.targets()[0].host,'203.0.113.7');
+  // Server settings are changed once, in the registration: a new name keeps the reading, a new address drops it.
+  office.updateTarget({target_id:target,name:'Shop server',host:'203.0.113.7',user:'root',port:22});assert.equal(board().get(web).server.target,'Shop server');
+  assert.ok(office.targets()[0].observed_at,'same connection, same reading');
+  office.updateTarget({target_id:target,name:'Shop server',host:'203.0.113.8',user:'ops',port:2222});
+  assert.deepEqual([office.targets()[0].host,office.targets()[0].user,office.targets()[0].port,office.targets()[0].observed_at],['203.0.113.8','ops',2222,null]);
+  assert.throws(()=>office.updateTarget({target_id:target,name:'x',host:'bad host',user:'root',port:22}));
 });
