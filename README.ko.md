@@ -213,4 +213,6 @@ Node.js **22.22.0**, npm **11.11.0**을 사용합니다. 기본 검사는 장시
 
 README 화면은 `node scripts/docs/capture-readme-feed.mjs ko|en`(보드·타임라인·피드, 예시 데이터)과 `scripts/docs/capture-readme-ui.mjs`(업무 상세)로 다시 만듭니다.
 
-[Apache License 2.0](LICENSE). 연결하는 모델·브라우저·외부 서비스의 라이선스와 이용 조건은 별도입니다.
+[Apache License 2.0](LICENSE) · © 2026 SHIPIT LABS. 연결하는 모델·브라우저·외부 서비스의 라이선스와 이용 조건은 별도입니다.
+
+만든 곳: **SHIPIT LABS** · 소식과 문의는 X [@DeepDive_KR](https://x.com/DeepDive_KR)

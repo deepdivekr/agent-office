@@ -213,4 +213,6 @@ Use Node.js **22.22.0** and npm **11.11.0**. The default test suite excludes lon
 
 README pictures are made with `node scripts/docs/capture-readme-feed.mjs en|ko` (board, timeline and feed with sample data) and `scripts/docs/capture-readme-ui.mjs` (Work detail).
 
-[Apache License 2.0](LICENSE). Connected models, browsers, and services have their own licenses and terms.
+[Apache License 2.0](LICENSE) · © 2026 SHIPIT LABS. Connected models, browsers, and services have their own licenses and terms.
+
+Made by **SHIPIT LABS** · news and questions on X: [@DeepDive_KR](https://x.com/DeepDive_KR)
