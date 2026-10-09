@@ -57,7 +57,7 @@ const EN:Record<string,string>={
 '업무 내용을 담당 AI에 보내 분석·실행 허용':'Allow sending the work text to the AI in charge for analysis and execution',
 '정해진 판단 지점에서 쓰는 선택 기능이에요. 연결하지 않으면 담당 AI가 그 판단도 맡아요.':'Optional, used only at fixed decision points. Without it the AI in charge makes those decisions too.',
 '저장된 키 삭제':'Delete saved key',
-'결과는 항상 이 앱에서 볼 수 있어요. 메신저로도 받으려면 추가하세요.':'Results are always available in this app. Add a messenger to receive them there too.',
+'결과는 항상 피드에서 볼 수 있어요. 메신저로도 받으려면 추가하세요.':'Results are always in the Feed. Add a messenger to receive them there too.',
 '업무 지침':'Work instructions',
 '작업물 확인 방법':'How to receive the result',
 '결과 전달 대상':'Result destinations',

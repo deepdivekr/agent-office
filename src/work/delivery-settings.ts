@@ -54,13 +54,21 @@ export function readDeliverySettings(path:string):Saved|null{
     return saved;
   }catch{throw Error('DELIVERY_SETTINGS_INVALID');}finally{closeSync(fd);}
 }
-export type PublicDeliverySettings={revision:number;targets:Array<{id:string;platform:DeliveryPlatform;label:string;configured:true;connection:'stored_unverified'}>;default_target_ids:string[];app_available:true};
+// detail: enough to recognise a saved destination (the chat ID's last digits, the webhook's host), never a secret.
+// connection: 'delivered' once a result went out with these exact details, with its time.
+export type PublicDeliverySettings={revision:number;targets:Array<{id:string;platform:DeliveryPlatform;label:string;configured:true;connection:'stored_unverified'|'delivered';detail:string;last_delivered_at:string|null}>;default_target_ids:string[];app_available:true};
 export class WorkDeliverySettings{
   constructor(readonly path:string){}
   static fromConfig(config:Pick<HostConfig,'dbPath'>){return new WorkDeliverySettings(deliverySettingsPath(config));}
   private read(){return readDeliverySettings(this.path);}
-  publicState():PublicDeliverySettings{
-    const saved=this.read();return {revision:saved?.revision??0,targets:(saved?.targets??[]).map(({id,platform,label})=>({id,platform,label,configured:true as const,connection:'stored_unverified' as const})),default_target_ids:saved?.default_target_ids??['app'],app_available:true};
+  publicState(lastDelivered?:(id:string,fingerprint:string)=>string|null):PublicDeliverySettings{
+    const saved=this.read();
+    return {revision:saved?.revision??0,targets:(saved?.targets??[]).map(target=>{
+      const fingerprint=createHash('sha256').update(JSON.stringify(target)).digest('hex'),at=lastDelivered?.(target.id,fingerprint)??null;
+      let host='';try{host=target.webhook_url?new URL(target.webhook_url).hostname:'';}catch{/* none */}
+      const detail=target.platform==='telegram'?`Chat ID …${String(target.telegram_chat_id??'').slice(-4)}`:host;
+      return {id:target.id,platform:target.platform,label:target.label,configured:true as const,connection:at?'delivered' as const:'stored_unverified' as const,detail,last_delivered_at:at};
+    }),default_target_ids:saved?.default_target_ids??['app'],app_available:true};
   }
   targetSnapshot(id:string):{target:DeliveryTarget;fingerprint:string}|null{
     const target=this.read()?.targets.find(target=>target.id===id);return target?{target,fingerprint:createHash('sha256').update(JSON.stringify(target)).digest('hex')}:null;

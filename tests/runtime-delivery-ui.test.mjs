@@ -24,7 +24,7 @@ test('delivery onboarding, new Work fields and future-only destination modal use
     if(url.pathname==='/delivery/status'){json(res,delivery);return;}
     if(url.pathname==='/delivery/settings'&&req.method==='POST'){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString('utf8'));posted.settings.push(body);posted.settingsHeaders.push(req.headers['x-agent-driver']);
-      delivery={revision:delivery.revision+1,targets:body.targets.map(({id,platform,label})=>({id,platform,label,configured:true,connection:'stored_unverified'})),default_target_ids:body.default_target_ids};json(res,delivery);return;
+      delivery={revision:delivery.revision+1,targets:body.targets.map(({id,platform,label,telegram_chat_id})=>({id,platform,label,configured:true,connection:'stored_unverified',detail:telegram_chat_id?'Chat ID …'+telegram_chat_id.slice(-4):'',last_delivered_at:null})),default_target_ids:body.default_target_ids};json(res,delivery);return;
     }
     if(url.pathname==='/work/board'){json(res,{works:[]});return;}
     if(url.pathname==='/work/start'&&req.method==='POST'){
@@ -57,7 +57,11 @@ test('delivery onboarding, new Work fields and future-only destination modal use
   assert.equal(posted.settingsHeaders[0],'human-office');
   assert.deepEqual(posted.settings[0].default_target_ids,['app',id]);
   assert.equal(posted.settings[0].targets[0].telegram_bot_token,'123456:fixture-secret-token');
-  assert.equal(await page.locator('[data-target-token]').inputValue(),'');
+  // Saved, it reads as saved: name, a recognisable detail, no fields; Edit opens them with the secrets left blank.
+  const saved=page.locator('[data-delivery-target="'+id+'"]');await saved.locator('.delivery-state').waitFor();
+  assert.match(await saved.innerText(),/Telegram · 운영 알림/u);assert.match(await saved.innerText(),/등록됨 · 아직 보낸 적 없음/u);assert.match(await saved.innerText(),/Chat ID …6789/u);assert.equal(await saved.locator('[data-target-token]').count(),0);
+  await saved.locator('[data-edit-delivery]').click();assert.equal(await saved.locator('[data-target-label]').inputValue(),'운영 알림');assert.equal(await saved.locator('[data-target-token]').inputValue(),'');
+  assert.match(await page.locator('#delivery-defaults').innerText(),/피드/u,'the app destination is called the Feed');
   assert.equal((await page.content()).includes('fixture-secret-token'),false);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.screenshot({path:'tests/evidence/phase111/delivery-settings-mobile.png',fullPage:true});
@@ -107,4 +111,15 @@ test('delivery onboarding, new Work fields and future-only destination modal use
   await english.getByText("Instructions",{exact:true}).waitFor();
   await english.getByText("Receive results",{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
+});
+
+test('a saved destination shows a recognisable detail and is connected once a result went out with its current details',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{WorkDeliverySettings}=await import('../dist/work/delivery-settings.js');
+  const dir=await mkdtemp(join(tmpdir(),'delivery-state-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+  const settings=new WorkDeliverySettings(join(dir,'delivery-settings.json'));
+  settings.save({revision:0,targets:[{id:'tg-main',platform:'telegram',label:'운영 알림',telegram_bot_token:'123456:fixture-secret-token',telegram_chat_id:'123456789'}],default_target_ids:['app','tg-main']});
+  const seen=[];const state=settings.publicState((id,fingerprint)=>{seen.push(id);return fingerprint===settings.fingerprint('tg-main')?'2026-10-09T05:42:20.402Z':null;});
+  assert.deepEqual(state.targets[0],{id:'tg-main',platform:'telegram',label:'운영 알림',configured:true,connection:'delivered',detail:'Chat ID …6789',last_delivered_at:'2026-10-09T05:42:20.402Z'});
+  assert.ok(!JSON.stringify(state).includes('fixture-secret-token')&&!JSON.stringify(state).includes('123456789'),'no secret and not the whole chat ID');
+  assert.equal(settings.publicState(()=>null).targets[0].connection,'stored_unverified','nothing sent with these details yet');
 });

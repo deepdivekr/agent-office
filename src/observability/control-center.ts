@@ -148,6 +148,8 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const migrations=new HermesMigrationRuntime(store,config);
   // Write Packs Office runs wait for the owner's press in the feed.
   const feedApprovals=new FeedApprovals(store,config.project.id);
+  // Each destination with the time a result last went out with its current details.
+  const deliveryState=()=>deliverySettings.publicState((id,fingerprint)=>((store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result_delivery'").get()?store.hermesState.prepare("SELECT MAX(updated_at) AS at FROM office_result_delivery WHERE project_id=? AND connector_id=? AND target_fingerprint=? AND status='delivered'").get(config.project.id,id,fingerprint):undefined) as {at:string|null}|undefined)?.at??null);
   const push=new WorkPush(store,config),pushWatcher=new FeedPushWatcher(store,config,push,feedApprovals),serverChat=new ServerChat(store,config,options.sessions??defaultSessionRoots());
   const sessionMirror=new SessionMirror(store,config,options.sessions,options.sessions?.temporary??false),addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,(id,text)=>serverNotice(id,text));
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
@@ -213,7 +215,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     }
     if(suffix==='delivery/status'||suffix==='work/delivery'&&request.method==='GET'){
       if(request.method!=='GET'){reply(response,405,'method not allowed');return;}
-      try{const value=suffix==='delivery/status'?deliverySettings.publicState():results.selection(config.project.id,z.string().uuid().parse(url.searchParams.get('work_id')));reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');}
+      try{const value=suffix==='delivery/status'?deliveryState():results.selection(config.project.id,z.string().uuid().parse(url.searchParams.get('work_id')));reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');}
       catch{reply(response,409,JSON.stringify({error:'DELIVERY_STATUS_UNAVAILABLE'}),'application/json; charset=utf-8');}return;
     }
     if(suffix==='delivery/settings'||suffix==='work/delivery'){
@@ -221,7 +223,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
       try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>32_000)throw Error('DELIVERY_REQUEST_TOO_LARGE');}if(rejectStopped())return;
         const raw:unknown=JSON.parse(body);let value:unknown;
-        if(suffix==='delivery/settings')value=deliverySettings.save(deliverySettingsUpdateSchema.parse(raw));
+        if(suffix==='delivery/settings'){deliverySettings.save(deliverySettingsUpdateSchema.parse(raw));value=deliveryState();}
         else{const input=z.object({work_id:z.string().uuid(),revision:z.number().int().nonnegative(),target_ids:z.array(z.string().min(1).max(120)).max(21)}).strict().parse(raw);value=results.setSelection(config.project.id,input.work_id,input);workActivity(store,config.project.id,input.work_id,'delivery.selection_changed','Updated the destinations for unsent and future Work results.',{stage_id:'delivery',status:'configured'});deliverOutput(input.work_id);}
         reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/u.test(error.message)?error.message:'DELIVERY_REQUEST_INVALID'}),'application/json; charset=utf-8');}return;
