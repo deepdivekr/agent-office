@@ -31,7 +31,7 @@ test('runtime fixture Hide takes a Work off the feed, the board and the counts i
   await page.locator('[data-view="hidden"]').click();await page.waitForFunction(()=>document.querySelectorAll('.tile').length===1);
   assert.deepEqual(await page.locator('.tile').evaluateAll(n=>n.map(t=>t.dataset.work)),[personal],'the Hidden view holds only hidden Works');
   await page.locator('.tile[data-work="'+personal+'"]').click();await page.locator('[data-work-hide="show"]').click();await page.locator('[data-work-hide="hide"]').waitFor();
-  await page.locator('[data-view="feed"]').click();await page.waitForFunction(()=>document.querySelectorAll('.post').length===2);
+  await page.locator('#view-tabs [data-view="feed"]').click();await page.waitForFunction(()=>document.querySelectorAll('.post').length===2);
   assert.equal(await page.locator('[data-count="hidden"]').innerText(),'');
   const forged=await page.evaluate(async id=>(await fetch('work/hide',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({work_id:id,hidden:true})})).status,personal);
   assert.equal(forged,403,'only the Office page can hide');

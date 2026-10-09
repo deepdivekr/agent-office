@@ -8,6 +8,8 @@ import {prepareLocalConnection} from '../dist/onboarding/connection.js';
 import {loadHostConfig} from '../dist/interface/config.js';
 import {startControlCenter} from '../dist/observability/control-center.js';
 import {RuntimeApi} from '../dist/interface/api.js';
+// On a phone the tools sit behind the menu button.
+const openNav=async(page,selector)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await page.locator(selector).click();};
 
 test('runtime fixture new Work shows Pack-owned Jev settings and can opt out on desktop and mobile',async t=>{
  const root=await mkdtemp(join(tmpdir(),'pack-jev-browser-'));
@@ -56,7 +58,7 @@ test('runtime fixture single Jev recommendation import UI works without candidat
  await mkdir('tests/evidence/phase68',{recursive:true});
  for(const width of [1280,390]){
   await page.setViewportSize({width,height:1000});await page.goto(server.url,{waitUntil:'domcontentloaded'});
-  await page.locator('[data-nav="import"]').click();await page.locator('[data-import-route="workflow"]').click();
+  await openNav(page,'[data-nav="import"]');await page.locator('[data-import-route="workflow"]').click();
   await page.locator('#import-path').fill(project);await page.locator('#scan-import').click();
   await page.locator('.jev-recommendation').waitFor();assert.equal(await page.locator('.jev-recommendation').count(),1);
   assert.equal(await page.locator('#import-jev').count(),0);assert.equal(await page.locator('#import-cost').isChecked(),false);
@@ -69,7 +71,7 @@ test('runtime fixture single Jev recommendation import UI works without candidat
   await page.locator('#jev-cost').check();await page.locator('#jev-toggle').click();
   await page.waitForFunction(()=>document.getElementById('jev-toggle')?.textContent==='Jev 끄기');
   await page.locator('#jev-toggle').click();await page.waitForFunction(()=>document.getElementById('jev-toggle')?.textContent==='Jev 켜기');
-  await page.locator('#back').click();await page.locator('[data-nav="import"]').click();await page.locator('[data-import-route="workflow"]').click();
+  await page.locator('#back').click();await openNav(page,'[data-nav="import"]');await page.locator('[data-import-route="workflow"]').click();
   await page.locator('#import-path').fill(plain);await page.locator('#scan-import').click();await page.locator('#accept-import').waitFor();
   assert.equal(await page.locator('.jev-recommendation').count(),0);assert.equal(await page.locator('#import-cost').count(),0);
   assert.match(await page.locator('#import-preview').innerText(),/Jev 없이 기존 AI와 코드로 진행해요/u);

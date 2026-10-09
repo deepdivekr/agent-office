@@ -8,6 +8,8 @@ import {prepareLocalConnection} from '../dist/onboarding/connection.js';
 import {loadHostConfig} from '../dist/interface/config.js';
 import {startControlCenter} from '../dist/observability/control-center.js';
 import {PackStore} from '../dist/packs/store.js';
+// On a phone the tools sit behind the menu button.
+const openNav=async(page,selector)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await page.locator(selector).click();};
 
 test('runtime fixture scoped project import uses real HTTP/storage, bilingual responsive UI, and rejects stale previews',async t=>{
  const root=await mkdtemp(join(tmpdir(),'office-scope-browser-')),project=join(root,'project');await mkdir(project);
@@ -29,7 +31,7 @@ test('runtime fixture scoped project import uses real HTTP/storage, bilingual re
  for(const lang of ['ko','en'])for(const width of [1280,390]){
   await page.setViewportSize({width,height:1000});await page.goto(server.url);
   await page.evaluate(({lang})=>{localStorage.setItem('office-lang',lang);localStorage.setItem('office-theme','dark');},{lang});await page.reload();
-  await page.locator('[data-nav="import"]').click();
+  await openNav(page,'[data-nav="import"]');
   await page.waitForFunction(()=>document.querySelector('#migration-prompt').value.length>0);
   const migrationPrompt=await page.locator('#migration-prompt').inputValue();
   if(lang==='en'){assert.match(migrationPrompt,/Do not run, change or stop the existing automation/u);assert.doesNotMatch(migrationPrompt,/[가-힣]/u);}
@@ -46,12 +48,12 @@ test('runtime fixture scoped project import uses real HTTP/storage, bilingual re
   assert.equal(await page.locator('#import-scope').isVisible(),true);
   const scope='뉴스 알림만 가져와줘.\n결제와 쇼핑몰은 제외. <img src=x onerror=alert(1)> '+lang+width;
   await page.locator('#import-path').fill(project);await page.locator('#import-scope').fill(scope);
-  const other=lang==='ko'?'en':'ko';await page.locator('#lang-toggle').click();
+  const other=lang==='ko'?'en':'ko';await openNav(page,'#lang-toggle');
   await page.waitForFunction(lang=>document.documentElement.lang===lang,other);
   assert.equal(await page.locator('#import-scope').inputValue(),scope);
   assert.equal(await page.locator('#import-path').inputValue(),project);
   assert.equal(await page.locator('#import-scope').isVisible(),true);
-  await page.locator('#lang-toggle').click();await page.waitForFunction(lang=>document.documentElement.lang===lang,lang);
+  await openNav(page,'#lang-toggle');await page.waitForFunction(lang=>document.documentElement.lang===lang,lang);
   assert.equal(await page.locator('#import-scope').inputValue(),scope);
   assert.equal(await page.locator('#import-scope').getAttribute('maxlength'),'2000');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -79,7 +81,7 @@ test('runtime fixture scoped project import uses real HTTP/storage, bilingual re
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  }
  // A changed request while a scan is in flight must never revive its old result.
- await page.goto(server.url);await page.locator('[data-nav="import"]').click();await page.locator('[data-import-route="workflow"]').click();
+ await page.goto(server.url);await openNav(page,'[data-nav="import"]');await page.locator('[data-import-route="workflow"]').click();
  await page.locator('#import-path').fill(project);await page.locator('#import-scope').fill('Old request');
  gate=new Promise(resolve=>{release=resolve;});const before=calls.length;
  await page.locator('#scan-import').click();await page.waitForFunction(()=>document.getElementById('scan-import').disabled);
