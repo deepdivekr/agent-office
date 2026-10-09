@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm,utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {claudeMessages,codexMessages,listSessions,SessionMirror} from '../dist/work/session-mirror.js';
 import {enableClientRun,disableClientRun} from '../dist/work/client-run.js';
@@ -39,13 +39,14 @@ async function roots(t){
   await writeFile(join(claude,'-work',ids.scratch+'.jsonl'),claudeLines(join(work,'.office','work-folders','x')).join('\n')+'\n');
   await writeFile(join(codex,'2026','10','07','rollout-2026-10-07T01-00-00-01a11abd-afe1-7823-a339-1870a0f41ae2.jsonl'),codexLines(work).join('\n')+'\n');
   const old=new Date(Date.now()-3600_000);await utimes(join(codex,'2026','10','07','rollout-2026-10-07T01-00-00-01a11abd-afe1-7823-a339-1870a0f41ae2.jsonl'),old,old);
-  const winCodex=join(root,'win','codex');await mkdir(join(winCodex,'2026','10','06'),{recursive:true});
+  // The Windows home as WSL sees it: its Codex sessions, and (once a test adds them) its client and folder.
+  const winHome=join(root,'win'),winCodex=join(winHome,'.codex','sessions');await mkdir(join(winCodex,'2026','10','06'),{recursive:true});
   ids.windows='cccccccc-3333-4333-8333-333333333333';
   const winFile=join(winCodex,'2026','10','06','rollout-2026-10-06T01-00-00-'+ids.windows+'.jsonl');
   await writeFile(winFile,codexLines('C:\\Users\\me\\shop').map(l=>l.replace('01a11abd-afe1-7823-a339-1870a0f41ae2',ids.windows)).join('\n')+'\n');
   const older=new Date(Date.now()-7200_000);await utimes(winFile,older,older);
   t.after(()=>rm(root,{recursive:true,force:true}));
-  return {root,work,ids,file:join(claude,'-work',ids.claude+'.jsonl'),roots:{claude,codex,windows:{claude:join(root,'win','claude'),codex:winCodex}}};
+  return {root,work,ids,file:join(claude,'-work',ids.claude+'.jsonl'),winHome,roots:{claude,codex,windows:{claude:join(winHome,'.claude','projects'),codex:winCodex}}};
 }
 
 test('recent sessions of both clients and the Windows apps are listed newest first, without the skipped folders',async t=>{
@@ -64,10 +65,11 @@ test('runtime fixture an attached session shows on the board, refuses a message 
   t.after(()=>{disableClientRun();store.close();});
   const mirror=new SessionMirror(store,config,x.roots,true);
   assert.equal(mirror.list().length,4,'the session folders of this fixture are not temporary ones');
-  // A Windows app's conversation is read here and continued in that app.
+  // A Windows app's conversation is read here; it is continued only when its Windows client and folder are there.
   const {work_id:win}=mirror.attach({client:'codex',session_id:x.ids.windows});
-  const winDetail=readWorkDetail(store,config,win);assert.deepEqual([winDetail.session.windows,winDetail.session.can_send,winDetail.session.messages.length],[true,false,3]);
-  assert.throws(()=>mirror.send({work_id:win,text:'이어서 해줘'}),/SESSION_IN_WINDOWS_APP/u);
+  const winDetail=()=>readWorkDetail(store,config,win).session;
+  assert.deepEqual([winDetail().windows,winDetail().ready,winDetail().can_send,winDetail().messages.length],[true,false,false,3]);
+  assert.throws(()=>mirror.send({work_id:win,text:'이어서 해줘'}),/SESSION_WINDOWS_UNAVAILABLE/u);
   const {work_id}=mirror.attach({client:'claude',session_id:x.ids.claude});
   assert.equal(mirror.attach({client:'claude',session_id:x.ids.claude}).reused,true);
   const board=()=>readWorkBoard(store,config).works.find(w=>w.id===work_id);
@@ -80,6 +82,16 @@ test('runtime fixture an attached session shows on the board, refuses a message 
   for(let i=0;i<50&&!store.hermesState.prepare("SELECT 1 FROM office_activity WHERE work_id=? AND kind='session.reply'").get(work_id);i++)await delay(20);
   assert.equal(calls.length,1);assert.equal(calls[0].cwd,x.work);assert.equal(calls[0].stdin,'다음 단계 진행해');
   assert.deepEqual(calls[0].args.slice(-2),['--resume',x.ids.claude]);
+  // With the Windows client and folder in place, the Windows session continues there, in its own folder and model.
+  const exe=join(x.winHome,'AppData','Roaming','npm','node_modules','@openai','codex','node_modules','@openai','codex-win32-x64','vendor','x86_64-pc-windows-msvc','bin','codex.exe'),folder=join(x.root,'mnt','c','Users','me','shop');
+  await mkdir(dirname(exe),{recursive:true});await writeFile(exe,'');await mkdir(folder,{recursive:true});
+  process.env.AGENT_OFFICE_WINDOWS_MOUNT=join(x.root,'mnt');t.after(()=>{delete process.env.AGENT_OFFICE_WINDOWS_MOUNT;});
+  assert.deepEqual([winDetail().ready,winDetail().can_send],[true,true]);
+  assert.deepEqual(mirror.send({work_id:win,text:'이어서 해줘'}),{accepted:true});
+  for(let i=0;i<50&&calls.length<2;i++)await delay(20);
+  assert.deepEqual([calls[1].executable,calls[1].cwd,calls[1].stdin],[exe,folder,'이어서 해줘']);
+  assert.deepEqual(calls[1].args.slice(0,2),['-C','C:\\Users\\me\\shop']);assert.ok(!calls[1].args.includes('-m'));
+  assert.deepEqual(calls[1].args.slice(-5),['resume','--json','--skip-git-repo-check',x.ids.windows,'-']);
 });
 
 test('runtime fixture the import pane lists sessions, attaches one and continues it from the Work detail',async t=>{
