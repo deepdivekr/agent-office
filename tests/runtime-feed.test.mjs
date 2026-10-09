@@ -329,7 +329,7 @@ test('runtime fixture the feed takes presses: answer a question, run an approved
 test('runtime fixture a text output reads as an article: title, sections, numbered items, safe links; the reader shows it whole; working files are not previewed',async t=>{
   const x=await fixture(t,'feed-article-'),{chromium}=await import('playwright'),{startControlCenter}=await import('../dist/observability/control-center.js');
   const w=x.work('article-w','매일 AI 새 글 정리');
-  const body=['# AI 새 글 정리 · 10월 9일','','[메시지 1: X 계정 모니터링]','','1. Tell the AI its budget','저자: **Matt Shumer**  ','원문: [Tell the AI its budget](https://example.com/budget) · [나쁜 링크](javascript:alert(1)) · <img src=x onerror=alert(1)>','','> 인용한 한 줄','','- 첫째','- 둘째','','2. 두 번째 글','@someone "따옴표 안의 말" https://x.com/someone/status/123456789012345','',...Array.from({length:30},(_,i)=>'긴 문단 '+i+' '+'가나다라마바사 '.repeat(8))].join('\n');
+  const body=['# AI 새 글 정리 · 10월 9일','','[메시지 1: X 계정 모니터링]','','1. Tell the AI its budget','저자: **Matt Shumer**  ','원문: [Tell the AI its budget](https://example.com/budget) · [나쁜 링크](javascript:alert(1)) · <img src=x onerror=alert(1)>','','> 인용한 한 줄','','- 첫째','- 둘째','','2. 두 번째 글','@someone "따옴표 안의 말" https://x.com/someone/status/123456789012345','원문:','https://x.com/someone/status/1','공식: [REDACTED_URL]','보조:','https://x.com/other/status/2','https://news.example.com/a/b/c','https://x.com/someone/status/1','',...Array.from({length:30},(_,i)=>'긴 문단 '+i+' '+'가나다라마바사 '.repeat(8))].join('\n');
   await x.result(w,new Date(Date.now()-60_000).toISOString(),body,[['DELIVERY.md',Buffer.from(body)],['collector.cjs',Buffer.from('module.exports=1')],['state.json',Buffer.from('{}')]]);
   x.store.close();
   const server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
@@ -345,7 +345,11 @@ test('runtime fixture a text output reads as an article: title, sections, number
   await post.locator('[data-read]').click();const reader=page.locator('#reader article');await reader.waitFor();
   assert.equal(await reader.locator('h1').innerText(),'AI 새 글 정리 · 10월 9일');
   assert.deepEqual(await reader.locator('.prose h4').allInnerTexts(),['1\nTell the AI its budget','2\n두 번째 글']);
-  assert.deepEqual(await reader.locator('.prose a').evaluateAll(a=>a.map(n=>[n.textContent,n.getAttribute('href'),n.target])),[['Tell the AI its budget','https://example.com/budget','_blank'],['x.com/someone/…','https://x.com/someone/status/123456789012345','_blank']],'only https links become links, shown short');
+  assert.deepEqual(await reader.locator('.prose a').evaluateAll(a=>a.map(n=>[n.textContent,n.getAttribute('href'),n.target])),[['Tell the AI its budget','https://example.com/budget','_blank'],['x.com/someone/…','https://x.com/someone/status/123456789012345','_blank'],['x.com/someone','https://x.com/someone/status/1','_blank'],['x.com/other','https://x.com/other/status/2','_blank'],['news.example.com/a','https://news.example.com/a/b/c','_blank']],'only https links become links, shown short');
+  // Source lines gather into one line: deduplicated, hidden addresses left out, never wrapping.
+  const src=reader.locator('.prose .src');assert.equal(await src.count(),1);
+  assert.deepEqual(await src.locator('a').evaluateAll(a=>a.map(n=>[n.textContent,n.getAttribute('href')])),[['x.com/someone','https://x.com/someone/status/1'],['x.com/other','https://x.com/other/status/2'],['news.example.com/a','https://news.example.com/a/b/c']]);
+  assert.equal(await src.evaluate(n=>Math.round(n.getBoundingClientRect().height)<=Math.ceil(parseFloat(getComputedStyle(n).lineHeight)*1.2)),true,'one line');
   assert.equal(await reader.locator('img').count(),0,'no HTML from the text reaches the page');assert.match(await reader.innerText(),/\[나쁜 링크\]\(javascript:alert\(1\)\)/u);
   assert.equal(await reader.locator('blockquote').innerText(),'인용한 한 줄');assert.deepEqual(await reader.locator('.prose ul li').allInnerTexts(),['첫째','둘째']);
   assert.equal(await reader.locator('.prose .at').first().innerText(),'@someone');

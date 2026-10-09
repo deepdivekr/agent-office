@@ -13,6 +13,7 @@ export const feedArticleCss=`.post .article{display:flex;flex-direction:column;g
 .prose .kicker{font:600 11.5px var(--mono);letter-spacing:.08em;color:var(--accent);margin:1.6em 0 .6em}
 .prose blockquote{margin:0 0 .85em;padding:.1em 0 .1em 1em;border-left:2px solid var(--line2);color:var(--dim)}
 .prose ul,.prose ol{padding-left:1.3em}.prose li{margin:.25em 0}.prose hr{border:0;border-top:1px solid var(--line);margin:1.5em 0}
+.prose .src{display:flex;gap:7px;align-items:baseline;white-space:nowrap;overflow-x:auto;scrollbar-width:none;font-size:.82em;color:var(--dim)}.prose .src::-webkit-scrollbar{display:none}.prose .src span{flex:none;font-weight:600}.prose .src i{font-style:normal;flex:none}.prose .src a{flex:none;color:var(--dim)}
 .prose a{color:var(--code);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}.prose code{font:.88em var(--mono);background:var(--raise);border-radius:4px;padding:.1em .35em}.prose .at{color:var(--code);font-weight:600}
 .reader{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;padding:32px 16px}
 .reader[hidden]{display:none}
@@ -30,6 +31,13 @@ export function feedArticleScript(){return String.raw`
 const INLINE=/\x60([^\x60]+)\x60|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*|__([^_]+)__|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"’”])|(^|[^\w])(@[A-Za-z0-9_]{2,30})/g;
 // A bare address reads as its site and first path part: x.com/name/… rather than the whole status URL.
 function shortUrl(url){try{const u=new URL(url),parts=u.pathname.split('/').filter(Boolean),host=u.hostname.replace(/^www\./,'');return host+(parts[0]?'/'+parts[0].slice(0,24):'')+(parts.length>1||u.search?'/…':'')}catch{return url.slice(0,40)}}
+// Source lines (원문:, 출처:, 공식:, 보조:, a line of addresses) gather into one line under the item they back.
+const SOURCE_LABEL=/^(?:원문|출처|공식|보조|링크|참고|자료|근거|sources?|links?|refs?)\s*[:：]\s*/i,SOURCE_TOKEN=/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"’”])|\[REDACTED_URL\]/g;
+function sourceLine(line){const labelled=SOURCE_LABEL.test(line),rest=line.replace(SOURCE_LABEL,'');const links=[];let m;SOURCE_TOKEN.lastIndex=0;
+ while((m=SOURCE_TOKEN.exec(rest)))if(m[2]||m[3])links.push({url:m[2]||m[3],text:m[1]||null});
+ const left=rest.replace(SOURCE_TOKEN,'').replace(/[\s,·|/]+/g,'');return (labelled||links.length)&&!left?links:null}
+function sourcesHtml(links){const seen=new Set(),shown=links.filter(l=>!seen.has(l.url)&&seen.add(l.url));if(!shown.length)return '';
+ return '<p class="src"><span>'+esc(ff(['출처','Sources']))+'</span>'+shown.map(l=>'<a href="'+esc(l.url)+'" target="_blank" rel="noopener noreferrer">'+esc(l.text?l.text.slice(0,28)+(l.text.length>28?'…':''):shortUrl(l.url).replace(/\/…$/,''))+'</a>').join('<i aria-hidden="true">·</i>')+'</p>'}
 function inlineMd(text){let out='',at=0,m;const s=String(text);INLINE.lastIndex=0;
  while((m=INLINE.exec(s))){out+=esc(s.slice(at,m.index));
   if(m[1])out+='<code>'+esc(m[1])+'</code>';
@@ -56,10 +64,11 @@ function articleBlocks(text){const lines=String(text||'').replace(/\r/g,'').spli
   if((m=/^(\d{1,2})[.)]\s+(.+)$/.exec(line))){const next=lines.slice(i+1).find(l=>l.trim())?.trim()||'',nextNumbered=/^\d{1,2}[.)]\s+/.test(next);
    if(!nextNumbered&&!(list&&list.t==='ol')&&next){flush();out.push({t:'h',level:4,num:m[1],html:inlineMd(m[2]),text:m[2]});continue}
    endPara();if(list&&list.t!=='ol')endList();if(!list)list={t:'ol',start:Number(m[1]),items:[],text:''};list.items.push(inlineMd(m[2]));list.text+=m[2]+' ';continue}
+  const links=sourceLine(line);if(links){endPara();endList();const last=out.at(-1);if(last?.t==='src')last.links.push(...links);else out.push({t:'src',links,text:''});continue}
   endList();para.push(line.replace(/\s{2,}$/,''))}
  flush();return out}
 function blockHtml(b){return b.t==='h'?(b.level<=3?'<h3>'+b.html+'</h3>':'<h4>'+(b.num?'<span class="num">'+esc(b.num)+'</span>':'')+'<span>'+b.html+'</span></h4>')
- :b.t==='kicker'?'<p class="kicker">'+b.html+'</p>':b.t==='hr'?'<hr>':b.t==='quote'?'<blockquote>'+b.html+'</blockquote>'
+ :b.t==='src'?sourcesHtml(b.links):b.t==='kicker'?'<p class="kicker">'+b.html+'</p>':b.t==='hr'?'<hr>':b.t==='quote'?'<blockquote>'+b.html+'</blockquote>'
  :b.t==='ul'?'<ul>'+b.items.map(i=>'<li>'+i+'</li>').join('')+'</ul>':b.t==='ol'?'<ol start="'+b.start+'">'+b.items.map(i=>'<li>'+i+'</li>').join('')+'</ol>':'<p>'+b.html+'</p>'}
 // The title: the first heading, else a short first line that stands alone above more text.
 function articleOf(post){const blocks=articleBlocks(post.text);let title=post.title||null;
