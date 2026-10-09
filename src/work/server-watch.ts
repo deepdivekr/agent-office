@@ -8,7 +8,8 @@
 export type UnitKind='service'|'timer'|'container';
 export type UnitState='ok'|'problem'|'off';
 export type UnitNote='failed'|'stopped'|'last_run_failed'|'timer_inactive'|'unhealthy'|'exited'|'not_found'|'no_recent_activity'|null;
-export interface ServerUnit {id:string;kind:UnitKind;description:string;state:UnitState;note:UnitNote;running?:boolean;active:string;sub:string;restarts:number;since:number|null;last_run:number|null;next_run:number|null;job:string|null;links:string[];project:string|null}
+export interface TimerSchedule {ko:string;en:string;raw:string}
+export interface ServerUnit {id:string;kind:UnitKind;description:string;state:UnitState;note:UnitNote;running?:boolean;schedule?:TimerSchedule;active:string;sub:string;restarts:number;since:number|null;last_run:number|null;next_run:number|null;job:string|null;links:string[];project:string|null}
 export interface ServerSnapshot {now:number;units:ServerUnit[];disabled:string[];checks:Record<string,number>}
 export interface RawSnapshot {format:number;now:number;timers:unknown;files:unknown;show:string;docker:string;checks?:Record<string,number>|undefined;feed?:string|undefined}
 /**
@@ -37,7 +38,8 @@ export function parseServerSnapshot(raw:RawSnapshot):ServerSnapshot{
       const state:UnitState=b.UnitFileState==='disabled'?'off':b.ActiveState!=='active'?'problem':failed?'problem':'ok';
       // While its job runs, systemd has already reset the job's result to success: the outcome is not known yet.
       const running=Boolean(job&&['activating','deactivating','reloading'].includes(job.ActiveState??''));
-      units.push({...base,kind:'timer',state,note:state==='problem'?(b.ActiveState!=='active'?'timer_inactive':'last_run_failed'):null,...(running?{running}:{}),last_run:usec(t?.last),next_run:usec(t?.next),job:jobId});
+      const schedule=timerSchedule(b.TimersCalendar,b.TimersMonotonic);
+      units.push({...base,kind:'timer',state,note:state==='problem'?(b.ActiveState!=='active'?'timer_inactive':'last_run_failed'):null,...(running?{running}:{}),...(schedule?{schedule}:{}),last_run:usec(t?.last),next_run:usec(t?.next),job:jobId});
       continue;
     }
     // A timer's job is shown with its timer; a static helper nobody schedules (an alert hook) is not a service to watch.
@@ -85,4 +87,35 @@ export function serverHealth(snapshot:ServerSnapshot,watched:string[],checks:Act
   // A check the snapshot did not run yet (added since the last read) is not a problem.
   for(const check of checks)if(snapshot.checks[check.id]===0)problems.push({id:check.label,note:'no_recent_activity'});
   return {status:(problems.length?'service_problem':'service_ok') as ServerStatus,counts,problems,off};
+}
+
+/**
+ * A timer's period in words, from systemd's TimersCalendar / TimersMonotonic: "30분마다", "매시 07·37분", "평일 09:00 (Asia/Seoul)".
+ * A form it does not know is shown as written.
+ */
+export function timerSchedule(calendar?:string,monotonic?:string):TimerSchedule|null{
+  const specs=[...(calendar??'').matchAll(/OnCalendar=([^;}]+?)\s*;/gu)].map(m=>m[1]!.trim());
+  if(specs.length){const parts=specs.map(calendarWords);return {ko:parts.map(p=>p.ko).join(', '),en:parts.map(p=>p.en).join(', '),raw:specs.join(' | ')};}
+  const every=/OnUnit(?:Active|Inactive)USec=([0-9a-z ]+?)\s*;/u.exec(monotonic??'')?.[1];
+  if(every){const d=durationWords(every);return {ko:`${d.ko}마다`,en:`every ${d.en}`,raw:every};}
+  return null;
+}
+function durationWords(text:string){
+  const m=/^(\d+)\s*(min|h|s|d|w)\b/u.exec(text.trim());if(!m)return {ko:text,en:text};
+  const n=Number(m[1]),unit=m[2]!,ko={s:'초',min:'분',h:'시간',d:'일',w:'주'}[unit]!,en={s:'s',min:' min',h:' h',d:' days',w:' weeks'}[unit]!;
+  return {ko:`${n}${ko}`,en:`${n}${en}`};
+}
+function calendarWords(spec:string):{ko:string;en:string}{
+  const tz=/\s([A-Za-z]+\/[A-Za-z_]+|UTC)$/u.exec(spec)?.[1]??null,body=tz?spec.slice(0,-tz.length).trim():spec;
+  const zone=(ko:string,en:string)=>tz?{ko:`${ko} (${tz})`,en:`${en} (${tz})`}:{ko:`${ko} (서버 시간)`,en:`${en} (server time)`};
+  const m=/^(?:(\S+)\s+)?\*-\*-\*\s+(\S+)$/u.exec(body);if(!m)return {ko:spec,en:spec};
+  const days=m[1]??null,time=m[2]!,dayKo=days==='Mon..Fri'?'평일 ':days==='Sat,Sun'||days==='Sat..Sun'?'주말 ':days?`${days} `:'',dayEn=days==='Mon..Fri'?'weekdays ':days==='Sat,Sun'||days==='Sat..Sun'?'weekends ':days?`${days} `:'';
+  const [hour='',minute='',second='00']=time.split(':');
+  let step=/^(\d+)\/(\d+)$/u.exec(minute);
+  if(hour==='*'&&step&&second.replace(/^0+/u,'')===''){const n=Number(step[2]);return days?{ko:`${dayKo}${n}분마다`,en:`${dayEn}every ${n} min`}:{ko:`${n}분마다`,en:`every ${n} min`};}
+  if(hour==='*'&&/^\d+(?:,\d+)*$/u.test(minute)){const list=minute.split(',');return list.length===1&&Number(list[0])===0?{ko:`${dayKo}매시 정각`,en:`${dayEn}hourly`}:{ko:`${dayKo}매시 ${list.map(v=>v.padStart(2,'0')).join('·')}분`,en:`${dayEn}hourly at :${list.map(v=>v.padStart(2,'0')).join(', :')}`};}
+  step=/^(\d+)\/(\d+)$/u.exec(hour);
+  if(step&&/^\d+$/u.test(minute)){const n=Number(step[2]);return {ko:`${dayKo}${n}시간마다`,en:`${dayEn}every ${n} h`};}
+  if(/^\d+(?:,\d+)*$/u.test(hour)&&/^\d+$/u.test(minute)){const at=hour.split(',').map(h=>`${h.padStart(2,'0')}:${minute.padStart(2,'0')}`).join('·');return zone(`${dayKo||'매일 '}${at}`,`${dayEn||'daily '}${at}`);}
+  return {ko:spec,en:spec};
 }

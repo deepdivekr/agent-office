@@ -72,7 +72,7 @@ test('runtime fixture a linked server group shows on the board, turns to Needs y
   assert.deepEqual(found.groups.map(g=>g.name),['chat-relay-bot','ledger','notes-bot','shop-web']);
   const {work_ids:[web]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop web',units:['shop-web.service','shop-worker@3007.service']}]});
   const row=()=>readWorkBoard(store,config).works.find(w=>w.id===web);
-  assert.deepEqual([row().status,row().run.kind,row().server.counts,row().server.problems],['service_ok','server',{service:2,timer:0,container:0},[]]);
+  assert.deepEqual([row().status,row().run.kind,row().server.counts,row().server.problems,row().server.mode],['service_standby','server',{service:2,timer:0,container:0},[],'standby'],'healthy services only: always on, waiting');
   assert.equal((await office.discover({target_id:target})).watched.includes('shop-web.service'),true,'a unit already watched is not proposed again');
   answer=raw({show:[unit('shop-web.service',{ActiveState:'failed',SubState:'failed',Result:'exit-code'}),unit('shop-worker@3007.service')]});
   await office.refreshTarget(target);await office.refreshTarget(target);
@@ -107,8 +107,9 @@ test('runtime fixture the Control Center registers a server, links its groups an
   await page.locator('#server-link').click();await page.locator('.feed-rail button').nth(3).waitFor();assert.equal(await page.locator('.feed-rail button').count(),4,'the feed lists the server with a row per server Work');
   await page.locator('[data-view="all"]').click();await page.locator('.tile').first().waitFor();
   assert.equal(await page.locator('.col .tile').count(),4);
-  // shop-sync's last run failed and notes-browser failed: those two groups need the owner; the others are healthy.
-  assert.deepEqual(await page.locator('.col').evaluateAll(cols=>cols.map(c=>c.querySelectorAll('.tile').length)),[3,0,1,0,0]);
+  // shop-sync's last run failed and notes-browser failed: those groups need the owner; the healthy one of services only
+  // is always on, waiting, so it sits with what runs now.
+  assert.deepEqual(await page.locator('.col').evaluateAll(cols=>cols.map(c=>c.querySelectorAll('.tile').length)),[3,1,0,0,0]);
   await page.locator('.tile',{hasText:'chat-relay-bot'}).click();await page.locator('.server-table').waitFor();
   assert.match(await page.locator('.server-table tbody').innerText(),/chat-relay-bot\.service/u);
   assert.equal(await page.locator('.server-chat #server-chat-input').count(),1,'a server Work has a conversation to direct changes');
@@ -260,4 +261,34 @@ test('runtime fixture a failing timer job that runs again is one notice: no "rec
   const kinds=store.hermesState.prepare("SELECT kind FROM office_activity WHERE work_id=? AND kind LIKE 'server.%' ORDER BY id").all(sync).map(r=>r.kind);
   assert.deepEqual(kinds,['server.linked','server.problem','server.recovered'],'two failing runs are one problem; the success is one recovery');
   assert.equal(notices.length,2);
+});
+
+
+test('runtime fixture server Works: timers make a Work recurring, services only always on, the owner can set it; timer runs and periods reach the timeline; a server can be renamed',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js'),{readWorkBoard,readWorkTimeline,readWorkDetail}=await import('../dist/observability/work-view.js');
+  const root=await mkdtemp(join(tmpdir(),'office-server-kind-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
+  const at=Math.floor(Date.now()/1000),timer=unit('shop-sync.timer',{SubState:'waiting',Triggers:'shop-sync.service',TimersCalendar:'{ OnCalendar=*-*-* *:00/30:00 ; next_elapse=x }'});
+  const job=extra=>unit('shop-sync.service',{UnitFileState:'static',TriggeredBy:'shop-sync.timer',ActiveState:'inactive',SubState:'dead',Result:'success',...extra});
+  const snap=(last,extra)=>({...raw({show:[unit('shop-web.service'),timer,job(extra)],timers:[{unit:'shop-sync.timer',last:usec(last),next:usec(last+1800)}]}),now:at});
+  let answer=snap(at-3600,{});const office=new ServerOffice(store,config,{async snapshot(){return answer;}});
+  const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
+  const {work_ids:[web,sync]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop web',units:['shop-web.service']},{name:'Shop sync',units:['shop-sync.timer']}]});
+  await office.refreshTarget(target);
+  const board=()=>new Map(readWorkBoard(store,config).works.map(w=>[w.id,w]));
+  assert.deepEqual([board().get(web).status,board().get(sync).status],['service_standby','service_ok'],'services only: always on; a timer: recurring');
+  // Runs: a new trigger time is a run; a failed one is a problem bar; a running one is "now".
+  answer=snap(at-1800,{Result:'exit-code'});await office.refreshTarget(target);
+  answer=snap(at-60,{ActiveState:'activating',SubState:'start'});await office.refreshTarget(target);
+  const line=readWorkTimeline(store,config).works.find(w=>w.id===sync);
+  assert.deepEqual(line.cycles.map(c=>c.state),['ok','problem','now']);assert.equal(line.cycles[0].unit,'shop-sync.timer');
+  assert.deepEqual(line.schedule,{ko:'30분마다',en:'every 30 min'});assert.equal(line.next_at,new Date((at-60+1800)*1000).toISOString());
+  assert.equal(readWorkDetail(store,config,sync).server.units[0].schedule.ko,'30분마다');
+  // The owner says the always-on service really sends on a schedule of its own.
+  office.setMode({work_id:web,mode:'recurring'});assert.equal(board().get(web).status,'service_ok');assert.equal(readWorkDetail(store,config,web).server.mode_set,true);
+  office.setMode({work_id:web,mode:'auto'});assert.equal(board().get(web).status,'service_standby');
+  assert.throws(()=>office.setMode({work_id:web,mode:'sometimes'}));
+  office.renameTarget({target_id:target,name:'Shop server'});assert.equal(board().get(web).server.target,'Shop server');assert.equal(office.targets()[0].host,'203.0.113.7');
 });

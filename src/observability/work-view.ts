@@ -14,7 +14,7 @@ import {type ProjectScan} from '../work/project-scan.js';
 import {importedCodingReadiness,importedConnectionReadiness,projectJevRecommendations} from '../work/import-runtime.js';
 import {hermesBoardRow,hermesWorkDetail} from '../work/hermes.js';
 import {remoteBoard,remoteDetail} from '../work/remote.js';
-import {serverBoard,serverDetail} from '../work/server-office.js';
+import {serverBoard,serverDetail,serverTimeline} from '../work/server-office.js';
 import {sessionBoard,sessionDetail} from '../work/session-mirror.js';
 import {workObservation,workTail,shortWorkTitle} from '../work/activity.js';
 import {workDispatchOptions} from '../work/dispatch.js';
@@ -147,7 +147,8 @@ function changeSummary(body:{before?:unknown;after?:unknown;evidence?:unknown;ro
 /** The board's Works over the last hours: one bar per cycle and marks for owner actions, for the timeline view. */
 export function readWorkTimeline(store:PackStore,config:HostConfig,hours=24,now=Date.now()){
   const from=now-hours*3_600_000,live=new Set(['running','leased','queued','advising','retry_wait','defining']);
-  const works=readWorkBoard(store,config).works.map(work=>({id:work.id,...workTimeline(store,config.project.id,work.id,{from,to:now,running:live.has(String(work.status))})}));
+  const works=readWorkBoard(store,config).works.map(work=>{const server='server' in work&&work.server?serverTimeline(store,config.project.id,work.id,{from,to:now}):null;
+    return server?{id:work.id,...server}:{id:work.id,...workTimeline(store,config.project.id,work.id,{from,to:now,running:live.has(String(work.status))})};});
   return {from:new Date(from).toISOString(),to:new Date(now).toISOString(),works};
 }
 
