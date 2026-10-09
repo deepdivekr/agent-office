@@ -117,6 +117,15 @@ function init(store:PackStore){initWorkExecution(store);store.hermesState.exec('
 const exists=(store:PackStore)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_session_work'").get());
 const row=(store:PackStore,project:string,id:string)=>exists(store)?store.hermesState.prepare('SELECT * FROM office_session_work WHERE project_id=? AND work_id=?').get(project,id) as Row|undefined:undefined;
 const sending=new Set<string>();
+/** A Windows app's session runs again in the Windows client next to its session folder, started in its folder as WSL
+ * sees it. A network share (\\server\share) is no folder to start in. AGENT_OFFICE_WINDOWS_MOUNT moves /mnt in tests. */
+export function windowsRun(r:{client:RunClient;file:string;cwd:string|null}){
+  const at=r.file.lastIndexOf(r.client==='codex'?'/.codex/':'/.claude/');if(at<0)return null;const home=r.file.slice(0,at);
+  const executable=r.client==='codex'?join(home,'AppData','Roaming','npm','node_modules','@openai','codex','node_modules','@openai','codex-win32-x64','vendor','x86_64-pc-windows-msvc','bin','codex.exe'):join(home,'.local','bin','claude.exe');
+  const drive=r.cwd?.match(/^([A-Za-z]):[\\/](.*)$/u);if(!drive||!existsSync(executable))return null;
+  const cwd=join(process.env.AGENT_OFFICE_WINDOWS_MOUNT??'/mnt',drive[1]!.toLowerCase(),...drive[2]!.split(/[\\/]/u).filter(Boolean));
+  return existsSync(cwd)?{executable,cwd}:null;
+}
 const quietFor=(file:string)=>{try{return Date.now()-statSync(file).mtimeMs;}catch{return Infinity;}};
 function state(r:Row){const quiet=quietFor(r.file);return sending.has(r.work_id)||quiet<LIVE_MS?'session_active':'session_idle';}
 const transcripts=new Map<string,{key:string;messages:SessionMessage[]}>();
@@ -130,9 +139,10 @@ export function sessionBoard(store:PackStore,project:string,id:string){
   return {status,run:{kind:'session',id,status},pack:null,has_contract:true,session:{client:r.client,cwd:r.cwd,updated_at:existsSync(r.file)?statSync(r.file).mtime.toISOString():null}};
 }
 export function sessionDetail(store:PackStore,project:string,id:string){
-  const r=row(store,project,id);if(!r)return null;const work=store.officeWorkById(project,id),quiet=quietFor(r.file);
+  const r=row(store,project,id);if(!r)return null;const work=store.officeWorkById(project,id),quiet=quietFor(r.file),
+    ready=r.windows?Boolean(windowsRun(r)):Boolean(r.cwd&&existsSync(r.cwd));
   return {id,title:work.title,goal:work.goal,revision:0,run_status:state(r),completion_verified:false,updated_at:Number.isFinite(quiet)?new Date(Date.now()-quiet).toISOString():work.updated_at,
-    session:{client:r.client,session_id:r.session_id,cwd:r.cwd,windows:Boolean(r.windows),missing:!existsSync(r.file),sending:sending.has(id),can_send:!Boolean(r.windows)&&!sending.has(id)&&quiet>=IDLE_MS&&Boolean(r.cwd&&existsSync(r.cwd)),messages:messages(r)}};
+    session:{client:r.client,session_id:r.session_id,cwd:r.cwd,windows:Boolean(r.windows),ready,missing:!existsSync(r.file),sending:sending.has(id),can_send:ready&&!sending.has(id)&&quiet>=IDLE_MS,messages:messages(r)}};
 }
 
 export class SessionMirror {
@@ -160,11 +170,11 @@ export class SessionMirror {
   /** Continues the session with the owner's message, in its own folder, only while nobody else is writing to it. */
   send(raw:unknown){
     const input=sessionSendSchema.parse(raw),project=this.config.project.id;assertWorkConnected(this.store,project,input.work_id);
-    const r=row(this.store,project,input.work_id);requireCondition(r,'SESSION_WORK_NOT_FOUND');requireCondition(!Boolean(r.windows),'SESSION_IN_WINDOWS_APP');requireCondition(clientRunEnabled(),'CLIENT_RUN_DISABLED');
-    requireCondition(!sending.has(r.work_id)&&quietFor(r.file)>=IDLE_MS,'SESSION_BUSY');requireCondition(r.cwd&&existsSync(r.cwd),'SESSION_FOLDER_MISSING');
-    const settings=readModelSettings(modelSettingsPath(this.config)),model=settings?.selection.client_models[r.client]??null;
+    const r=row(this.store,project,input.work_id);requireCondition(r,'SESSION_WORK_NOT_FOUND');requireCondition(clientRunEnabled(),'CLIENT_RUN_DISABLED');
+    requireCondition(!sending.has(r.work_id)&&quietFor(r.file)>=IDLE_MS,'SESSION_BUSY');const win=r.windows?windowsRun(r):null;requireCondition(!r.windows||win,'SESSION_WINDOWS_UNAVAILABLE');requireCondition(r.cwd&&(win||existsSync(r.cwd)),'SESSION_FOLDER_MISSING');
+    const settings=readModelSettings(modelSettingsPath(this.config)),model=win?null:settings?.selection.client_models[r.client]??null;
     sending.add(r.work_id);workActivity(this.store,project,r.work_id,'session.sent',`지시 전달 · ${redact(input.text).slice(0,300)}`);
-    void runClient({client:r.client,model,effort:null,folder:r.cwd,prompt:input.text,session:{id:r.session_id,resume:true},signal:new AbortController().signal,timeout_ms:30*60_000,
+    void runClient({client:r.client,model,effort:null,folder:r.cwd,...(win?{windows:win}:{}),prompt:input.text,session:{id:r.session_id,resume:true},signal:new AbortController().signal,timeout_ms:30*60_000,
       // A resumed Claude session can answer under a new ID (a fork); the Work follows it.
       onSession:sessionId=>{if(sessionId!==r.session_id){const file=r.client==='claude'?join(dirname(r.file),`${sessionId}.jsonl`):r.file;this.store.hermesState.prepare('UPDATE office_session_work SET session_id=?,file=? WHERE project_id=? AND work_id=?').run(sessionId,existsSync(file)?file:r.file,project,r.work_id);}},onEvent:()=>{}})
       .then(outcome=>workActivity(this.store,project,r.work_id,outcome.completed?'session.reply':'session.failed',outcome.completed?'답변을 받았습니다.':`답변을 받지 못했습니다: ${outcome.reason}`))
