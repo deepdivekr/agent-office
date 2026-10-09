@@ -53,6 +53,10 @@ test('the timeline layout draws one row per Work with its bars, marks and state,
   assert.equal(await page.locator('.tl-row[data-work] .bar').count(),2);
   assert.equal(await page.locator('.tl-row[data-work] .bar.problem').count(),1);
   assert.equal(await page.locator('.tl-row[data-work] .mk.edit').getAttribute('title').then(v=>v.startsWith('Instruction changed · ')),true);
+  // A short legend above; an owner action is a neutral ring, not the red of a failure; the track has a left edge.
+  assert.equal((await page.locator('.tl-legend').innerText()).replace(/\s+/gu,' '),'Last 24 hours Succeeded Failed Running Stopped My action Delivery failed');
+  const colors=await page.evaluate(()=>{const get=(s,p)=>getComputedStyle(document.querySelector(s))[p];return [get('.tl-row[data-work] .mk.edit','borderTopColor')===get('.tl-row[data-work] .bar.problem','backgroundColor'),get('.tl-row[data-work] .tl-track','borderLeftStyle')]});
+  assert.deepEqual(colors,[false,'solid']);
   assert.match(await page.locator('.tl-row[data-work] .tl-st').innerText(),/^Next run · today \d\d:\d\d$|^Next run · tomorrow \d\d:\d\d$/u);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.reload();await page.locator('.tl-row[data-work]').waitFor();
