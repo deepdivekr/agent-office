@@ -9,11 +9,12 @@ import {serverWatchCss,serverWatchScript} from './server-watch-ui.js';
 import {importAddressCss,importAddressScript} from './import-address-ui.js';
 import {sessionMirrorCss,sessionMirrorScript} from './session-mirror-ui.js';
 import {feedCss,feedScript} from './feed-ui.js';
+import {feedCardsCss,feedCardsScript} from './feed-cards-ui.js';
 import {workResultsScript,workResultsCss} from './work-results-ui.js';
 import {deliveryCss,deliveryWorkScript} from './delivery-ui.js';
 import {workAdoptionScript} from './work-adoption-ui.js';
 export function workHtml(nonce:string){return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent Office · 업무 현황</title>${iconHead}
-<style>${uiCss}${workResultsCss}${deliveryCss}${serverWatchCss}${importAddressCss}${sessionMirrorCss}${feedCss}
+<style>${uiCss}${workResultsCss}${deliveryCss}${serverWatchCss}${importAddressCss}${sessionMirrorCss}${feedCss}${feedCardsCss}
 .top .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.top input[type=search]{width:220px;font:12.5px var(--mono)}
 .seg{display:inline-flex;gap:2px}.seg button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--dim);padding:5px 9px;font:500 11px var(--mono);letter-spacing:.14em;text-transform:uppercase}.seg button[aria-pressed=true]{color:var(--text);border-bottom-color:var(--accent)}
 .intake{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:20px}.intake>label:first-child{position:absolute;left:-9999px}
@@ -537,6 +538,7 @@ ${serverWatchScript()}
 ${importAddressScript()}
 ${sessionMirrorScript()}
 ${feedScript()}
+${feedCardsScript()}
 document.getElementById('open-import').onclick=()=>{importOpen=true;render();setImportRoute('address');loadMigrationPrompt()};
 document.getElementById('close-import').onclick=()=>{importRevision++;importOpen=false;importResult=null;render();setMessage('')};
 document.querySelectorAll('[data-import-route]').forEach(button=>button.onclick=()=>{setImportRoute(button.dataset.importRoute);if(button.dataset.importRoute==='external')loadMigrationPrompt()});

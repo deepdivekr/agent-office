@@ -139,7 +139,8 @@ test('runtime fixture Hermes control HTTP validates origin and exposes managed W
  const paused=await fetch(server.url+'work/hermes/action',{method:'POST',headers:{'content-type':'application/json','x-agent-driver':'human-office',origin:new URL(server.url).origin},body});assert.equal(paused.status,200);assert.equal((await paused.json()).hermes.paused,true);assert.equal(fake.prompts.length,0);
 });
 test('runtime contract Hermes Work UI compiles, escapes text and shows actual logs plus explicit usage consent',()=>{
- const html=workHtml('nonce');assert.doesNotThrow(()=>new Script(html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/u)[1]));assert.match(html,/Hermes 실행 · Driver 관리/u);assert.match(html,/실제 작업 로그/u);assert.match(html,/cost_acknowledged:true/u);assert.match(html,/esc\(t.reply\)/u);assert.doesNotMatch(html,/<iframe|<video/u);
+ const html=workHtml('nonce');assert.doesNotThrow(()=>new Script(html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/u)[1]));assert.match(html,/Hermes 실행 · Driver 관리/u);assert.match(html,/실제 작업 로그/u);assert.match(html,/cost_acknowledged:true/u);assert.match(html,/esc\(t.reply\)/u);// Nothing from outside is embedded: no frames, and a player only for Office's own files (the CSP allows media from 'self' alone).
+ assert.doesNotMatch(html,/<iframe/u);for(const tag of html.match(/<video[^>]*>/gu)??[])assert.match(tag,/src="'\+src\+'"/u,tag);
 });
 test('runtime fixture Hermes transport exchanges ACP JSONL, denies unsupported capabilities and bounds request time',async()=>{
  const updates=[],permissions=[];

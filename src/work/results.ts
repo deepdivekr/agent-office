@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {constants} from 'node:fs';
-import {open,realpath} from 'node:fs/promises';
+import {open,realpath,stat} from 'node:fs/promises';
 import {basename,dirname,isAbsolute,relative,resolve,sep} from 'node:path';
 import {z} from 'zod';
 import {type PackStore} from '../packs/store.js';
@@ -12,6 +12,7 @@ import {workImportExecutionOwner} from './import-authority.js';
 import {WorkDeliverySettings} from './delivery-settings.js';
 import {createDeliveryConnector} from './delivery-connectors.js';
 import {workActivity} from './activity.js';
+import {fileSha256} from './artifact-kind.js';
 
 const identity=z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/u);
 const digest=z.string().regex(/^[a-f0-9]{64}$/u);
@@ -298,11 +299,22 @@ export class WorkResults {
     return this.store.hermesState.prepare("SELECT DISTINCT d.work_id FROM office_result_delivery d JOIN office_result r ON r.id=d.result_id LEFT JOIN office_work_lifecycle l ON l.work_id=d.work_id LEFT JOIN office_intake i ON i.work_id=d.work_id WHERE d.project_id=? AND d.authority='office' AND d.status='pending' AND d.target_fingerprint IS NOT NULL AND l.work_id IS NULL AND COALESCE(i.paused,0)=0 ORDER BY r.created_at LIMIT ?").all(project,limit).map(row=>String(row.work_id));
   }
   /** Download only a recorded file inside explicitly delegated roots, with independent readback. */
-  async readArtifact(project:string,workId:string,resultId:string,artifactId:string,roots:string[]){
+  private async artifactPath(project:string,workId:string,resultId:string,artifactId:string,roots:string[]){
     this.get(project,workId,resultId);const row=this.store.hermesState.prepare('SELECT body FROM office_result WHERE project_id=? AND work_id=? AND id=?').get(project,workId,resultId)!;
     const artifact=(JSON.parse(String(row.body)).artifacts as Array<{id:string;path:string;label:string;sha256:string;bytes:number|null;media_type:string|null}>).find(value=>value.id===artifactId);requireCondition(artifact&&isAbsolute(artifact.path),'RESULT_ARTIFACT_NOT_FOUND');
     const delegated=await Promise.all(roots.filter(isAbsolute).map(root=>realpath(root))),resolved=await realpath(artifact.path);
     requireCondition(delegated.some(root=>{const path=relative(root,resolved);return path!==''&&!isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep);}), 'RESULT_ARTIFACT_OUT_OF_SCOPE');
+    return {artifact,resolved};
+  }
+  /** A stored file the page streams (a video plays from ranges of it): in scope and still the file the result saved. */
+  async artifactFile(project:string,workId:string,resultId:string,artifactId:string,roots:string[]){
+    const {artifact,resolved}=await this.artifactPath(project,workId,resultId,artifactId,roots),stats=await stat(resolved);
+    requireCondition(stats.isFile()&&stats.size<=1024**3,'RESULT_ARTIFACT_SIZE_INVALID');requireCondition(artifact.bytes===null||artifact.bytes===stats.size,'RESULT_ARTIFACT_CHANGED');
+    requireCondition(await fileSha256(resolved,stats.size,stats.mtimeMs)===artifact.sha256,'RESULT_ARTIFACT_CHANGED');
+    return {path:resolved,size:stats.size,sha256:artifact.sha256,label:artifact.label,filename:basename(resolve(resolved)).replace(/[\r\n"\\]/gu,'_'),media_type:artifact.media_type??imageType(artifact.label)??'application/octet-stream'};
+  }
+  async readArtifact(project:string,workId:string,resultId:string,artifactId:string,roots:string[]){
+    const {artifact,resolved}=await this.artifactPath(project,workId,resultId,artifactId,roots);
     const handle=await open(resolved,constants.O_RDONLY|constants.O_NOFOLLOW);try{const stat=await handle.stat();requireCondition(stat.isFile()&&stat.size<=16*1024*1024,'RESULT_ARTIFACT_SIZE_INVALID');requireCondition(artifact.bytes===null||artifact.bytes===stat.size,'RESULT_ARTIFACT_CHANGED');const bytes=await handle.readFile();requireCondition(sha(bytes)===artifact.sha256,'RESULT_ARTIFACT_CHANGED');return {bytes,filename:basename(resolve(resolved)).replace(/[\r\n"\\]/gu,'_'),media_type:artifact.media_type??imageType(artifact.label)??'application/octet-stream',sha256:artifact.sha256};}finally{await handle.close();}
   }
 }

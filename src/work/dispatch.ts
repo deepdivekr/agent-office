@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {type PackStore} from '../packs/store.js';
-import {FamilyRuntime} from '../packs/runtime.js';
+import {FamilyRuntime,type PackApprovalDispatcher} from '../packs/runtime.js';
 import {recipeSchema} from '../packs/contracts.js';
 import {loadHostConfig,workModelDataApproved,type HostConfig} from '../interface/config.js';
 import {type StructuredModel} from '../taskpack/adaptive-spec.js';
@@ -41,7 +41,7 @@ export function workDispatchOptions(store:PackStore,config:HostConfig,id:string)
 /** Explicit UI dispatch. Work creation alone does not grant a new execution. */
 export class WorkDispatcher{
   private active=new Set<Promise<void>>();private stopped=false;readonly family:FamilyRuntime;
-  constructor(readonly store:PackStore,readonly config:HostConfig,readonly model:StructuredModel,readonly hermes:HermesWorkRuntime,readonly supervisor?:WorkSupervisor){initWorkExecution(store);this.family=new FamilyRuntime(store,config,{llm:model});}
+  constructor(readonly store:PackStore,readonly config:HostConfig,readonly model:StructuredModel,readonly hermes:HermesWorkRuntime,readonly supervisor?:WorkSupervisor,approval?:PackApprovalDispatcher){initWorkExecution(store);this.family=new FamilyRuntime(store,config,{llm:model,...(approval?{approval}:{})});}
   get idle(){return this.active.size===0;}
   start(raw:unknown){
     const input=workExecuteSchema.parse(raw),project=this.config.project.id,work=this.store.intakeWork(project,input.work_id);

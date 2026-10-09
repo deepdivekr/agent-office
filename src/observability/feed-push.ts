@@ -1,6 +1,7 @@
 import {type PackStore} from '../packs/store.js';
 import {type HostConfig} from '../interface/config.js';
 import {needsOwner} from '../work/progress.js';
+import {type FeedApprovals} from '../work/feed-approvals.js';
 import {type WorkPush,type PushMessage} from '../work/push.js';
 import {readWorkBoard} from './work-view.js';
 
@@ -16,12 +17,14 @@ const firstLine=(text:string)=>text.split('\n').map(line=>line.replace(/^[\s#>*\
 export class FeedPushWatcher {
   private since=new Date().toISOString();
   private attention:Set<string>|null=null;
-  constructor(readonly store:PackStore,readonly config:HostConfig,readonly push:WorkPush){}
+  private approvalsSeen:Set<string>|null=null;
+  constructor(readonly store:PackStore,readonly config:HostConfig,readonly push:WorkPush,readonly approvals?:FeedApprovals){}
   async tick(){
     const project=this.config.project.id,now=new Date().toISOString(),board=readWorkBoard(this.store,this.config).works.filter(work=>!work.hidden);
     const titles=new Map(board.map(work=>[work.id,work.title])),attention=new Set(board.filter(work=>needsYou.has(String(work.status))).map(work=>work.id));
     const started=this.attention?[...attention].filter(id=>!this.attention!.has(id)):[];this.attention=attention;
     const since=this.since;this.since=now;
+    const held=this.approvals?.list()??[],readyNow=held.filter(item=>!this.approvalsSeen?.has(item.task_id)&&this.approvalsSeen!==null);this.approvalsSeen=new Set(held.map(item=>item.task_id));
     if(!this.push.count())return {sent:0};
     const outputs:Array<{id:string;work:string;text:string}>=[];
     const has=(table:string)=>Boolean(this.store.hermesState.prepare('SELECT 1 FROM sqlite_master WHERE name=?').get(table));
@@ -33,7 +36,11 @@ export class FeedPushWatcher {
       if(row.work_id&&!titles.has(row.work_id))continue;
       outputs.push({id:'p:'+row.id,work:row.work_id?titles.get(row.work_id)!:row.source_label,text:row.title||firstLine(row.text)});
     }
-    const messages:PushMessage[]=started.map(id=>({title:titles.get(id)!,body:'확인이 필요해요',tag:'attention:'+id,view:'attention'}));
+    // A monitor's change is the reason it exists: it is told as soon as it is seen.
+    for(const row of this.store.hermesState.prepare("SELECT e.id,o.work_id FROM family_event e JOIN office_run o ON o.project_id=e.project_id AND o.source_kind='pack' AND o.source_id=e.run_id WHERE e.project_id=? AND e.kind='changed' AND e.created_at>? AND e.created_at<=? ORDER BY e.created_at").all(project,since,now) as Array<{id:number;work_id:string}>)
+      if(titles.has(row.work_id))outputs.push({id:'e:'+row.id,work:titles.get(row.work_id)!,text:'변화가 생겼어요'});
+    const messages:PushMessage[]=readyNow.map(item=>({title:item.work_id?titles.get(item.work_id)??'제출 준비':'제출 준비',body:'제출 준비가 끝났어요. 피드에서 승인해 주세요',tag:'approval:'+item.task_id,view:'attention'}));
+    messages.push(...started.filter(id=>!readyNow.some(item=>item.work_id===id)).map(id=>({title:titles.get(id)!,body:'확인이 필요해요',tag:'attention:'+id,view:'attention'})));
     if(outputs.length>3)messages.push({title:`새 산출물 ${outputs.length}개`,body:[...new Set(outputs.map(o=>o.work))].join(', '),tag:'feed'});
     else for(const o of outputs)messages.push({title:o.work,body:o.text||'새 산출물',tag:o.id});
     let sent=0;for(const message of messages)sent+=(await this.push.notify(message)).sent;

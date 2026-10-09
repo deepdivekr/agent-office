@@ -1,5 +1,5 @@
-import {statSync} from 'node:fs';
-import {dirname} from 'node:path';
+import {realpathSync,statSync} from 'node:fs';
+import {dirname,isAbsolute,relative,sep} from 'node:path';
 import {type HostConfig} from '../interface/config.js';
 import {workClientChoice} from '../work/client-run.js';
 import {type IntakeWork,type PackStore} from '../packs/store.js';
@@ -29,7 +29,10 @@ import {workTimeline} from '../work/timeline.js';
 import {refinedLog} from '../work/thread.js';
 import {hiddenWorkIds} from '../work/hidden.js';
 import {listFeedPosts} from '../work/feed.js';
-import {imageType,type WorkResults} from '../work/results.js';
+import {type WorkResults} from '../work/results.js';
+import {artifactKind,artifactPreview} from '../work/artifact-kind.js';
+import {appApproved,isAppFile,isCardFile,lastAppRun,readAppManifest,readCardFile} from '../work/feed-cards.js';
+import {type FeedApprovals} from '../work/feed-approvals.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
 const verified=(worker:SwarmRunSnapshot['workers'][string])=>worker.status==='succeeded'&&worker.result?.readback?.verified===true&&worker.quality?.accepted===true;
@@ -62,7 +65,7 @@ export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
  * along for what the page pins and lists beside the posts: those that need the owner, those running, the next runs and
  * the servers. Built from stored records only; hidden Works stay out.
  */
-export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,options:{before?:string;limit?:number}={}){
+export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,options:{before?:string;limit?:number;approvals?:FeedApprovals}={}){
   const project=config.project.id,before=options.before??'9999',limit=Math.min(Math.max(options.limit??30,1),60);
   const board=readWorkBoard(store,config).works.filter(work=>!work.hidden),shown=new Set(board.map(work=>work.id)),titles=new Map(board.map(work=>[work.id,work.title]));
   const recent=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get()?store.hermesState.prepare('SELECT kind,summary,created_at,metadata FROM office_activity WHERE project_id=? AND work_id=? ORDER BY id DESC LIMIT 1'):null;
@@ -73,26 +76,68 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
     return {id:work.id,title:work.title,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),client:work.client?.id??null,created_at:work.created_at,
       schedule:added.schedule?{enabled:Boolean(added.schedule.enabled),definition:added.schedule.definition,next_run_at:added.schedule.next_run_at??null}:null,
       note:added.progress?.note??null,last_event:event?refinedLog([{...event,kind:'event',summary:clean(event.summary,300)}])[0]!:null,
-      ...('server' in work&&work.server?{server:work.server}:{})};
+      ...('server' in work&&work.server?{server:work.server}:{}),...ownerQuestions(store,project,work.id,String(work.status)),...watchStatus(store,project,work.id)};
   });
   const posts:Array<Record<string,unknown>&{at:string}>=[];
+  // Only files under Office's data folder or the project, as the file route serves them.
+  const roots=[dirname(config.dbPath),config.project.worktree].flatMap(root=>{try{return [realpathSync(root)];}catch{return [];}});
+  const inRoots=(path:string)=>roots.some(root=>{const rel=relative(root,path);return rel!==''&&!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..'+sep);});
   if(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result'").get())
     for(const row of store.hermesState.prepare('SELECT id,work_id,body FROM office_result WHERE project_id=? AND created_at<? ORDER BY created_at DESC LIMIT ?').all(project,before,limit*2) as Array<{id:string;work_id:string;body:string}>){
       if(!shown.has(row.work_id))continue;let r;try{r=results.get(project,row.work_id,row.id);}catch{continue;}
       // A later run may have replaced a picture in the Work folder: only files still as they were saved are shown.
-      let stored:Array<{id:string;path:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
-      const intact=new Set(stored.filter(a=>{try{const size=statSync(a.path).size;return a.bytes===null||a.bytes===size;}catch{return false;}}).map(a=>a.id));
-      const images=r.artifacts.filter(a=>a.download_available&&imageType(a.label)&&intact.has(a.id));
+      let stored:Array<{id:string;path:string;label:string;sha256:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
+      const intact=new Map<string,{path:string;size:number;mtimeMs:number}>();
+      for(const a of stored)try{const path=realpathSync(a.path),stats=statSync(path);if(stats.isFile()&&(a.bytes===null||a.bytes===stats.size)&&inRoots(path))intact.set(a.id,{path,size:stats.size,mtimeMs:stats.mtimeMs});}catch{/* gone */}
+      const allFiles=r.artifacts.filter(a=>a.download_available&&intact.has(a.id)).map(a=>({...a,...artifactKind(a.label)}));
+      // CARD.json shapes the post; an *.app.json is an app card. Neither is shown as a file of its own.
+      const cardFile=allFiles.find(a=>isCardFile(a.label)),card=cardFile?readCardFile(intact.get(cardFile.id)!.path,cardFile.sha256):null;
+      const apps=allFiles.filter(a=>isAppFile(a.label)).slice(0,2).flatMap(a=>{const manifest=readAppManifest(intact.get(a.id)!.path,a.sha256);
+        return manifest?[{artifact_id:a.id,label:a.label,title:manifest.title,command:manifest.command,inputs:manifest.inputs??[],buttons:manifest.buttons,approved:appApproved(store,project,a.sha256),last_run:lastAppRun(store,project,r.id,a.id)}]:[];});
+      const shownFiles=allFiles.filter(a=>!isCardFile(a.label)&&!isAppFile(a.label));
+      const images=shownFiles.filter(a=>a.kind==='image'),media=shownFiles.find(a=>a.kind==='video'||a.kind==='audio'),doc=shownFiles.find(a=>a.kind==='pdf');
+      // The first text, code or table file that reads cleanly gives the card its preview.
+      // An app's own script is behind its card, not a preview.
+      let preview=null;if(!apps.length)for(const a of shownFiles.filter(f=>['code','text','table'].includes(f.kind))){const file=intact.get(a.id)!;preview=artifactPreview(file.path,a.sha256,a.label,file.size,file.mtimeMs);if(preview){preview={...preview,artifact_id:a.id,label:a.label};break;}}
       posts.push({id:'r:'+r.id,kind:'result',work_id:r.work_id,work_title:titles.get(r.work_id),at:r.created_at,result_id:r.id,text:clean(r.delivery_text||r.text||r.summary,4000),
         images:images.slice(0,4).map(a=>({artifact_id:a.id,label:a.label})),image_count:images.length,files:r.artifacts.length,verified:r.work_completion_verified,
+        media:media?{kind:media.kind,artifact_id:media.id,label:media.label,bytes:intact.get(media.id)!.size}:null,doc:doc?{artifact_id:doc.id,label:doc.label,bytes:intact.get(doc.id)!.size}:null,preview,card,apps,
         deliveries:r.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))});
     }
   for(const post of listFeedPosts(store,project,{before,limit}))if(!post.work_id||shown.has(post.work_id))
-    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label});
+    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label,card:post.card});
+  // A monitor's change: what it found, from the observation it recorded, with its source page when that is a web page.
+  for(const row of store.hermesState.prepare("SELECT e.id,e.body,e.created_at,o.work_id FROM family_event e JOIN office_run o ON o.project_id=e.project_id AND o.source_kind='pack' AND o.source_id=e.run_id WHERE e.project_id=? AND e.kind='changed' AND e.created_at<? ORDER BY e.created_at DESC LIMIT ?").all(project,before,limit) as Array<{id:number;body:string;created_at:string;work_id:string}>){
+    if(!shown.has(row.work_id))continue;let body:{before?:unknown;after?:unknown;evidence?:unknown};try{body=JSON.parse(row.body);}catch{continue;}
+    posts.push({id:'e:'+row.id,kind:'change',work_id:row.work_id,work_title:titles.get(row.work_id),at:row.created_at,text:'',change:changeSummary(body,config)});
+  }
   for(const work of board)if('session' in work&&work.session){const last=sessionDetail(store,project,work.id)?.session.messages.filter(m=>m.role==='assistant').at(-1);
     if(last?.at&&last.at<before)posts.push({id:'s:'+work.id+':'+last.at,kind:'reply',work_id:work.id,work_title:work.title,client:work.session.client,at:last.at,text:clean(last.text,4000)});}
   posts.sort((a,b)=>b.at.localeCompare(a.at));const page=posts.slice(0,limit);
-  return {generated_at:new Date().toISOString(),works,posts:page,next_before:page.length===limit?page.at(-1)!.at:null};
+  const approvals=(options.approvals?.list()??[]).filter(item=>!item.work_id||shown.has(item.work_id)).map(item=>({...item,work_title:item.work_id?titles.get(item.work_id)??null:null}));
+  return {generated_at:new Date().toISOString(),works,posts:page,approvals,next_before:page.length===limit?page.at(-1)!.at:null};
+}
+/** The questions a Work waits on, for answering in the feed. */
+function ownerQuestions(store:PackStore,project:string,workId:string,status:string){
+  if(status!=='awaiting_details')return {};
+  try{const work=store.intakeWork(project,workId);return {revision:work.revision,questions:(work.questions as Array<{id:string;prompt:string;options:Array<{id:string;label:string;detail?:string}>;recommended_id?:string;required?:boolean}>).filter(q=>!work.answers[q.id]).map(q=>({id:q.id,prompt:q.prompt,recommended_id:q.recommended_id??null,required:q.required!==false,options:q.options.map(o=>({id:o.id,label:o.label,needs_value:Boolean(o.detail),...(o.detail?{value_hint:o.detail}:{})}))}))};}catch{return {};}
+}
+/** A monitor's one line: when it last looked, when it looks next, and what it has found. */
+function watchStatus(store:PackStore,project:string,workId:string){
+  const row=store.hermesState.prepare("SELECT w.run_id,w.next_ms,w.paused,json_extract(x.checkpoint,'$.watch_tick.observed_at') AS observed_at FROM family_watch w JOIN office_run o ON o.source_kind='pack' AND o.source_id=w.run_id AND o.project_id=? LEFT JOIN family_execution x ON x.run_id=w.run_id WHERE o.work_id=? ORDER BY w.next_ms DESC LIMIT 1").get(project,workId) as {run_id:string;next_ms:number;paused:number;observed_at:string|null}|undefined;
+  if(!row)return {};
+  const changes=store.hermesState.prepare("SELECT COUNT(*) AS n,MAX(created_at) AS at FROM family_event WHERE run_id=? AND kind='changed'").get(row.run_id) as {n:number;at:string|null};
+  const last=store.hermesState.prepare('SELECT kind FROM family_event WHERE run_id=? ORDER BY id DESC LIMIT 1').get(row.run_id) as {kind:string}|undefined;
+  return {watch:{next_at:new Date(Number(row.next_ms)).toISOString(),checked_at:row.observed_at,paused:Boolean(row.paused),changes:Number(changes.n),last_change_at:changes.at,failing:last?.kind==='unavailable'}};
+}
+function changeSummary(body:{before?:unknown;after?:unknown;evidence?:unknown;rows_before?:unknown;rows_after?:unknown},config:HostConfig){
+  const lowest=(value:unknown)=>{const minima=(value as {minima?:Record<string,unknown>}|null)?.minima;const numbers=minima?Object.values(minima).filter((n):n is number=>typeof n==='number'&&Number.isFinite(n)):[];return numbers.length?Math.min(...numbers):null;};
+  const before=lowest(body.before),after=lowest(body.after);
+  const evidence=(Array.isArray(body.evidence)?body.evidence:[]) as Array<{source_id?:string;rows?:Array<Record<string,unknown>>}>,seen=evidence.find(item=>Array.isArray(item.rows)&&item.rows.length);
+  const header=seen?Object.keys(seen.rows![0]!).slice(0,8):[];
+  const source=seen?.source_id?config.packs?.sources.find(item=>item.id===seen.source_id):undefined,url=source&&'url' in source&&/^https:\/\/[^{}\s]+$/u.test(source.url)?source.url:null;
+  return {diff:rowDiff(body.rows_before,body.rows_after),lowest_before:before!==null&&after!==null&&before!==after?before:null,lowest_after:before!==null&&after!==null&&before!==after?after:null,
+    header:header.map(key=>clean(key,80)),rows:seen?seen.rows!.slice(0,5).map(row=>header.map(key=>clean(typeof row[key]==='string'?row[key] as string:JSON.stringify(row[key]??''),120))):[],total_rows:seen?.rows?.length??0,url};
 }
 
 /** The board's Works over the last hours: one bar per cycle and marks for owner actions, for the timeline view. */
@@ -252,4 +297,21 @@ function buildWorkDetail(store:PackStore,config:HostConfig,id:string){
   // The steps an imported automation came with (review 2026-10-04: the spec plan can hold a later replan's steps).
   const importRecord=store.workImportForWork(project,id),importBody=importRecord?.kind==='pasted'?importRecord.body as {steps?:Array<{goal?:unknown}>}:null,imported_steps=Array.isArray(importBody?.steps)?{steps:importBody.steps.map(step=>({goal:String(step.goal??'')})).filter(step=>step.goal)}:null;
   return {format:1,id,client:workClientChoice(store,project,id),imported_steps,imported_connection:connection,file_activity:fileActivity,title:clean(record.title,160),goal:clean(record.goal,2000),prompt:intake?clean(intake.prompt,8000):null,work_status:intake?.status??null,mode:intake?.mode??null,revision:intake?.revision??null,paused:Boolean(intake?.paused||control?.paused),jev:intake?{enabled:intake.jev_enabled,cost_consent_at:intake.jev_cost_consent_at,optional:true,can_change:['ready','running'].includes(intake.status)}:null,jev_recommendations:jevRecommendations,jev_recommendation_status:jevRecommendationStatus,work_plan:workPlan,context_metrics:intake?workContextMetrics(store,project,id):null,imported_plan:importedPlan,imported_coding:importedCodingReadiness(store,config,id),coding_attach:codingAttach,coding_dialog:codingDialog,spec:intake?.spec??null,questions:intake?.questions??[],answers:intake?.answers??{},route:spec?.route??null,pack,run_id:latest?.source_id??null,run_status:runStatus,runs,swarm,coding,agent_count:stages.filter(stage=>stage.status==='leased'||stage.status==='running').length,verified_steps:verifiedSteps,total_steps:stages.length,progress_percent:progress,progress_basis:swarm?'독립 확인과 품질 승인된 단계만 계산':coding?'단계 실행·검증 완료 기준이며 업무 완료 조건은 별도 확인':'이 실행 경로는 단계별 독립 검증 진행률을 제공하지 않음',stages,control,work_control:workControl,events,updated_at:record.updated_at,completion_verified:false,completion_note:'Run 성공은 Work의 모든 완료조건 충족을 자동으로 뜻하지 않습니다.'};
+}
+
+/**
+ * What a monitor's change changed, row by row: rows are matched by their first column; a matched row shows the cells
+ * that differ with their old value, an unmatched one is new or gone. Null when the rows on either side are not known.
+ */
+function rowDiff(beforeRows:unknown,afterRows:unknown){
+  if(!Array.isArray(beforeRows)||!Array.isArray(afterRows))return null;
+  const rows=(list:unknown[])=>list.filter((row):row is Record<string,unknown>=>Boolean(row)&&typeof row==='object'&&!Array.isArray(row));
+  const before=rows(beforeRows),after=rows(afterRows),header=Object.keys(after[0]??before[0]??{}).slice(0,8);if(!header.length)return null;
+  const text=(value:unknown)=>clean(typeof value==='string'?value:JSON.stringify(value??''),120),key=(row:Record<string,unknown>)=>text(row[header[0]!]);
+  const old=new Map(before.map(row=>[key(row),row])),seen=new Set<string>(),changes:Array<{kind:'added'|'removed'|'changed';cells:Array<{value:string;old?:string}>}>=[];
+  for(const row of after){const id=key(row),prior=old.get(id);seen.add(id);
+    if(!prior)changes.push({kind:'added',cells:header.map(h=>({value:text(row[h])}))});
+    else if(header.some(h=>text(row[h])!==text(prior[h])))changes.push({kind:'changed',cells:header.map(h=>text(row[h])===text(prior[h])?{value:text(row[h])}:{value:text(row[h]),old:text(prior[h])})});}
+  for(const row of before)if(!seen.has(key(row)))changes.push({kind:'removed',cells:header.map(h=>({value:text(row[h])}))});
+  return {header:header.map(h=>clean(h,80)),changes:changes.slice(0,8),total:changes.length};
 }
