@@ -112,7 +112,9 @@ export function clientRunArgs(choice:Pick<WorkClientChoice,'id'|'model'|'effort'
  * keep the host's own path. A pasted Work that Office accepted as its own is run like any other (live 2026-10-03: the
  * owner's imported derivatives Work was kept on the host path and met its wait again). */
 export function clientRunEligible(store:PackStore,project:string,workId:string,spec:{route:{pack_family:string|null};collection_contract?:unknown;completion_checks:Array<{native_check?:unknown}>}){
-  return !['coding.orchestrate','form.draft-submit','record.update','choose.stage'].includes(spec.route.pack_family??'')&&!spec.collection_contract&&!spec.completion_checks.some(check=>check.native_check)
+  // A draft on any site is the client's to fill with its own browser tools (owner 2026-10-10: an X article draft through
+  // Aside); the host's form Pack fills only registered forms, so a Work there could never finish.
+  return !['coding.orchestrate','record.update','choose.stage'].includes(spec.route.pack_family??'')&&!spec.collection_contract&&!spec.completion_checks.some(check=>check.native_check)
     &&!customPackWorkBinding(store,project,workId)&&workImportExecutionOwner(store,project,workId)!=='original_runtime';
 }
 
