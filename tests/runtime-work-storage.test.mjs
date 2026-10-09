@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,writeFile,utimes,rm,readdir,symlink} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {pruneWorkFolders,workFolderUsage} from '../dist/work/storage.js';
+
+test('old runs lose their working files only: deliverables, newest runs, app runs, recent runs and state beside the runs stay',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'work-storage-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const work=randomUUID(),now=Date.now(),day=86_400_000,big=Buffer.alloc(300*1024,1),small=Buffer.from('{}');
+  const run=async(ageDays,files)=>{const id=randomUUID(),dir=join(root,work,id);await mkdir(join(dir,'raw'),{recursive:true});for(const [name,bytes] of files){const path=join(dir,name);await writeFile(path,bytes);const at=new Date(now-ageDays*day);await utimes(path,at,at);}return dir;};
+  const old=await run(20,[['DELIVERY.md',small],['01.png',big],['report.pdf',big],['RECORDS.json',small],['evidence.zip',big],['raw/page.html',big],['note.json',small]]);
+  const mid=await run(4,[['DELIVERY.md',small],['capture.html',big],['seen.json',small]]);
+  const app=await run(20,[['price.app.json',small],['tool.mjs',small],['cache.html',big]]);
+  const newest=[];for(let i=0;i<5;i++)newest.push(await run(0.1+i*0.01,[['archive.zip',big]]));
+  await writeFile(join(root,work,'state.json'),small);await utimes(join(root,work,'state.json'),new Date(now-30*day),new Date(now-30*day));
+  await symlink('/etc/hostname',join(old,'link.txt')).catch(()=>{});
+  const dry=pruneWorkFolders(root,{dryRun:true,now});assert.equal(dry.files,4);assert.ok(existsSync(join(old,'evidence.zip')),'a dry run deletes nothing');
+  const report=pruneWorkFolders(root,{now});
+  assert.equal(report.files,4);assert.equal(report.works[work].files,4);assert.equal(report.freed_bytes,big.length*3+small.length);
+  assert.deepEqual((await readdir(old)).sort(),['01.png','DELIVERY.md','RECORDS.json','link.txt','report.pdf'],'deliverables stay; old working files and the emptied folder go');
+  assert.deepEqual((await readdir(mid)).sort(),['DELIVERY.md','seen.json'],'a big file goes after a day, a small one stays until two weeks');
+  assert.ok(existsSync(join(app,'cache.html')),'a run with an app keeps its files');
+  for(const dir of newest)assert.ok(existsSync(join(dir,'archive.zip')),'the newest runs stay whole');
+  assert.ok(existsSync(join(root,work,'state.json')),'state beside the runs stays');
+  assert.equal(pruneWorkFolders(root,{now}).files,0,'a second pass finds nothing');
+  assert.ok(workFolderUsage(root)[work]>0);
+});
