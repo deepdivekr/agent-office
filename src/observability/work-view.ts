@@ -1,5 +1,5 @@
-import {statSync} from 'node:fs';
-import {dirname} from 'node:path';
+import {realpathSync,statSync} from 'node:fs';
+import {dirname,isAbsolute,relative,sep} from 'node:path';
 import {type HostConfig} from '../interface/config.js';
 import {workClientChoice} from '../work/client-run.js';
 import {type IntakeWork,type PackStore} from '../packs/store.js';
@@ -29,7 +29,8 @@ import {workTimeline} from '../work/timeline.js';
 import {refinedLog} from '../work/thread.js';
 import {hiddenWorkIds} from '../work/hidden.js';
 import {listFeedPosts} from '../work/feed.js';
-import {imageType,type WorkResults} from '../work/results.js';
+import {type WorkResults} from '../work/results.js';
+import {artifactKind,artifactPreview} from '../work/artifact-kind.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
 const verified=(worker:SwarmRunSnapshot['workers'][string])=>worker.status==='succeeded'&&worker.result?.readback?.verified===true&&worker.quality?.accepted===true;
@@ -76,15 +77,23 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
       ...('server' in work&&work.server?{server:work.server}:{})};
   });
   const posts:Array<Record<string,unknown>&{at:string}>=[];
+  // Only files under Office's data folder or the project, as the file route serves them.
+  const roots=[dirname(config.dbPath),config.project.worktree].flatMap(root=>{try{return [realpathSync(root)];}catch{return [];}});
+  const inRoots=(path:string)=>roots.some(root=>{const rel=relative(root,path);return rel!==''&&!isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..'+sep);});
   if(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result'").get())
     for(const row of store.hermesState.prepare('SELECT id,work_id,body FROM office_result WHERE project_id=? AND created_at<? ORDER BY created_at DESC LIMIT ?').all(project,before,limit*2) as Array<{id:string;work_id:string;body:string}>){
       if(!shown.has(row.work_id))continue;let r;try{r=results.get(project,row.work_id,row.id);}catch{continue;}
       // A later run may have replaced a picture in the Work folder: only files still as they were saved are shown.
-      let stored:Array<{id:string;path:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
-      const intact=new Set(stored.filter(a=>{try{const size=statSync(a.path).size;return a.bytes===null||a.bytes===size;}catch{return false;}}).map(a=>a.id));
-      const images=r.artifacts.filter(a=>a.download_available&&imageType(a.label)&&intact.has(a.id));
+      let stored:Array<{id:string;path:string;label:string;sha256:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
+      const intact=new Map<string,{path:string;size:number;mtimeMs:number}>();
+      for(const a of stored)try{const path=realpathSync(a.path),stats=statSync(path);if(stats.isFile()&&(a.bytes===null||a.bytes===stats.size)&&inRoots(path))intact.set(a.id,{path,size:stats.size,mtimeMs:stats.mtimeMs});}catch{/* gone */}
+      const shownFiles=r.artifacts.filter(a=>a.download_available&&intact.has(a.id)).map(a=>({...a,...artifactKind(a.label)}));
+      const images=shownFiles.filter(a=>a.kind==='image'),media=shownFiles.find(a=>a.kind==='video'||a.kind==='audio'),doc=shownFiles.find(a=>a.kind==='pdf');
+      // The first text, code or table file that reads cleanly gives the card its preview.
+      let preview=null;for(const a of shownFiles.filter(f=>['code','text','table'].includes(f.kind))){const file=intact.get(a.id)!;preview=artifactPreview(file.path,a.sha256,a.label,file.size,file.mtimeMs);if(preview){preview={...preview,artifact_id:a.id,label:a.label};break;}}
       posts.push({id:'r:'+r.id,kind:'result',work_id:r.work_id,work_title:titles.get(r.work_id),at:r.created_at,result_id:r.id,text:clean(r.delivery_text||r.text||r.summary,4000),
         images:images.slice(0,4).map(a=>({artifact_id:a.id,label:a.label})),image_count:images.length,files:r.artifacts.length,verified:r.work_completion_verified,
+        media:media?{kind:media.kind,artifact_id:media.id,label:media.label,bytes:intact.get(media.id)!.size}:null,doc:doc?{artifact_id:doc.id,label:doc.label,bytes:intact.get(doc.id)!.size}:null,preview,
         deliveries:r.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))});
     }
   for(const post of listFeedPosts(store,project,{before,limit}))if(!post.work_id||shown.has(post.work_id))

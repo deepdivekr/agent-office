@@ -122,3 +122,60 @@ test('runtime fixture the feed page: pinned needs-you first, then outputs by day
   assert.deepEqual(subscribed,{subscribed:true,devices:1});
   assert.deepEqual(errors,[]);
 });
+
+test('a result file shows by kind from its name only: pictures, players, code and text, tables, documents; anything else downloads',async()=>{
+  const {artifactKind,inlineType}=await import('../dist/work/artifact-kind.js');
+  assert.deepEqual(['a.png','b.MP4','c.webm','d.mp3','e.m4a','f.pdf','g.csv','h.py','i.ts','j.md','k.svg','l.zip','m'].map(n=>artifactKind(n).kind),['image','video','video','audio','audio','pdf','table','code','code','text','file','file','file']);
+  assert.equal(artifactKind('run.py').lang,'python');
+  assert.deepEqual(['a.mp4','page.html','data.csv','pic.svg','x.zip'].map(inlineType),['video/mp4','text/plain; charset=utf-8','text/plain; charset=utf-8',null,null],'a page or an SVG is never shown as itself');
+});
+
+test('feed posts carry a player, the start of code or a table and a document; a changed file gives no preview',async t=>{
+  const x=await fixture(t,'feed-kinds-'),{readFeed}=await import('../dist/observability/work-view.js'),{writeFile}=await import('node:fs/promises'),{join}=await import('node:path');
+  const w=x.work('feed-kinds','요금 감시');
+  const code=Array.from({length:20},(_,i)=>i?`print(${i})`:'# price_watch.py').join('\n')+'\n';
+  const rich=await x.result(w,'2026-10-09T08:00:00.000Z','결과',[['clip.mp4',Buffer.from('not really a video')],['price_watch.py',Buffer.from(code)],['prices.csv',Buffer.from('서비스,이전,지금\n"A사, 기본",9900,11000\nB사,0,4900\n')],['report.pdf',Buffer.from('%PDF-1.4 fake')]]);
+  const table=await x.result(w,'2026-10-09T07:00:00.000Z','표만',[['prices.csv',Buffer.from('﻿서비스,변동\nA사,+11%\n')]]);
+  const changed=await x.result(w,'2026-10-09T06:00:00.000Z','바뀐 파일',[['note.md',Buffer.from('처음 내용')]]);await writeFile(join(changed.folder,'note.md'),'다른 내용!');
+  const posts=new Map(readFeed(x.store,x.config,x.results).posts.map(p=>[p.result_id,p]));
+  const a=posts.get(rich.id);
+  assert.deepEqual(a.media,{kind:'video',artifact_id:'artifact-0',label:'clip.mp4',bytes:18});
+  assert.deepEqual(a.doc,{artifact_id:'artifact-3',label:'report.pdf',bytes:13});
+  assert.equal(a.preview.kind,'code');assert.equal(a.preview.lang,'python');assert.equal(a.preview.label,'price_watch.py');assert.equal(a.preview.lines.length,12);assert.equal(a.preview.total_lines,20);
+  assert.deepEqual(posts.get(table.id).preview,{kind:'table',header:['서비스','변동'],rows:[['A사','+11%']],total_rows:1,artifact_id:'artifact-0',label:'prices.csv'});
+  assert.equal(posts.get(changed.id).preview,null,'a file a later run changed is not read');
+  const {artifactPreview}=await import('../dist/work/artifact-kind.js'),{statSync}=await import('node:fs'),{createHash}=await import('node:crypto');
+  const csv=join(rich.folder,'prices.csv'),st=statSync(csv);
+  assert.deepEqual(artifactPreview(csv,createHash('sha256').update(await (await import('node:fs/promises')).readFile(csv)).digest('hex'),'prices.csv',st.size,st.mtimeMs).rows[0],['A사, 기본','9900','11000'],'a quoted comma stays in its cell');
+});
+
+test('runtime fixture the feed page plays video, shows code and tables and opens documents; the file route serves ranges and keeps other files as downloads',async t=>{
+  const x=await fixture(t,'feed-kinds-page-'),{chromium}=await import('playwright'),{startControlCenter}=await import('../dist/observability/control-center.js');
+  const w=x.work('page-kinds','요금 감시'),video=Buffer.alloc(4096,7);
+  const r=await x.result(w,new Date(Date.now()-60_000).toISOString(),'변동 2건',[['clip.mp4',video],['price_watch.py',Buffer.from('def run():\n    return "ok"  # done\n')],['report.pdf',Buffer.from('%PDF-1.4 fake')],['page.svg',Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')]]);
+  await x.result(w,new Date(Date.now()-120_000).toISOString(),'표',[['prices.csv',Buffer.from('서비스,변동\nA사,+11%\n')]]);
+  x.store.close();
+  const server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();await server.close();});
+  const context=await browser.newContext({viewport:{width:1280,height:900}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(server.url);await page.locator('.post').first().waitFor();
+  const post=page.locator('.post').filter({hasText:'변동 2건'});
+  assert.match(await post.locator('video').getAttribute('src'),/artifact_id=artifact-0&inline=1$/u);
+  assert.deepEqual(await post.locator('.snip pre .l').allInnerTexts(),['def run():','    return "ok"  # done']);
+  assert.deepEqual(await post.locator('.snip .hk').allInnerTexts(),['def','return']);assert.equal(await post.locator('.snip .hc').innerText(),'# done');
+  assert.match(await post.locator('.doc').innerText(),/report\.pdf/u);
+  assert.deepEqual(await page.locator('.post').filter({hasText:'prices.csv'}).locator('.snip td').allInnerTexts(),['A사','+11%']);
+  assert.deepEqual(await page.locator('[data-feed-kind]').allInnerTexts(),['All','Video · audio','Code','Tables','Documents','Needs you'],'only kinds the feed has are offered');
+  await page.locator('[data-feed-kind="data"]').click();assert.deepEqual(await page.locator('.post .who strong').allInnerTexts(),['요금 감시']);assert.equal(await page.locator('.post video').count(),0);
+  await page.locator('[data-feed-kind="all"]').click();
+  const base=server.url+'work/result/artifact?work_id='+w+'&result_id='+r.id+'&artifact_id=';
+  const part=await fetch(base+'artifact-0&inline=1',{headers:{range:'bytes=100-199'}});
+  assert.equal(part.status,206);assert.equal(part.headers.get('content-range'),'bytes 100-199/4096');assert.equal(part.headers.get('content-type'),'video/mp4');assert.match(part.headers.get('content-disposition'),/^inline/u);assert.equal((await part.arrayBuffer()).byteLength,100);
+  assert.equal((await fetch(base+'artifact-0',{headers:{range:'bytes=5000-'}})).status,416);
+  const whole=await fetch(base+'artifact-0');assert.equal(whole.status,200);assert.match(whole.headers.get('content-disposition'),/^attachment/u);assert.equal((await whole.arrayBuffer()).byteLength,4096);
+  const code=await fetch(base+'artifact-1&inline=1');assert.equal(code.headers.get('content-type'),'text/plain; charset=utf-8');
+  const svg=await fetch(base+'artifact-3&inline=1');assert.match(svg.headers.get('content-disposition'),/^attachment/u,'an SVG is never shown in the page');
+  assert.match((await fetch(server.url)).headers.get('content-security-policy'),/media-src 'self'/u);
+  assert.deepEqual(errors,[]);
+});

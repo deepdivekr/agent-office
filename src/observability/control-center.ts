@@ -2,6 +2,8 @@ import {serveUiAsset} from './ui-assets.js';
 import {defaultWorkClient} from '../work/client-run.js';
 import {FileExplorerRoutes} from './files-http.js';
 import {dirname} from 'node:path';
+import {createReadStream} from 'node:fs';
+import {inlineType} from '../work/artifact-kind.js';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {PackStore,type RuntimeActivity} from '../packs/store.js';
@@ -118,7 +120,7 @@ export function readControlCenter(store:PackStore,config:HostConfig,now=Date.now
   return {format:1,project_id:project,generated_at:new Date(now).toISOString(),health,runs,activities,website_connections,latest_revision:latestRevision+JSON.stringify(website_connections),coverage:{agent_driver_only:true,outside_runtime:'unobserved'},read_only:true};
 }
 
-function headers(nonce?:string){return {'cache-control':'no-store','content-security-policy':`default-src 'none'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; style-src 'unsafe-inline'; script-src ${nonce?`'nonce-${nonce}'`:`'none'`}; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};}
+function headers(nonce?:string){return {'cache-control':'no-store','content-security-policy':`default-src 'none'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; media-src 'self'; style-src 'unsafe-inline'; script-src ${nonce?`'nonce-${nonce}'`:`'none'`}; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};}
 function reply(response:ServerResponse,status:number,body:string,type='text/plain; charset=utf-8',nonce?:string){response.writeHead(status,{'content-type':type,...headers(nonce)});response.end(body);}
 /** Conservative, project-scoped restart admission; historical labels alone are not live leases. */
 export function controlCenterReloadBlockedReason(store:PackStore,project:string,at=Date.now()){
@@ -489,7 +491,17 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     }
     if(request.method!=='GET'){reply(response,405,'method not allowed');return;}
     if(suffix==='work/result/artifact'){
-      try{const value=await results.readArtifact(config.project.id,url.searchParams.get('work_id')??'',url.searchParams.get('result_id')??'',url.searchParams.get('artifact_id')??'',[dirname(config.dbPath),config.project.worktree]);response.writeHead(200,{'content-type':value.media_type,'content-disposition':`attachment; filename*=UTF-8''${encodeURIComponent(value.filename)}`,...headers()});response.end(value.bytes);}catch{reply(response,404,'artifact unavailable');}return;
+      // A picture, player or document the page shows sits inline, as its kind from the name; any other file downloads.
+      // Ranges let a phone seek a video without sending it whole.
+      let file;try{file=await results.artifactFile(config.project.id,url.searchParams.get('work_id')??'',url.searchParams.get('result_id')??'',url.searchParams.get('artifact_id')??'',[dirname(config.dbPath),config.project.worktree]);}catch{reply(response,404,'artifact unavailable');return;}
+      const shown=url.searchParams.get('inline')==='1'?inlineType(file.label):null,range=/^bytes=(\d*)-(\d*)$/u.exec(String(request.headers.range??''));
+      let start=0,end=file.size-1;
+      if(range&&(range[1]||range[2])){start=range[1]?Number(range[1]):Math.max(0,file.size-Number(range[2]));end=range[1]&&range[2]?Math.min(Number(range[2]),file.size-1):file.size-1;
+        if(start>end||start>=file.size){response.writeHead(416,{'content-range':`bytes */${file.size}`,...headers()});response.end();return;}}
+      const partial=Boolean(range&&(range[1]||range[2]));
+      response.writeHead(partial?206:200,{'content-type':shown??file.media_type,'content-disposition':`${shown?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'accept-ranges':'bytes','content-length':String(file.size?end-start+1:0),...(partial?{'content-range':`bytes ${start}-${end}/${file.size}`}:{}),...headers()});
+      if(!file.size){response.end();return;}
+      createReadStream(file.path,{start,end}).on('error',()=>response.destroy()).pipe(response);return;
     }
     if(suffix==='work/coding/sessions'){
       try{const project_ref=url.searchParams.get('project_ref');const result=await codingDialog.sessions({project_ref});reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');}
