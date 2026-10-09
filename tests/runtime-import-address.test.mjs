@@ -8,6 +8,8 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {loadHostConfig} from '../dist/interface/config.js';
 import {classifyAddress,readImportReport,addressPrompt,AddressImport} from '../dist/work/import-address.js';
 import {enableClientRun,disableClientRun} from '../dist/work/client-run.js';
+// On a phone the tools sit behind the menu button.
+const openNav=async(page,selector)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await page.locator(selector).click();};
 
 const draft={format:1,source:{platform:'local_project',name:'news-bot',reference:'scripts/daily.py'},title:{value:'매일 새 글 정리',evidence_ids:['e1']},goal:{value:'피드 4곳의 새 글을 정리해 텔레그램으로 보낸다',evidence_ids:['e1']},
   trigger:{kind:'schedule',rule:'매일 08:00',timezone:'Asia/Seoul',evidence_ids:['e2']},steps:[{id:'collect',goal:'피드를 읽는다',depends_on:[],tool_hints:['python scripts/daily.py'],effect:'read_only',evidence_ids:['e1']}],
@@ -75,7 +77,7 @@ test('runtime fixture the import pane analyses an address and creates the chosen
   t.after(async()=>{await browser.close();await server.close();disableClientRun();if(ambient===undefined)delete process.env.AGENT_DRIVER_LLM_CLIENT;else process.env.AGENT_DRIVER_LLM_CLIENT=ambient;await rm(root,{recursive:true,force:true});});
   const context=await browser.newContext({viewport:{width:1280,height:900}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(server.url);await page.locator('[data-nav="import"]').click();
+  await page.goto(server.url);await openNav(page,'[data-nav="import"]');
   assert.equal(await page.locator('[data-import-route="address"]').getAttribute('aria-pressed'),'true','import opens on the address route');
   assert.equal(await page.locator('.import-routes button').last().getAttribute('data-import-route'),'external','the prompt route comes last');
   await page.fill('#import-address-value',source);await page.locator('#import-address-start').click();
@@ -85,7 +87,7 @@ test('runtime fixture the import pane analyses an address and creates the chosen
   await page.locator('#import-address-attach').click();await page.locator('.feed-tools').waitFor({timeout:5000});
   const store=new PackStore(config.dbPath);const titles=store.officeWorkSummaries(config.project.id,10).map(w=>w.title);store.close();
   assert.deepEqual(titles,['매일 새 글 정리']);
-  await page.locator('[data-nav="import"]').click();await page.fill('#import-address-value','ops@203.0.113.7');await page.locator('#import-address-start').click();
+  await openNav(page,'[data-nav="import"]');await page.fill('#import-address-value','ops@203.0.113.7');await page.locator('#import-address-start').click();
   await page.locator('#import-server').waitFor({state:'visible'});
   assert.deepEqual([await page.inputValue('#server-host'),await page.inputValue('#server-user')],['203.0.113.7','ops']);
   assert.deepEqual(errors,[]);

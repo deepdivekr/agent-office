@@ -14,6 +14,8 @@ import {PackStore} from '../dist/packs/store.js';
 import {modelSettingsPath,publicModelSettings,readModelSettings,saveModelSettings} from '../dist/onboarding/model-settings.js';
 import {ConfiguredStructuredModel} from '../dist/onboarding/configured-model.js';
 import {SubscriptionAwareStructuredModel} from '../dist/integrations/subscription-auth.js';
+// On a phone the tools sit behind the menu button.
+const openNav=async(page,selector)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await page.locator(selector).click();};
 
 const evidence='tests/evidence/phase94';
 async function fixture(t,{savedCodexModel,savedCodexEffort,catalogModels=[{id:'fixture-model',label:'Fixture model'}]}={}){
@@ -160,7 +162,7 @@ test('runtime native Work import and detail retain compact right actions, readab
   for(const width of [1280,375])for(const lang of ['ko','en']){
     const context=await browser.newContext({viewport:{width,height:1000},colorScheme:'dark'}),page=await context.newPage(),errors=[];page.setDefaultTimeout(8000);
     await context.addInitScript(lang=>localStorage.setItem('office-lang',lang),lang);page.on('pageerror',error=>errors.push(error.message));
-    await page.goto(server.url);await page.locator('[data-nav="import"]').click();await page.locator('#importer').waitFor({state:'visible'});
+    await page.goto(server.url);await openNav(page,'[data-nav="import"]');await page.locator('#importer').waitFor({state:'visible'});
     // Import opens on the address route; the prompt route for other AI services comes last.
     await compactButtons(page.locator('#import-address .action-grid button'));await rightEdge(page,'#import-address-start','#import-address');
     await page.locator('[data-import-route=external]').click();

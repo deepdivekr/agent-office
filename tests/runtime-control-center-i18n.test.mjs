@@ -11,6 +11,8 @@ import {ControlSettings} from '../dist/observability/control-settings.js';
 import {prepareLocalConnection} from '../dist/onboarding/connection.js';
 import {BrowserSetupController} from '../dist/onboarding/browser-setup.js';
 import {appendSetupActivity,readSetupActivity} from '../dist/onboarding/setup-activity.js';
+// On a phone the language and theme buttons sit behind the menu button.
+const option=async(page,locator)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await locator.click();};
 
 test('runtime fixture setup checks stream localized historical/live outcomes and explain optional Windows configuration without changing data',async t=>{
  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());await mkdir('tests/evidence/phase97',{recursive:true});
@@ -57,7 +59,7 @@ test('runtime fixture setup checks stream localized historical/live outcomes and
    await page.screenshot({path:'tests/evidence/phase97/tail-'+width+'-en.png',fullPage:true});
    await page.reload();await page.waitForFunction(()=>!document.querySelector('[data-step="0"]').disabled);
    assert.doesNotMatch(await page.locator('#setup-log').textContent(),/[가-힣]/u,'Historical reload must stay English');
-   await page.locator('#lang-toggle').click();await page.waitForFunction(()=>document.documentElement.lang==='ko'&&!document.querySelector('[data-step="0"]').disabled);
+   await option(page,page.locator('#lang-toggle'));await page.waitForFunction(()=>document.documentElement.lang==='ko'&&!document.querySelector('[data-step="0"]').disabled);
    assert.match(await page.locator('#setup-log').textContent(),/Aside 연결 확인 완료 · 2.4초/u,'Display copy is reviewed without rewriting stored source history');
    await page.locator('[data-step="1"]').click();await page.waitForFunction(()=>!document.querySelector('#browser-setup-refresh').disabled);await page.locator('#browser-alternatives>summary').click();
    probeReady=false;await page.locator('[data-browser=neo] .cact button').click();await page.waitForFunction(()=>document.querySelector('#tail-last').textContent.includes('연결 실패'));
@@ -106,13 +108,13 @@ test('Control Center renders English by default and the flag button switches to 
   await page.getByText('Planned stage · Queued',{exact:true}).waitFor();
   await page.getByText('Work plan · v1',{exact:true}).waitFor();
   assert.doesNotMatch(await page.locator('#plan-translation-probe').innerText(),hangul);
-  await page.locator('#lang-toggle').click();
+  await option(page,page.locator('#lang-toggle'));
   await page.getByRole('button',{name:'업무 시작',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>document.documentElement.lang),'ko');
   assert.equal(await page.locator('#lang-toggle [data-lang-code]').textContent(),'KO');
   await page.goto(server.url+'settings');
   await page.getByRole('heading',{name:'연결 및 설정',exact:true}).waitFor();
-  await page.locator('#lang-toggle').click();
+  await option(page,page.locator('#lang-toggle'));
   await page.getByRole('heading',{name:'Connections & settings',exact:true}).waitFor();
   assert.deepEqual(errors,[]);
 });

@@ -11,6 +11,8 @@ import {ControlSettings} from '../dist/observability/control-settings.js';
 import {startControlCenter} from '../dist/observability/control-center.js';
 import {PackStore} from '../dist/packs/store.js';
 import {importHermesWork} from '../dist/work/hermes.js';
+// On a phone the language and theme buttons sit behind the menu button.
+const option=async(page,locator)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await locator.click();};
 
 async function assertDisclosures(page,minimum){
   const values=await page.locator('details>summary').evaluateAll(items=>items.map(s=>({color:getComputedStyle(s).color,underline:getComputedStyle(s).textDecorationLine})));
@@ -51,7 +53,7 @@ test('runtime fixture connection actions align and automatically continue instal
       assert.deepEqual(f.calls.slice(-2),['install:'+id,'login:'+id]);assert.ok(await page.locator('#agent-flow-'+id).isVisible());await popup.close();
     }
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.deepEqual(errors,[]);
-    await page.screenshot({path:'tests/evidence/phase92/connections-'+width+'-'+lang+'.png',fullPage:true});await page.locator('#theme-toggle').click();await assertDisclosures(page,5);await context.close();
+    await page.screenshot({path:'tests/evidence/phase92/connections-'+width+'-'+lang+'.png',fullPage:true});await option(page,page.locator('#theme-toggle'));await assertDisclosures(page,5);await context.close();
   }
 });
 
@@ -86,7 +88,7 @@ test('runtime native import entry is visibly linked and import text/actions have
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:'tests/evidence/phase92/import-'+width+'.png',fullPage:true});
     await page.goto(server.url+'?work='+work);await page.locator('.runlist summary').first().waitFor();await assertDisclosures(page,1);
     const disclosure=page.locator('.runlist').first(),closed=await disclosure.evaluate(e=>e.open);await disclosure.locator('summary').click();assert.notEqual(await disclosure.evaluate(e=>e.open),closed);
-    await page.locator('#theme-toggle').click();await assertDisclosures(page,1);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-    await page.goto(server.url+'?work='+hermes);await page.locator('#hermes-instruction').waitFor();await assertDisclosures(page,3);await page.locator('#theme-toggle').click();await assertDisclosures(page,3);await page.close();
+    await option(page,page.locator('#theme-toggle'));await assertDisclosures(page,1);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await page.goto(server.url+'?work='+hermes);await page.locator('#hermes-instruction').waitFor();await assertDisclosures(page,3);await option(page,page.locator('#theme-toggle'));await assertDisclosures(page,3);await page.close();
   }
 });

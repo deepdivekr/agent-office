@@ -14,6 +14,8 @@ import {BrowserLoginBroker,requireSiteAuth,authSites} from '../dist/swarm/browse
 import {HermesWorkRuntime} from '../dist/work/hermes.js';
 import {WorkDispatcher} from '../dist/work/dispatch.js';
 import {observedCompletionFixture} from './helpers/observed-completion-fixture.mjs';
+// On a phone the language and theme buttons sit behind the menu button.
+const option=async(page,locator)=>{if(await page.locator('#menu-toggle').isVisible()&&!await page.locator('.side.menu-open').count())await page.locator('#menu-toggle').click();await locator.click();};
 const proposal={title:'데이터 조회',desired_outcome:'파일의 결과 확인',completion_checks:[{id:'result',result:'원본과 일치',evidence:'조회 결과'}],assumptions:[],route:{kind:'pack',pack_family:'research.search'},requested_effect:'read_only',recurrence:{kind:'once',rule:null},questions:[]};
 const recipe={version:1,family:'research.search',request:'자료를 확인해줘',sources:[{id:'records',parameters:{}}],filters:[],deduplicate_by:['id'],query:'',search_fields:['title'],sort:null,limit:10};
 async function setup(t){
@@ -73,7 +75,7 @@ test('runtime browser Work execute and event tail work on mobile without losing 
  await page.waitForFunction(()=>document.getElementById('work-tail-output')?.textContent.includes('supervisor.started'));
  x.release();await page.waitForFunction(()=>document.getElementById('work-tail-output')?.textContent.includes('supervisor.result'));
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
- await page.getByRole('button',{name:'언어: 한국어. 영어로 전환'}).click();
+ await option(page,page.getByRole('button',{name:'언어: 한국어. 영어로 전환'}));
  await page.getByRole('heading',{name:"Activity"}).waitFor();
  assert.doesNotMatch(await page.locator('.work-tail').innerText(),/[가-힣]/u);
  assert.deepEqual(errors,[]);
