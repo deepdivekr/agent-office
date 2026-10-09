@@ -31,6 +31,8 @@ import {hiddenWorkIds} from '../work/hidden.js';
 import {listFeedPosts} from '../work/feed.js';
 import {type WorkResults} from '../work/results.js';
 import {artifactKind,artifactPreview} from '../work/artifact-kind.js';
+import {appApproved,isAppFile,isCardFile,lastAppRun,readAppManifest,readCardFile} from '../work/feed-cards.js';
+import {type FeedApprovals} from '../work/feed-approvals.js';
 
 const clean=(value:string,max=800)=>{const text=redact(value).replace(/https?:\/\/[^\s<>"']+/giu,raw=>{try{const url=new URL(raw);return url.origin+url.pathname;}catch{return '[URL]';}});return text.length<=max?text:text.slice(0,max-1)+'…';};
 const verified=(worker:SwarmRunSnapshot['workers'][string])=>worker.status==='succeeded'&&worker.result?.readback?.verified===true&&worker.quality?.accepted===true;
@@ -63,7 +65,7 @@ export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
  * along for what the page pins and lists beside the posts: those that need the owner, those running, the next runs and
  * the servers. Built from stored records only; hidden Works stay out.
  */
-export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,options:{before?:string;limit?:number}={}){
+export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,options:{before?:string;limit?:number;approvals?:FeedApprovals}={}){
   const project=config.project.id,before=options.before??'9999',limit=Math.min(Math.max(options.limit??30,1),60);
   const board=readWorkBoard(store,config).works.filter(work=>!work.hidden),shown=new Set(board.map(work=>work.id)),titles=new Map(board.map(work=>[work.id,work.title]));
   const recent=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get()?store.hermesState.prepare('SELECT kind,summary,created_at,metadata FROM office_activity WHERE project_id=? AND work_id=? ORDER BY id DESC LIMIT 1'):null;
@@ -74,7 +76,7 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
     return {id:work.id,title:work.title,status:String(work.status),kind:String(work.run?.kind??(work.client?'client':'work')),client:work.client?.id??null,created_at:work.created_at,
       schedule:added.schedule?{enabled:Boolean(added.schedule.enabled),definition:added.schedule.definition,next_run_at:added.schedule.next_run_at??null}:null,
       note:added.progress?.note??null,last_event:event?refinedLog([{...event,kind:'event',summary:clean(event.summary,300)}])[0]!:null,
-      ...('server' in work&&work.server?{server:work.server}:{})};
+      ...('server' in work&&work.server?{server:work.server}:{}),...ownerQuestions(store,project,work.id,String(work.status)),...watchStatus(store,project,work.id)};
   });
   const posts:Array<Record<string,unknown>&{at:string}>=[];
   // Only files under Office's data folder or the project, as the file route serves them.
@@ -87,21 +89,55 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
       let stored:Array<{id:string;path:string;label:string;sha256:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
       const intact=new Map<string,{path:string;size:number;mtimeMs:number}>();
       for(const a of stored)try{const path=realpathSync(a.path),stats=statSync(path);if(stats.isFile()&&(a.bytes===null||a.bytes===stats.size)&&inRoots(path))intact.set(a.id,{path,size:stats.size,mtimeMs:stats.mtimeMs});}catch{/* gone */}
-      const shownFiles=r.artifacts.filter(a=>a.download_available&&intact.has(a.id)).map(a=>({...a,...artifactKind(a.label)}));
+      const allFiles=r.artifacts.filter(a=>a.download_available&&intact.has(a.id)).map(a=>({...a,...artifactKind(a.label)}));
+      // CARD.json shapes the post; an *.app.json is an app card. Neither is shown as a file of its own.
+      const cardFile=allFiles.find(a=>isCardFile(a.label)),card=cardFile?readCardFile(intact.get(cardFile.id)!.path,cardFile.sha256):null;
+      const apps=allFiles.filter(a=>isAppFile(a.label)).slice(0,2).flatMap(a=>{const manifest=readAppManifest(intact.get(a.id)!.path,a.sha256);
+        return manifest?[{artifact_id:a.id,label:a.label,title:manifest.title,command:manifest.command,inputs:manifest.inputs??[],buttons:manifest.buttons,approved:appApproved(store,project,a.sha256),last_run:lastAppRun(store,project,r.id,a.id)}]:[];});
+      const shownFiles=allFiles.filter(a=>!isCardFile(a.label)&&!isAppFile(a.label));
       const images=shownFiles.filter(a=>a.kind==='image'),media=shownFiles.find(a=>a.kind==='video'||a.kind==='audio'),doc=shownFiles.find(a=>a.kind==='pdf');
       // The first text, code or table file that reads cleanly gives the card its preview.
-      let preview=null;for(const a of shownFiles.filter(f=>['code','text','table'].includes(f.kind))){const file=intact.get(a.id)!;preview=artifactPreview(file.path,a.sha256,a.label,file.size,file.mtimeMs);if(preview){preview={...preview,artifact_id:a.id,label:a.label};break;}}
+      // An app's own script is behind its card, not a preview.
+      let preview=null;if(!apps.length)for(const a of shownFiles.filter(f=>['code','text','table'].includes(f.kind))){const file=intact.get(a.id)!;preview=artifactPreview(file.path,a.sha256,a.label,file.size,file.mtimeMs);if(preview){preview={...preview,artifact_id:a.id,label:a.label};break;}}
       posts.push({id:'r:'+r.id,kind:'result',work_id:r.work_id,work_title:titles.get(r.work_id),at:r.created_at,result_id:r.id,text:clean(r.delivery_text||r.text||r.summary,4000),
         images:images.slice(0,4).map(a=>({artifact_id:a.id,label:a.label})),image_count:images.length,files:r.artifacts.length,verified:r.work_completion_verified,
-        media:media?{kind:media.kind,artifact_id:media.id,label:media.label,bytes:intact.get(media.id)!.size}:null,doc:doc?{artifact_id:doc.id,label:doc.label,bytes:intact.get(doc.id)!.size}:null,preview,
+        media:media?{kind:media.kind,artifact_id:media.id,label:media.label,bytes:intact.get(media.id)!.size}:null,doc:doc?{artifact_id:doc.id,label:doc.label,bytes:intact.get(doc.id)!.size}:null,preview,card,apps,
         deliveries:r.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))});
     }
   for(const post of listFeedPosts(store,project,{before,limit}))if(!post.work_id||shown.has(post.work_id))
-    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label});
+    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label,card:post.card});
+  // A monitor's change: what it found, from the observation it recorded, with its source page when that is a web page.
+  for(const row of store.hermesState.prepare("SELECT e.id,e.body,e.created_at,o.work_id FROM family_event e JOIN office_run o ON o.project_id=e.project_id AND o.source_kind='pack' AND o.source_id=e.run_id WHERE e.project_id=? AND e.kind='changed' AND e.created_at<? ORDER BY e.created_at DESC LIMIT ?").all(project,before,limit) as Array<{id:number;body:string;created_at:string;work_id:string}>){
+    if(!shown.has(row.work_id))continue;let body:{before?:unknown;after?:unknown;evidence?:unknown};try{body=JSON.parse(row.body);}catch{continue;}
+    posts.push({id:'e:'+row.id,kind:'change',work_id:row.work_id,work_title:titles.get(row.work_id),at:row.created_at,text:'',change:changeSummary(body,config)});
+  }
   for(const work of board)if('session' in work&&work.session){const last=sessionDetail(store,project,work.id)?.session.messages.filter(m=>m.role==='assistant').at(-1);
     if(last?.at&&last.at<before)posts.push({id:'s:'+work.id+':'+last.at,kind:'reply',work_id:work.id,work_title:work.title,client:work.session.client,at:last.at,text:clean(last.text,4000)});}
   posts.sort((a,b)=>b.at.localeCompare(a.at));const page=posts.slice(0,limit);
-  return {generated_at:new Date().toISOString(),works,posts:page,next_before:page.length===limit?page.at(-1)!.at:null};
+  const approvals=(options.approvals?.list()??[]).filter(item=>!item.work_id||shown.has(item.work_id)).map(item=>({...item,work_title:item.work_id?titles.get(item.work_id)??null:null}));
+  return {generated_at:new Date().toISOString(),works,posts:page,approvals,next_before:page.length===limit?page.at(-1)!.at:null};
+}
+/** The questions a Work waits on, for answering in the feed. */
+function ownerQuestions(store:PackStore,project:string,workId:string,status:string){
+  if(status!=='awaiting_details')return {};
+  try{const work=store.intakeWork(project,workId);return {revision:work.revision,questions:(work.questions as Array<{id:string;prompt:string;options:Array<{id:string;label:string;detail?:string}>;recommended_id?:string;required?:boolean}>).filter(q=>!work.answers[q.id]).map(q=>({id:q.id,prompt:q.prompt,recommended_id:q.recommended_id??null,required:q.required!==false,options:q.options.map(o=>({id:o.id,label:o.label,needs_value:Boolean(o.detail)}))}))};}catch{return {};}
+}
+/** A monitor's one line: when it last looked, when it looks next, and what it has found. */
+function watchStatus(store:PackStore,project:string,workId:string){
+  const row=store.hermesState.prepare("SELECT w.run_id,w.next_ms,w.paused,json_extract(x.checkpoint,'$.watch_tick.observed_at') AS observed_at FROM family_watch w JOIN office_run o ON o.source_kind='pack' AND o.source_id=w.run_id AND o.project_id=? LEFT JOIN family_execution x ON x.run_id=w.run_id WHERE o.work_id=? ORDER BY w.next_ms DESC LIMIT 1").get(project,workId) as {run_id:string;next_ms:number;paused:number;observed_at:string|null}|undefined;
+  if(!row)return {};
+  const changes=store.hermesState.prepare("SELECT COUNT(*) AS n,MAX(created_at) AS at FROM family_event WHERE run_id=? AND kind='changed'").get(row.run_id) as {n:number;at:string|null};
+  const last=store.hermesState.prepare('SELECT kind FROM family_event WHERE run_id=? ORDER BY id DESC LIMIT 1').get(row.run_id) as {kind:string}|undefined;
+  return {watch:{next_at:new Date(Number(row.next_ms)).toISOString(),checked_at:row.observed_at,paused:Boolean(row.paused),changes:Number(changes.n),last_change_at:changes.at,failing:last?.kind==='unavailable'}};
+}
+function changeSummary(body:{before?:unknown;after?:unknown;evidence?:unknown},config:HostConfig){
+  const lowest=(value:unknown)=>{const minima=(value as {minima?:Record<string,unknown>}|null)?.minima;const numbers=minima?Object.values(minima).filter((n):n is number=>typeof n==='number'&&Number.isFinite(n)):[];return numbers.length?Math.min(...numbers):null;};
+  const before=lowest(body.before),after=lowest(body.after);
+  const evidence=(Array.isArray(body.evidence)?body.evidence:[]) as Array<{source_id?:string;rows?:Array<Record<string,unknown>>}>,seen=evidence.find(item=>Array.isArray(item.rows)&&item.rows.length);
+  const header=seen?Object.keys(seen.rows![0]!).slice(0,8):[];
+  const source=seen?.source_id?config.packs?.sources.find(item=>item.id===seen.source_id):undefined,url=source&&'url' in source&&/^https:\/\/[^{}\s]+$/u.test(source.url)?source.url:null;
+  return {lowest_before:before!==null&&after!==null&&before!==after?before:null,lowest_after:before!==null&&after!==null&&before!==after?after:null,
+    header:header.map(key=>clean(key,80)),rows:seen?seen.rows!.slice(0,5).map(row=>header.map(key=>clean(typeof row[key]==='string'?row[key] as string:JSON.stringify(row[key]??''),120))):[],total_rows:seen?.rows?.length??0,url};
 }
 
 /** The board's Works over the last hours: one bar per cycle and marks for owner actions, for the timeline view. */

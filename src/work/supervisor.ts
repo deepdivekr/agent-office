@@ -35,7 +35,7 @@ import {connectedSourceCatalog,observedWorkSourceSchemas} from '../packs/source-
 import {createNativeCompletionResolver} from './native-completion.js';
 import {assertCustomPackInvocation,customPackWorkBinding} from './custom-pack-repeat.js';
 import {assertCustomPackScheduledRun} from './custom-pack-schedule.js';
-import {PACK_ENGINE_VERSION} from '../packs/runtime.js';
+import {PACK_ENGINE_VERSION,type PackApprovalDispatcher} from '../packs/runtime.js';
 import {sealCollectionContract,readSealedCollectionContract,createCollectionCompletionResolver} from './collection-contract.js';
 
 const now=()=>new Date().toISOString();
@@ -169,7 +169,7 @@ export class WorkSupervisor {
   private stopped=false;private active=new Map<string,Promise<void>>();private controllers=new Map<string,AbortController>();
   private timer:NodeJS.Timeout|null=null;private activated=false;private api:RuntimeApi|null=null;
   readonly schedules:WorkSchedules;
-  constructor(readonly store:PackStore,readonly config:HostConfig,readonly model:StructuredModel,readonly options:{api?:RuntimeApi;tick_ms?:number;max_parallel?:number;auto_start?:boolean;can_start?:()=>boolean;onResult?:(workId:string)=>void;verifyCompletion?:Parameters<BoundedWorkClientExecutor['execute']>[1]['verifyCompletion']}={}){
+  constructor(readonly store:PackStore,readonly config:HostConfig,readonly model:StructuredModel,readonly options:{api?:RuntimeApi;tick_ms?:number;max_parallel?:number;auto_start?:boolean;can_start?:()=>boolean;onResult?:(workId:string)=>void;approval?:PackApprovalDispatcher;verifyCompletion?:Parameters<BoundedWorkClientExecutor['execute']>[1]['verifyCompletion']}={}){
     initWorkSupervisor(store);this.api=options.api??null;this.schedules=new WorkSchedules(store,config.project.id,{waitEnds:workId=>this.clientRunNext(workId)});
     if(options.auto_start!==false)this.activate();
   }
@@ -231,7 +231,7 @@ export class WorkSupervisor {
     for(const due of this.schedules.due(at)){
       const latest=supervisorStatus(this.store,project,due.work_id,this.config);
       try{
-        if(!this.api)this.api=new RuntimeApi(this.config,{swarmModel:this.model});
+        if(!this.api)this.api=new RuntimeApi(this.config,{swarmModel:this.model,...(this.options.approval?{approval:this.options.approval}:{})});
         const custom=this.api.customPackSchedules.binding(due.work_id);
         requireCondition(!this.schedules.customPackRequired(due.work_id)||custom,'CUSTOM_PACK_SCHEDULE_BINDING_MISSING');
         // A run that stopped in the host-tool executor's own wait (live 2026-10-03: a wait for a setting) does not hold back
@@ -328,7 +328,7 @@ export class WorkSupervisor {
       // it (replan, schedule, page digests, verification) use the same client and model.
       const pin=pinWorkClient(this.store,project,row.work_id,undefined,readModelSettings(modelSettingsPath(this.config)));
       if(pin&&model instanceof ConfiguredStructuredModel)model=model.forClient(pin.id,pin.model);
-      if(!this.api)this.api=new RuntimeApi(this.config,{swarmModel:this.model});
+      if(!this.api)this.api=new RuntimeApi(this.config,{swarmModel:this.model,...(this.options.approval?{approval:this.options.approval}:{})});
       // A Work the client's own agent runs takes a new direction as it is: Office hands it to the same client session and
       // does not rewrite the Work (owner 2026-10-04: "just toss it to the client; no replanning" — a replan had renamed the
       // Work, made it daily and added completion checks nobody asked for).

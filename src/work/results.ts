@@ -311,7 +311,7 @@ export class WorkResults {
     const {artifact,resolved}=await this.artifactPath(project,workId,resultId,artifactId,roots),stats=await stat(resolved);
     requireCondition(stats.isFile()&&stats.size<=1024**3,'RESULT_ARTIFACT_SIZE_INVALID');requireCondition(artifact.bytes===null||artifact.bytes===stats.size,'RESULT_ARTIFACT_CHANGED');
     requireCondition(await fileSha256(resolved,stats.size,stats.mtimeMs)===artifact.sha256,'RESULT_ARTIFACT_CHANGED');
-    return {path:resolved,size:stats.size,label:artifact.label,filename:basename(resolve(resolved)).replace(/[\r\n"\\]/gu,'_'),media_type:artifact.media_type??imageType(artifact.label)??'application/octet-stream'};
+    return {path:resolved,size:stats.size,sha256:artifact.sha256,label:artifact.label,filename:basename(resolve(resolved)).replace(/[\r\n"\\]/gu,'_'),media_type:artifact.media_type??imageType(artifact.label)??'application/octet-stream'};
   }
   async readArtifact(project:string,workId:string,resultId:string,artifactId:string,roots:string[]){
     const {artifact,resolved}=await this.artifactPath(project,workId,resultId,artifactId,roots);

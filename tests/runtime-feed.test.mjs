@@ -179,3 +179,127 @@ test('runtime fixture the feed page plays video, shows code and tables and opens
   assert.match((await fetch(server.url)).headers.get('content-security-policy'),/media-src 'self'/u);
   assert.deepEqual(errors,[]);
 });
+
+// Rows a monitor Work leaves: its Pack run, the watch, the latest observation and one change.
+function monitorRows(x,workId,{changedAt,observedAt}){
+  const db=x.store.hermesState,run='run-'+workId.slice(0,8),project=x.config.project.id;
+  db.prepare('INSERT INTO family_run(id,project_id,request_id,binding,recipe,status,result,task_id) VALUES(?,?,?,?,?,?,?,?)').run(run,project,'req-'+run,'{}','{}','watching','{}',null);
+  db.prepare('INSERT INTO office_run VALUES(?,?,?,?,?)').run(project,workId,'pack',run,new Date().toISOString());
+  db.prepare('INSERT INTO family_watch(run_id,next_ms,paused,baseline,cycle) VALUES(?,?,?,?,?)').run(run,Date.parse('2026-10-09T10:05:00Z'),0,'{}',4);
+  db.prepare('INSERT INTO family_execution(run_id,checkpoint) VALUES(?,?)').run(run,JSON.stringify({watch_tick:{observed_at:observedAt}}));
+  db.prepare('INSERT INTO family_event(project_id,run_id,kind,body,created_at) VALUES(?,?,?,?,?)').run(project,run,'changed',JSON.stringify({before:{digest:'a',minima:{g1:9900,g2:12000}},after:{digest:'b',minima:{g1:8800,g2:12000}},evidence:[{source_id:'seats',rows:[{show:'19:30',seats:2},{show:'21:00',seats:0}]}],external_notifications_sent:0}),changedAt);
+  return run;
+}
+
+test('feed cards: AI app posts and CARD.json files carry checked cards; monitors show their change and a status line; questions come with the Work',async t=>{
+  const x=await fixture(t,'feed-cards-'),{readFeed}=await import('../dist/observability/work-view.js'),{postToFeed}=await import('../dist/work/feed.js');
+  const card={type:'compare',title:'숙소 후보',items:[{title:'A 호텔',lines:['189,000원','역 3분'],recommended:true,url:'https://example.com/a'},{title:'B 스테이',lines:['162,000원']}],replies:[{label:'A로 진행',text:'A 호텔로 진행해'}],actions:[{label:'지도',url:'https://example.com/map'}]};
+  assert.equal(postToFeed(x.store,x.config.project.id,{text:'후보 2곳',card},'AI app').posted,true);
+  assert.throws(()=>postToFeed(x.store,x.config.project.id,{text:'x',card:{...card,actions:[{label:'열기',url:'http://example.com'}]}},'AI app'),undefined,'only https links');
+  assert.throws(()=>postToFeed(x.store,x.config.project.id,{text:'x',card:{type:'unknown'}},'AI app'));
+  const w=x.work('feed-cards-w','방문 정리');
+  const withCard=await x.result(w,'2026-10-09T08:00:00.000Z','방문',[['CARD.json',Buffer.from(JSON.stringify({type:'metric',label:'주간 방문',value:'12,480',delta:'+8%'}))]]);
+  const badCard=await x.result(w,'2026-10-09T07:00:00.000Z','깨진 카드',[['CARD.json',Buffer.from('{"type":"metric"}')]]);
+  const watch=x.work('feed-cards-watch','영화관 빈자리');monitorRows(x,watch,{changedAt:'2026-10-09T09:00:00.000Z',observedAt:'2026-10-09T09:58:00.000Z'});
+  const ask=x.work('feed-cards-ask','출장 일정','awaiting_details');
+  x.store.hermesState.prepare('UPDATE office_intake SET questions=? WHERE work_id=?').run(JSON.stringify([{id:'mode',prompt:'기차와 비행기 중 어느 쪽으로 찾을까요?',options:[{id:'train',label:'기차',meaning:'기차'},{id:'plane',label:'비행기',meaning:'비행기'}],recommended_id:'train',required:true}]),ask);
+  const feed=readFeed(x.store,x.config,x.results),posts=new Map(feed.posts.map(p=>[p.result_id??p.id,p]));
+  assert.deepEqual(feed.posts.find(p=>p.kind==='external').card.items.map(i=>i.title),['A 호텔','B 스테이']);
+  assert.deepEqual(posts.get(withCard.id).card,{type:'metric',label:'주간 방문',value:'12,480',delta:'+8%'});assert.equal(posts.get(withCard.id).preview,null,'a card file is not shown as code');
+  assert.equal(posts.get(badCard.id).card,null,'an invalid card is left out');
+  const change=feed.posts.find(p=>p.kind==='change');
+  assert.equal(change.work_title,'영화관 빈자리');assert.deepEqual([change.change.lowest_before,change.change.lowest_after],[9900,8800]);
+  assert.deepEqual(change.change.header,['show','seats']);assert.deepEqual(change.change.rows,[['19:30','2'],['21:00','0']]);assert.equal(change.change.url,null);
+  const watching=feed.works.find(w=>w.id===watch);
+  assert.deepEqual(watching.watch,{next_at:'2026-10-09T10:05:00.000Z',checked_at:'2026-10-09T09:58:00.000Z',paused:false,changes:1,last_change_at:'2026-10-09T09:00:00.000Z',failing:false});
+  const asking=feed.works.find(w=>w.id===ask);assert.equal(typeof asking.revision,'number');
+  assert.deepEqual(asking.questions,[{id:'mode',prompt:'기차와 비행기 중 어느 쪽으로 찾을까요?',recommended_id:'train',required:true,options:[{id:'train',label:'기차',needs_value:false},{id:'plane',label:'비행기',needs_value:false}]}]);
+});
+
+test('app cards: a declared command runs in its folder only after the owner approves that exact file; values are checked; output comes back as text and a table',async t=>{
+  const x=await fixture(t,'feed-apps-'),{readFeed}=await import('../dist/observability/work-view.js'),{readAppManifest,approveApp,runApp,appValues}=await import('../dist/work/feed-cards.js'),{writeFile}=await import('node:fs/promises'),{join}=await import('node:path'),{createHash}=await import('node:crypto');
+  const manifest={title:'요금 확인',command:['node','tool.mjs'],inputs:[{id:'period',label:'기간',type:'select',options:[{value:'7',label:'최근 7일'},{value:'30',label:'최근 30일'}]},{id:'only',label:'변동만',type:'toggle',default:true}],buttons:[{id:'run',label:'실행'}]};
+  const tool="let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const {button,inputs}=JSON.parse(s);console.log(JSON.stringify({text:'ran '+button+' '+process.env.OFFICE_APP_BUTTON,table:{header:['period','only','secret'],rows:[[inputs.period,String(inputs.only),String(process.env.AGENT_OFFICE_SECRET_TEST??'none')]]}}))});";
+  const w=x.work('feed-apps-w','요금 감시'),bytes=Buffer.from(JSON.stringify(manifest)),sha=createHash('sha256').update(bytes).digest('hex');
+  const r=await x.result(w,'2026-10-09T08:00:00.000Z','앱',[['price.app.json',bytes],['tool.mjs',Buffer.from(tool)]]);
+  const path=join(r.folder,'price.app.json'),file={path,sha256:sha,result_id:r.id,artifact_id:'artifact-0'},project=x.config.project.id;
+  assert.deepEqual(readAppManifest(path,sha).buttons,[{id:'run',label:'실행'}]);assert.equal(readAppManifest(path,'0'.repeat(64)),null);
+  let post=readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===r.id);
+  assert.deepEqual(post.apps.map(a=>[a.title,a.approved,a.last_run]),[['요금 확인',false,null]]);assert.equal(post.preview,null,'an app result shows its card, not its script');
+  await assert.rejects(runApp(x.store,project,file,manifest,'run',{}),/APP_NOT_APPROVED/u);
+  approveApp(x.store,project,sha,manifest);
+  assert.throws(()=>appValues(manifest,{period:'90'}),/APP_INPUT_INVALID/u);assert.deepEqual(appValues(manifest,{}),{period:'7',only:true});
+  await assert.rejects(runApp(x.store,project,file,manifest,'other',{}),/APP_BUTTON_UNKNOWN/u);
+  process.env.AGENT_OFFICE_SECRET_TEST='leak';t.after(()=>{delete process.env.AGENT_OFFICE_SECRET_TEST;});
+  const run=await runApp(x.store,project,file,manifest,'run',{period:'30',only:false});
+  assert.equal(run.status,'done');assert.equal(run.output.text,'ran run run');assert.deepEqual(run.output.table,{header:['period','only','secret'],rows:[['30','false','none']]},'the command gets the values and no Office environment');
+  post=readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===r.id);assert.equal(post.apps[0].approved,true);assert.equal(post.apps[0].last_run.status,'done');
+  await writeFile(join(r.folder,'tool.mjs'),"process.exit(3)");const failed=await runApp(x.store,project,file,manifest,'run',{});assert.equal(failed.status,'failed');assert.match(failed.error,/exit 3/u);
+});
+
+test('feed approvals: only a held approval for the exact snapshot is accepted, once; a decline cancels; nothing is stored',async t=>{
+  const x=await fixture(t,'feed-approvals-'),{FeedApprovals}=await import('../dist/work/feed-approvals.js');
+  const w=x.work('feed-approvals-w','분기 보고서 제출'),project=x.config.project.id,db=x.store.hermesState;
+  db.prepare('INSERT INTO family_run(id,project_id,request_id,binding,recipe,status,result,task_id) VALUES(?,?,?,?,?,?,?,?)').run('run-a',project,'req-a','{}','{}','waiting_approval','{}','task-a');
+  db.prepare('INSERT INTO office_run VALUES(?,?,?,?,?)').run(project,w,'pack','run-a',new Date().toISOString());
+  const hash='a'.repeat(64),proposals={'task-a':{state:'waiting_approval',snapshot_hash:hash,snapshot:{target:'portal',family:'form.draft-submit',values:{기간:'3분기',매출:'[금액]'},before:{기간:'2분기'}}},'task-b':{state:'waiting_approval',snapshot_hash:hash,snapshot:{values:{}}}};
+  const calls=[];x.store.proposal=id=>{if(!proposals[id])throw Error('PROPOSAL_NOT_FOUND');return proposals[id];};
+  x.store.acceptProposalApproval=(id,token,channel,receipt)=>{calls.push(['accept',id,token,channel,receipt.proposal_hash]);proposals[id].state='approved';};
+  x.store.invalidateProposal=(id,reason)=>{calls.push(['invalidate',id,reason]);proposals[id].state='invalidated';};x.store.cancel=id=>calls.push(['cancel',id]);
+  const approvals=new FeedApprovals(x.store,project),soon=Date.now()+30*60_000;
+  assert.equal(approvals.ttl_ms,60*60_000,'the feed asks for the longest approval window');
+  await approvals.deliver({task_id:'task-a',proposal_hash:hash,expires_at_ms:soon,approval_token:'apv_secret',capture_ref:'/nonexistent.png',timing:[]});
+  await approvals.deliver({task_id:'task-b',proposal_hash:hash,expires_at_ms:soon,approval_token:'apv_other',capture_ref:'/nonexistent.png',timing:[]});
+  const listed=approvals.list().find(a=>a.task_id==='task-a');
+  assert.deepEqual([listed.work_id,listed.family,listed.target,listed.values,listed.before],[w,'form.draft-submit','portal',{기간:'3분기',매출:'[금액]'},{기간:'2분기'}]);
+  assert.ok(!JSON.stringify(approvals.list()).includes('apv_'),'the capability never leaves memory');
+  assert.ok(!JSON.stringify(db.prepare("SELECT * FROM sqlite_master").all()).includes('approval_token TEXT'),'no table keeps it');
+  assert.throws(()=>approvals.decide({task_id:'task-a',proposal_hash:'b'.repeat(64),decision:'approve'}),/APPROVAL_NOT_AVAILABLE/u,'another snapshot is refused');
+  assert.deepEqual(approvals.decide({task_id:'task-a',proposal_hash:hash,decision:'approve'}),{decision:'approve',work_id:w});
+  assert.deepEqual(calls,[['accept','task-a','apv_secret','office-feed',hash]]);
+  assert.throws(()=>approvals.decide({task_id:'task-a',proposal_hash:hash,decision:'approve'}),/APPROVAL_NOT_AVAILABLE/u,'once');
+  approvals.decide({task_id:'task-b',proposal_hash:hash,decision:'decline'});assert.deepEqual(calls.slice(1),[['invalidate','task-b','human_declined'],['cancel','task-b']]);
+  await approvals.deliver({task_id:'task-a',proposal_hash:hash,expires_at_ms:Date.now()-1,approval_token:'apv_late',capture_ref:'/x',timing:[]});proposals['task-a'].state='waiting_approval';
+  assert.deepEqual(approvals.list(),[],'an expired approval is gone');
+});
+
+test('runtime fixture the feed takes presses: answer a question, run an approved app, reply from a card; a monitor shows its change and status line',async t=>{
+  const x=await fixture(t,'feed-press-'),{chromium}=await import('playwright'),{startControlCenter}=await import('../dist/observability/control-center.js'),{postToFeed}=await import('../dist/work/feed.js');
+  const now=Date.now(),iso=ms=>new Date(now-ms).toISOString();
+  const watch=x.work('press-watch','영화관 빈자리');monitorRows(x,watch,{changedAt:iso(120_000),observedAt:iso(60_000)});
+  const ask=x.work('press-ask','출장 일정','awaiting_details');
+  x.store.hermesState.prepare('UPDATE office_intake SET questions=? WHERE work_id=?').run(JSON.stringify([{id:'mode',prompt:'기차와 비행기 중 어느 쪽으로 찾을까요?',options:[{id:'train',label:'기차',meaning:'기차'},{id:'plane',label:'비행기',meaning:'비행기'}],recommended_id:'train',required:true}]),ask);
+  const stay=x.work('press-stay','숙소 고르기');
+  postToFeed(x.store,x.config.project.id,{text:'후보 2곳',work_id:stay,card:{type:'compare',items:[{title:'A 호텔',lines:['189,000원'],recommended:true},{title:'B 스테이',lines:['162,000원']}],replies:[{label:'A로 진행',text:'A 호텔로 진행해'}]}},'AI app');
+  postToFeed(x.store,x.config.project.id,{text:'답장 초안',card:{type:'draft',to:'buyer@example.com',subject:'납품 일정',body:'15일 오전에 보내 드릴게요.'}},'AI app');
+  const tool="let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const {inputs}=JSON.parse(s);console.log(JSON.stringify({text:'기간 '+inputs.period,table:{header:['서비스','변동'],rows:[['A사','+11%']]}}))});";
+  const apps=x.work('press-app','요금 감시');
+  await x.result(apps,iso(30_000),'앱',[['price.app.json',Buffer.from(JSON.stringify({title:'요금 확인',command:['node','tool.mjs'],inputs:[{id:'period',label:'기간',type:'select',options:[{value:'7',label:'최근 7일'},{value:'30',label:'최근 30일'}]}],buttons:[{id:'run',label:'실행'}]}))],['tool.mjs',Buffer.from(tool)]]);
+  x.store.close();
+  const server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();await server.close();});
+  const context=await browser.newContext({viewport:{width:390,height:844}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(server.url);await page.locator('.post').first().waitFor();
+  assert.match(await page.locator('.watch-line button').innerText(),/영화관 빈자리 · 1m ago checked · next \d{1,2}\/\d{1,2} \d{2}:\d{2} · changed 1×|영화관 빈자리 · .* · changed 1×/u);
+  const change=page.locator('.post').filter({hasText:'Change'}).filter({hasText:'영화관 빈자리'});
+  assert.deepEqual(await change.locator('.low s, .low b').allInnerTexts(),['9,900','8,800']);assert.deepEqual(await change.locator('td').allInnerTexts(),['19:30','2','21:00','0']);
+  // One question: a tap answers it, with the same request the Work detail sends.
+  let answered=null;await page.route('**/work/answer',async route=>{answered=JSON.parse(route.request().postData());await route.fulfill({status:200,contentType:'application/json',body:'{}'});});
+  await page.locator('.post.pin').filter({hasText:'출장 일정'}).locator('[data-o="plane"]').click();await page.waitForFunction(()=>true);
+  await page.waitForTimeout(200);assert.deepEqual({...answered,revision:typeof answered.revision},{work_id:ask,revision:'number',answers:{mode:'plane'},execute:true,cost_acknowledged:true});
+  // An app card: the first press shows the exact command; the output lands in the card.
+  let dialog='';page.on('dialog',d=>{dialog=d.message();d.accept();});
+  const card=page.locator('.appcard');await card.locator('select').selectOption('30');await card.locator('[data-app-run="run"]').click();
+  await page.locator('.appcard pre').waitFor();assert.match(dialog,/node tool\.mjs/u);
+  assert.equal(await page.locator('.appcard pre').innerText(),'기간 30');assert.deepEqual(await page.locator('.appcard td').allInnerTexts(),['A사','+11%']);
+  assert.equal(await page.locator('.appcard').getAttribute('data-approved'),'true');
+  // A draft card copies and opens the mail app; a reply puts its text into the Work conversation.
+  assert.match(await page.locator('.draft + .press a').getAttribute('href'),/^mailto:buyer%40example\.com\?subject=/u);
+  await page.locator('[data-card-reply]').click();await page.locator('.work-head h2').waitFor();assert.ok(page.url().includes(stay),'the reply opens its Work');
+  await page.waitForFunction(()=>document.getElementById('message').textContent.includes('A 호텔로 진행해'),null,{timeout:6000});assert.equal(await page.locator('#chat-input').count(),0,'a Work without a run takes no instruction: the text is copied and shown');
+  // The approval routes answer only for a held approval.
+  const status=await page.evaluate(async()=>(await fetch('work/approval',{method:'POST',headers:{'content-type':'application/json','x-agent-driver':'human-office'},body:JSON.stringify({task_id:'none',proposal_hash:'a'.repeat(64),decision:'approve'})})).status);
+  assert.equal(status,409);assert.equal((await fetch(server.url+'work/approval/capture?task_id=none')).status,404);
+  assert.deepEqual(errors,[]);
+});
