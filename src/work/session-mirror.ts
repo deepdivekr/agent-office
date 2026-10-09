@@ -17,12 +17,21 @@ import {clientRunEnabled,runClient,type RunClient} from './client-run.js';
  * Work: Office reads its conversation from the client's own session file and, while the session is idle, continues it
  * with the owner's next message in the session's own folder. Nothing is copied into Office but the file's location.
  */
-export interface SessionSummary {client:RunClient;id:string;file:string;cwd:string|null;title:string;updated_at:string;bytes:number}
+export interface SessionSummary {client:RunClient;id:string;file:string;cwd:string|null;title:string;updated_at:string;bytes:number;windows?:true}
 export interface SessionMessage {role:'user'|'assistant'|'tool';text:string;at:string|null}
-export interface SessionRoots {claude:string;codex:string}
-export const defaultSessionRoots=():SessionRoots=>({claude:join(homedir(),'.claude','projects'),codex:join(process.env.CODEX_HOME??join(homedir(),'.codex'),'sessions')});
+/** `windows`: under WSL, the session folders of the Windows apps (Codex Desktop, Claude Code for Windows). */
+export interface SessionRoots {claude:string;codex:string;windows?:{claude:string;codex:string}}
+/** The Windows home seen from WSL: the user folder under /mnt/c/Users that holds a Codex or Claude session folder. */
+function windowsHome(){
+  if(!process.env.WSL_DISTRO_NAME)return null;const users='/mnt/c/Users';
+  return safeList(users).filter(d=>d.isDirectory()&&!['Public','Default','Default User','All Users'].includes(d.name)).map(d=>join(users,d.name))
+    .find(home=>existsSync(join(home,'.codex','sessions'))||existsSync(join(home,'.claude','projects')))??null;
+}
+export const defaultSessionRoots=():SessionRoots=>{const win=windowsHome();
+  return {claude:join(homedir(),'.claude','projects'),codex:join(process.env.CODEX_HOME??join(homedir(),'.codex'),'sessions'),...(win?{windows:{claude:join(win,'.claude','projects'),codex:join(win,'.codex','sessions')}}:{})};};
 export const sessionAttachSchema=z.object({client:z.enum(['claude','codex']),session_id:z.string().uuid()}).strict();
 export const sessionSendSchema=z.object({work_id:z.string().uuid(),text:z.string().trim().min(1).max(4000)}).strict();
+const safeList=(dir:string)=>{try{return readdirSync(dir,{withFileTypes:true});}catch{return [];}};
 const UUID=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 // A session file still being written is live; one quiet for this long can take the owner's next message.
 const LIVE_MS=90_000,IDLE_MS=60_000;
@@ -34,7 +43,8 @@ function head(file:string,bytes=131_072){const size=statSync(file).size;const te
 export function tail(file:string,bytes=1_048_576){const size=statSync(file).size,start=Math.max(0,size-bytes),text=readRange(file,start,size-start);return (start?text.slice(text.indexOf('\n')+1):text).split('\n').filter(Boolean);}
 const parse=(line:string)=>{try{const value=JSON.parse(line);return value&&typeof value==='object'?value as Record<string,any>:null;}catch{return null;}};
 // System text the clients put in the user's turn (reminders, local command output, environment notes) is not the owner's.
-const ownerText=(text:unknown)=>typeof text==='string'&&text.trim()&&!/^\s*</u.test(text)?text.trim():null;
+// Codex also puts the folder's AGENTS.md there.
+const ownerText=(text:unknown)=>typeof text==='string'&&text.trim()&&!/^\s*(?:<|# AGENTS\.md instructions\b)/u.test(text)?text.trim():null;
 const clip=(text:string,max=6000)=>{const t=redact(text);return t.length<=max?t:t.slice(0,max-1)+'…';};
 
 export function claudeMessages(lines:string[]):SessionMessage[]{
@@ -77,25 +87,33 @@ function codexSummary(file:string):SessionSummary|null{
   const first=codexMessages(lines).find(m=>m.role==='user');if(!first)return null;
   return {client:'codex',id,file,cwd:typeof meta.payload?.cwd==='string'?meta.payload.cwd:null,title:clip(first.text.split('\n')[0]!,160),updated_at:info.mtime.toISOString(),bytes:info.size};
 }
-const safeList=(dir:string)=>{try{return readdirSync(dir,{withFileTypes:true});}catch{return [];}};
-/** The owner's recent sessions of both clients, newest first; a session whose folder `skip` names is left out. */
+// A file unchanged since the last list keeps its summary: the Windows folders are slow to read from WSL.
+const summaries=new Map<string,{mtime:number;summary:SessionSummary|null}>();
+function summaryOf(client:RunClient,file:string,mtime:number){
+  const cached=summaries.get(file);if(cached?.mtime===mtime)return cached.summary;
+  const summary=client==='claude'?claudeSummary(file):codexSummary(file);summaries.set(file,{mtime,summary});return summary;
+}
+/** The owner's recent sessions, newest first, up to `limit` of each client; a session whose folder `skip` names is left out. */
 export function listSessions(roots:SessionRoots,skip:(cwd:string|null)=>boolean,limit=30):SessionSummary[]{
-  const files:Array<{client:RunClient;file:string;mtime:number}>=[];
-  for(const dir of safeList(roots.claude))if(dir.isDirectory())for(const f of safeList(join(roots.claude,dir.name)))if(f.isFile()&&f.name.endsWith('.jsonl')){const file=join(roots.claude,dir.name,f.name);files.push({client:'claude',file,mtime:statSync(file).mtimeMs});}
-  // Codex keeps sessions by date: walk the newest days until there are enough candidates.
-  const days=safeList(roots.codex).filter(d=>d.isDirectory()).map(y=>y.name).sort().reverse().flatMap(y=>safeList(join(roots.codex,y)).filter(d=>d.isDirectory()).map(m=>join(y,m.name)).sort().reverse()).flatMap(ym=>safeList(join(roots.codex,ym)).filter(d=>d.isDirectory()).map(d=>join(ym,d.name)).sort().reverse());
-  let codexCount=0;for(const day of days){if(codexCount>=limit*2)break;for(const f of safeList(join(roots.codex,day)))if(f.isFile()&&/^rollout-.*\.jsonl$/u.test(f.name)){const file=join(roots.codex,day,f.name);files.push({client:'codex',file,mtime:statSync(file).mtimeMs});codexCount++;}}
-  const out:SessionSummary[]=[];
+  const files:Array<{client:RunClient;file:string;mtime:number;windows:boolean}>=[];
+  for(const [pair,windows] of [[roots,false],...(roots.windows?[[roots.windows,true]] as const:[])] as Array<[{claude:string;codex:string},boolean]>){
+    for(const dir of safeList(pair.claude))if(dir.isDirectory())for(const f of safeList(join(pair.claude,dir.name)))if(f.isFile()&&f.name.endsWith('.jsonl')){const file=join(pair.claude,dir.name,f.name);files.push({client:'claude',file,mtime:statSync(file).mtimeMs,windows});}
+    // Codex keeps sessions by date: walk the newest days until there are enough candidates.
+    const days=safeList(pair.codex).filter(d=>d.isDirectory()).map(y=>y.name).sort().reverse().flatMap(y=>safeList(join(pair.codex,y)).filter(d=>d.isDirectory()).map(m=>join(y,m.name)).sort().reverse()).flatMap(ym=>safeList(join(pair.codex,ym)).filter(d=>d.isDirectory()).map(d=>join(ym,d.name)).sort().reverse());
+    let codexCount=0;for(const day of days){if(codexCount>=limit*4)break;for(const f of safeList(join(pair.codex,day)))if(f.isFile()&&/^rollout-.*\.jsonl$/u.test(f.name)){const file=join(pair.codex,day,f.name);files.push({client:'codex',file,mtime:statSync(file).mtimeMs,windows});codexCount++;}}
+  }
+  const out:SessionSummary[]=[],count={claude:0,codex:0};
   for(const item of files.sort((a,b)=>b.mtime-a.mtime)){
-    if(out.length>=limit)break;
-    let summary:SessionSummary|null=null;try{summary=item.client==='claude'?claudeSummary(item.file):codexSummary(item.file);}catch{continue;}
-    if(summary&&!skip(summary.cwd))out.push(summary);
+    if(count[item.client]>=limit)continue;
+    let summary:SessionSummary|null=null;try{summary=summaryOf(item.client,item.file,item.mtime);}catch{continue;}
+    if(summary&&!skip(summary.cwd)){out.push(item.windows?{...summary,windows:true}:summary);count[item.client]++;}
   }
   return out;
 }
 
-type Row={work_id:string;client:RunClient;session_id:string;file:string;cwd:string|null;title:string};
-function init(store:PackStore){initWorkExecution(store);store.hermesState.exec('CREATE TABLE IF NOT EXISTS office_session_work(work_id TEXT PRIMARY KEY REFERENCES office_work(id),project_id TEXT NOT NULL,client TEXT NOT NULL,session_id TEXT NOT NULL,file TEXT NOT NULL,cwd TEXT,title TEXT NOT NULL,created_at TEXT NOT NULL)');}
+type Row={work_id:string;client:RunClient;session_id:string;file:string;cwd:string|null;title:string;windows:number|null};
+function init(store:PackStore){initWorkExecution(store);store.hermesState.exec('CREATE TABLE IF NOT EXISTS office_session_work(work_id TEXT PRIMARY KEY REFERENCES office_work(id),project_id TEXT NOT NULL,client TEXT NOT NULL,session_id TEXT NOT NULL,file TEXT NOT NULL,cwd TEXT,title TEXT NOT NULL,created_at TEXT NOT NULL)');
+  try{store.hermesState.exec('ALTER TABLE office_session_work ADD COLUMN windows INTEGER');}catch{/* already there */}}
 const exists=(store:PackStore)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_session_work'").get());
 const row=(store:PackStore,project:string,id:string)=>exists(store)?store.hermesState.prepare('SELECT * FROM office_session_work WHERE project_id=? AND work_id=?').get(project,id) as Row|undefined:undefined;
 const sending=new Set<string>();
@@ -114,7 +132,7 @@ export function sessionBoard(store:PackStore,project:string,id:string){
 export function sessionDetail(store:PackStore,project:string,id:string){
   const r=row(store,project,id);if(!r)return null;const work=store.officeWorkById(project,id),quiet=quietFor(r.file);
   return {id,title:work.title,goal:work.goal,revision:0,run_status:state(r),completion_verified:false,updated_at:Number.isFinite(quiet)?new Date(Date.now()-quiet).toISOString():work.updated_at,
-    session:{client:r.client,session_id:r.session_id,cwd:r.cwd,missing:!existsSync(r.file),sending:sending.has(id),can_send:!sending.has(id)&&quiet>=IDLE_MS&&Boolean(r.cwd&&existsSync(r.cwd)),messages:messages(r)}};
+    session:{client:r.client,session_id:r.session_id,cwd:r.cwd,windows:Boolean(r.windows),missing:!existsSync(r.file),sending:sending.has(id),can_send:!Boolean(r.windows)&&!sending.has(id)&&quiet>=IDLE_MS&&Boolean(r.cwd&&existsSync(r.cwd)),messages:messages(r)}};
 }
 
 export class SessionMirror {
@@ -124,7 +142,7 @@ export class SessionMirror {
   private skip=(cwd:string|null)=>Boolean(cwd&&(cwd.startsWith(dirname(this.config.dbPath))||!this.listTemporary&&(cwd.startsWith(tmpdir())||cwd.startsWith('/tmp/'))));
   list(){
     const attached=new Set(this.store.hermesState.prepare('SELECT session_id FROM office_session_work WHERE project_id=?').all(this.config.project.id).map(r=>String(r.session_id)));
-    return listSessions(this.roots,this.skip).map(s=>({client:s.client,id:s.id,cwd:s.cwd,title:s.title,updated_at:s.updated_at,bytes:s.bytes,attached:attached.has(s.id)}));
+    return listSessions(this.roots,this.skip).map(s=>({client:s.client,id:s.id,cwd:s.cwd,title:s.title,updated_at:s.updated_at,bytes:s.bytes,windows:Boolean(s.windows),attached:attached.has(s.id)}));
   }
   attach(raw:unknown){
     const input=sessionAttachSchema.parse(raw),project=this.config.project.id;
@@ -133,7 +151,7 @@ export class SessionMirror {
     const id=randomUUID(),at=new Date().toISOString(),title=found.title.slice(0,80);
     this.store.hermesState.exec('BEGIN IMMEDIATE');try{
       this.store.hermesState.prepare('INSERT INTO office_work VALUES(?,?,?,?,?,?)').run(id,project,title,`${found.client==='claude'?'Claude Code':'Codex'} 대화 · ${found.cwd??''}`,at,at);
-      this.store.hermesState.prepare('INSERT INTO office_session_work VALUES(?,?,?,?,?,?,?,?)').run(id,project,found.client,found.id,found.file,found.cwd,title,at);
+      this.store.hermesState.prepare('INSERT INTO office_session_work(work_id,project_id,client,session_id,file,cwd,title,created_at,windows) VALUES(?,?,?,?,?,?,?,?,?)').run(id,project,found.client,found.id,found.file,found.cwd,title,at,found.windows?1:null);
       workActivity(this.store,project,id,'session.attached','내 AI 앱의 대화를 연결했습니다. 대화는 원래 세션 파일에서 읽습니다.');
       this.store.hermesState.exec('COMMIT');
     }catch(error){this.store.hermesState.exec('ROLLBACK');throw error;}
@@ -142,7 +160,7 @@ export class SessionMirror {
   /** Continues the session with the owner's message, in its own folder, only while nobody else is writing to it. */
   send(raw:unknown){
     const input=sessionSendSchema.parse(raw),project=this.config.project.id;assertWorkConnected(this.store,project,input.work_id);
-    const r=row(this.store,project,input.work_id);requireCondition(r,'SESSION_WORK_NOT_FOUND');requireCondition(clientRunEnabled(),'CLIENT_RUN_DISABLED');
+    const r=row(this.store,project,input.work_id);requireCondition(r,'SESSION_WORK_NOT_FOUND');requireCondition(!Boolean(r.windows),'SESSION_IN_WINDOWS_APP');requireCondition(clientRunEnabled(),'CLIENT_RUN_DISABLED');
     requireCondition(!sending.has(r.work_id)&&quietFor(r.file)>=IDLE_MS,'SESSION_BUSY');requireCondition(r.cwd&&existsSync(r.cwd),'SESSION_FOLDER_MISSING');
     const settings=readModelSettings(modelSettingsPath(this.config)),model=settings?.selection.client_models[r.client]??null;
     sending.add(r.work_id);workActivity(this.store,project,r.work_id,'session.sent',`지시 전달 · ${redact(input.text).slice(0,300)}`);
