@@ -9,7 +9,6 @@
   "theme": "dark",
   "layout": "board",
   "screens": [
-    "work-overview.png",
     "work-detail.png"
   ],
   "checks": [

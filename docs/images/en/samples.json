@@ -1,0 +1,22 @@
+{
+  "ui_base_commit": "6f76f7d6209aa9650c84361a9cb8231f879fb893",
+  "captured_at": "2026-10-09T20:22:04.418Z",
+  "sample_data": true,
+  "live_task_run": false,
+  "paid_model_calls": 0,
+  "language": "en",
+  "theme": "dark",
+  "source": "scripts/docs/readme-samples.mjs",
+  "screens": [
+    "feed.png",
+    "feed-phone.png",
+    "work-overview.png",
+    "timeline.png",
+    "feed-news.png",
+    "feed-compare.png",
+    "feed-draft.png",
+    "feed-budget.png",
+    "feed-emails.png",
+    "feed-question.png"
+  ]
+}
