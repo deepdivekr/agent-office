@@ -163,9 +163,11 @@ export class ServerOffice {
   }
   async discover(raw:unknown){
     const {target_id}=serverDiscover.parse(raw),snapshot=await this.refreshTarget(target_id);requireCondition(snapshot,'SERVER_CONNECTION_FAILED');
-    const taken=new Set(this.store.hermesState.prepare('SELECT units FROM office_server_work WHERE project_id=? AND target_id=?').all(this.config.project.id,target_id).flatMap(row=>JSON.parse(String(row.units)) as string[]));
+    const works=(this.store.hermesState.prepare('SELECT s.work_id,w.title,s.units FROM office_server_work s JOIN office_work w ON w.id=s.work_id WHERE s.project_id=? AND s.target_id=? ORDER BY w.created_at').all(this.config.project.id,target_id) as Array<{work_id:string;title:string;units:string}>)
+      .map(row=>({work_id:row.work_id,title:row.title,units:JSON.parse(row.units) as string[]}));
+    const taken=new Set(works.flatMap(w=>w.units));
     return {target_id,observed_at:now(),groups:suggestServerGroups(snapshot).map(g=>({...g,units:g.units.filter(u=>!taken.has(u))})).filter(g=>g.units.length),
-      units:snapshot.units.map(u=>({id:u.id,kind:u.kind,state:u.state,note:u.note,description:u.description})),watched:[...taken]};
+      units:snapshot.units.map(u=>({id:u.id,kind:u.kind,state:u.state,note:u.note,description:u.description})),watched:[...taken],watched_works:works};
   }
   link(raw:unknown){
     const input=serverLink.parse(raw),project=this.config.project.id,target=this.target(input.target_id),at=now(),ids:string[]=[];

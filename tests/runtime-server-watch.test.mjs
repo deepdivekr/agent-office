@@ -74,6 +74,7 @@ test('runtime fixture a linked server group shows on the board, turns to Needs y
   const row=()=>readWorkBoard(store,config).works.find(w=>w.id===web);
   assert.deepEqual([row().status,row().run.kind,row().server.counts,row().server.problems,row().server.mode],['service_standby','server',{service:2,timer:0,container:0},[],'standby'],'healthy services only: always on, waiting');
   assert.equal((await office.discover({target_id:target})).watched.includes('shop-web.service'),true,'a unit already watched is not proposed again');
+  assert.deepEqual((await office.discover({target_id:target})).watched_works.map(w=>[w.work_id,w.title,w.units]),[[web,'Shop web',['shop-web.service','shop-worker@3007.service']]],'and is listed under the Work that watches it');
   answer=raw({show:[unit('shop-web.service',{ActiveState:'failed',SubState:'failed',Result:'exit-code'}),unit('shop-worker@3007.service')]});
   await office.refreshTarget(target);await office.refreshTarget(target);
   assert.deepEqual([row().status,row().server.problems],['service_problem',[{id:'shop-web.service',note:'failed'}]]);
@@ -101,6 +102,7 @@ test('runtime fixture the Control Center registers a server, links its groups an
   await page.locator('#import-server details summary').click();
   await page.fill('#server-name','Main VM');await page.fill('#server-host','203.0.113.7');await page.fill('#server-user','ops');
   await page.locator('#server-register').click();await page.waitForFunction(()=>document.getElementById('server-target').options.length===1);
+  assert.equal(await page.locator('#server-target option').innerText(),'Main VM','the server is named, its address kept out of sight');
   await page.locator('#server-discover').click();await page.locator('.server-group').first().waitFor();
   assert.deepEqual(await page.locator('.sg-name').evaluateAll(n=>n.map(i=>i.value)),['chat-relay-bot','ledger','notes-bot','shop-web']);
   await page.locator('[data-pick="web-session.service"]').uncheck();
@@ -131,6 +133,12 @@ test('runtime fixture the Control Center registers a server, links its groups an
   await page.fill('#check-label','Relay heartbeat');await page.fill('#check-pattern','heartbeat');await page.selectOption('#check-window','10');
   await page.locator('#check-add').click();await page.waitForFunction(()=>document.body.innerText.includes('Relay heartbeat'));
   assert.match(await page.locator('.server-table').last().innerText(),/Relay heartbeat[\s\S]*chat-relay-bot\.service[\s\S]*heartbeat[\s\S]*10min[\s\S]*next check/u);
+  // Finding services again lists what is new and, below, every Work that already watches the rest.
+  await page.goto(server.url+'?import=1');await page.locator('[data-import-route="server"]').click();await page.waitForFunction(()=>document.getElementById('server-target').options.length===1);
+  await page.locator('#server-discover').click();await page.locator('.server-group.watched').first().waitFor();
+  assert.deepEqual(await page.locator('.server-group:not(.watched) .sg-unit span').allInnerTexts(),['web-session.service\nservice'],'the unit left out is offered again');
+  assert.equal(await page.locator('.server-group.watched').count(),4);
+  assert.match(await page.locator('#import-server').innerText(),/Already watched[\s\S]*chat-relay-bot\.service/iu);
   assert.deepEqual(errors,[]);
 });
 
