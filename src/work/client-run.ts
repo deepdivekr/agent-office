@@ -170,7 +170,9 @@ function claudeEvent(event:Json,state:RunState):ClientRunEvent[]{
 
 export interface ClientRunOutcome {session_id:string|null;final_message:string;completed:boolean;reason:string|null;counts:RunState['counts'];}
 /** One run of the client's own agent until its turn ends. Unknown events are tolerated: both clients update themselves. */
-export async function runClient(request:{client:RunClient;model:string|null;effort:WorkClientChoice['effort'];servers?:ClientRunMcpServer[];folder:string;prompt:string;session:{id:string;resume:boolean}|null;signal:AbortSignal;timeout_ms?:number;onSession:(id:string)=>void;onEvent:(event:ClientRunEvent)=>void}):Promise<ClientRunOutcome>{
+/** `windows`: a Windows app's session, run by its Windows client from WSL; `folder` is then the Windows path the client
+ * works in and `windows.cwd` the same folder as WSL sees it. */
+export async function runClient(request:{client:RunClient;model:string|null;effort:WorkClientChoice['effort'];servers?:ClientRunMcpServer[];folder:string;windows?:{executable:string;cwd:string};prompt:string;session:{id:string;resume:boolean}|null;signal:AbortSignal;timeout_ms?:number;onSession:(id:string)=>void;onEvent:(event:ClientRunEvent)=>void}):Promise<ClientRunOutcome>{
   // A new Claude session's pre-assigned ID is confirmed only when the client reports it.
   const state:RunState={session:request.session?.resume?request.session.id:null,final:'',done:false,turnFailed:false,failure:'',tools:new Map(),counts:{commands:0,file_changes:0,tool_calls:0,web:0}};
   let pending='';
@@ -186,8 +188,8 @@ export async function runClient(request:{client:RunClient;model:string|null;effo
     }
     if(pending.length>8_388_608)throw Error('CLIENT_EVENT_TOO_LARGE');
   };
-  mkdirSync(request.folder,{recursive:true});
-  const result=await runner.run({executable:executable(request.client),args:clientRunArgs({id:request.client,model:request.model,effort:request.effort},request.folder,request.session,codexHasOffice(),request.servers),cwd:request.folder,stdin:request.prompt,timeout_ms:request.timeout_ms??7_200_000,signal:request.signal,env:clientRunEnvironment(),keep_stdout:false,output_limit_bytes:8_388_608,onStdout:observe});
+  if(!request.windows)mkdirSync(request.folder,{recursive:true});
+  const result=await runner.run({executable:request.windows?.executable??executable(request.client),args:clientRunArgs({id:request.client,model:request.model,effort:request.effort},request.folder,request.session,request.windows?false:codexHasOffice(),request.servers),cwd:request.windows?.cwd??request.folder,stdin:request.prompt,timeout_ms:request.timeout_ms??7_200_000,signal:request.signal,env:clientRunEnvironment(),keep_stdout:false,output_limit_bytes:8_388_608,onStdout:observe});
   observe('\n');
   const completed=result.code===0&&state.done&&!state.turnFailed;
   const failure=`${state.failure}\n${result.stderr.slice(-4000)}`,missing=Boolean(request.session?.resume)&&/no (?:conversation|session|thread) found|(?:session|conversation|thread)[^\n]{0,100}(?:not found|does not exist)/iu.test(failure);

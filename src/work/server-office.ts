@@ -157,7 +157,7 @@ export class ServerOffice {
       if(view.work.last_status===null&&status==='service_ok')continue;
       const summary=status==='service_ok'?'모든 서비스가 정상입니다.':status==='service_unreachable'?'서버에 접속하지 못했습니다.':`확인 필요: ${health?.problems.map(p=>`${p.id} (${NOTE_KO[p.note??'']??p.note})`).join(', ')}`;
       workActivity(this.store,project,id,status==='service_ok'?'server.recovered':status==='service_unreachable'?'server.unreachable':'server.problem',summary);
-      const title=this.store.officeWorkById(project,id).title,where=`${view.definition.name} (${view.definition.host})`;
+      const title=this.store.officeWorkById(project,id).title,where=view.definition.name;
       this.notify?.(id,`${status==='service_ok'?'[회복]':status==='service_unreachable'?'[서버 연결 안 됨]':'[서버 확인 필요]'} ${title}\n${where}\n${summary}`);
     }
   }

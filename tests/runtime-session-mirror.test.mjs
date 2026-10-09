@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm,utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {claudeMessages,codexMessages,listSessions,SessionMirror} from '../dist/work/session-mirror.js';
 import {enableClientRun,disableClientRun} from '../dist/work/client-run.js';
@@ -19,6 +19,7 @@ const claudeLines=cwd=>[
 ].map(L);
 const codexLines=cwd=>[
   {type:'session_meta',payload:{id:'01a11abd-afe1-7823-a339-1870a0f41ae2',cwd}},
+  {type:'response_item',timestamp:'2026-10-07T01:00:00Z',payload:{type:'message',role:'user',content:[{type:'input_text',text:'# AGENTS.md instructions for /p\n\n<INSTRUCTIONS>rules</INSTRUCTIONS>'}]}},
   {type:'response_item',timestamp:'2026-10-07T01:00:00Z',payload:{type:'message',role:'user',content:[{type:'input_text',text:'<environment_context>cwd</environment_context>'}]}},
   {type:'response_item',timestamp:'2026-10-07T01:00:01Z',payload:{type:'message',role:'user',content:[{type:'input_text',text:'README를 정리해줘'}]}},
   {type:'response_item',timestamp:'2026-10-07T01:00:02Z',payload:{type:'function_call',name:'shell'}},
@@ -38,14 +39,22 @@ async function roots(t){
   await writeFile(join(claude,'-work',ids.scratch+'.jsonl'),claudeLines(join(work,'.office','work-folders','x')).join('\n')+'\n');
   await writeFile(join(codex,'2026','10','07','rollout-2026-10-07T01-00-00-01a11abd-afe1-7823-a339-1870a0f41ae2.jsonl'),codexLines(work).join('\n')+'\n');
   const old=new Date(Date.now()-3600_000);await utimes(join(codex,'2026','10','07','rollout-2026-10-07T01-00-00-01a11abd-afe1-7823-a339-1870a0f41ae2.jsonl'),old,old);
+  // The Windows home as WSL sees it: its Codex sessions, and (once a test adds them) its client and folder.
+  const winHome=join(root,'win'),winCodex=join(winHome,'.codex','sessions');await mkdir(join(winCodex,'2026','10','06'),{recursive:true});
+  ids.windows='cccccccc-3333-4333-8333-333333333333';
+  const winFile=join(winCodex,'2026','10','06','rollout-2026-10-06T01-00-00-'+ids.windows+'.jsonl');
+  await writeFile(winFile,codexLines('C:\\Users\\me\\shop').map(l=>l.replace('01a11abd-afe1-7823-a339-1870a0f41ae2',ids.windows)).join('\n')+'\n');
+  const older=new Date(Date.now()-7200_000);await utimes(winFile,older,older);
   t.after(()=>rm(root,{recursive:true,force:true}));
-  return {root,work,ids,file:join(claude,'-work',ids.claude+'.jsonl'),roots:{claude,codex}};
+  return {root,work,ids,file:join(claude,'-work',ids.claude+'.jsonl'),winHome,roots:{claude,codex,windows:{claude:join(winHome,'.claude','projects'),codex:winCodex}}};
 }
 
-test('recent sessions of both clients are listed newest first, without the skipped folders',async t=>{
+test('recent sessions of both clients and the Windows apps are listed newest first, without the skipped folders',async t=>{
   const x=await roots(t);
   const list=listSessions(x.roots,cwd=>Boolean(cwd?.includes('.office')));
-  assert.deepEqual(list.map(s=>[s.client,s.id,s.title]),[['claude',x.ids.claude,'서버 서비스 관측 기능을 추가하고 싶어'],['codex','01a11abd-afe1-7823-a339-1870a0f41ae2','README를 정리해줘']]);
+  assert.deepEqual(list.map(s=>[s.client,s.id,s.title,Boolean(s.windows)]),[['claude',x.ids.claude,'서버 서비스 관측 기능을 추가하고 싶어',false],['codex','01a11abd-afe1-7823-a339-1870a0f41ae2','README를 정리해줘',false],['codex',x.ids.windows,'README를 정리해줘',true]]);
+  // The limit is per client: busy Claude sessions do not push Codex off the list.
+  assert.deepEqual(listSessions(x.roots,()=>false,1).map(s=>s.client),['claude','codex']);
 });
 
 test('runtime fixture an attached session shows on the board, refuses a message while busy and continues in its own folder when idle',async t=>{
@@ -55,7 +64,12 @@ test('runtime fixture an attached session shows on the board, refuses a message 
   const calls=[];enableClientRun({executable:()=>process.execPath,runner:{run:async request=>{calls.push(request);request.onStdout(L({type:'system',subtype:'init',session_id:x.ids.claude})+'\n');request.onStdout(L({type:'result',subtype:'success',is_error:false,result:'이어서 했어요.',session_id:x.ids.claude})+'\n');return {code:0,stdout:'',stderr:''};}}});
   t.after(()=>{disableClientRun();store.close();});
   const mirror=new SessionMirror(store,config,x.roots,true);
-  assert.equal(mirror.list().length,3,'the session folders of this fixture are not temporary ones');
+  assert.equal(mirror.list().length,4,'the session folders of this fixture are not temporary ones');
+  // A Windows app's conversation is read here; it is continued only when its Windows client and folder are there.
+  const {work_id:win}=mirror.attach({client:'codex',session_id:x.ids.windows});
+  const winDetail=()=>readWorkDetail(store,config,win).session;
+  assert.deepEqual([winDetail().windows,winDetail().ready,winDetail().can_send,winDetail().messages.length],[true,false,false,3]);
+  assert.throws(()=>mirror.send({work_id:win,text:'이어서 해줘'}),/SESSION_WINDOWS_UNAVAILABLE/u);
   const {work_id}=mirror.attach({client:'claude',session_id:x.ids.claude});
   assert.equal(mirror.attach({client:'claude',session_id:x.ids.claude}).reused,true);
   const board=()=>readWorkBoard(store,config).works.find(w=>w.id===work_id);
@@ -68,6 +82,16 @@ test('runtime fixture an attached session shows on the board, refuses a message 
   for(let i=0;i<50&&!store.hermesState.prepare("SELECT 1 FROM office_activity WHERE work_id=? AND kind='session.reply'").get(work_id);i++)await delay(20);
   assert.equal(calls.length,1);assert.equal(calls[0].cwd,x.work);assert.equal(calls[0].stdin,'다음 단계 진행해');
   assert.deepEqual(calls[0].args.slice(-2),['--resume',x.ids.claude]);
+  // With the Windows client and folder in place, the Windows session continues there, in its own folder and model.
+  const exe=join(x.winHome,'AppData','Roaming','npm','node_modules','@openai','codex','node_modules','@openai','codex-win32-x64','vendor','x86_64-pc-windows-msvc','bin','codex.exe'),folder=join(x.root,'mnt','c','Users','me','shop');
+  await mkdir(dirname(exe),{recursive:true});await writeFile(exe,'');await mkdir(folder,{recursive:true});
+  process.env.AGENT_OFFICE_WINDOWS_MOUNT=join(x.root,'mnt');t.after(()=>{delete process.env.AGENT_OFFICE_WINDOWS_MOUNT;});
+  assert.deepEqual([winDetail().ready,winDetail().can_send],[true,true]);
+  assert.deepEqual(mirror.send({work_id:win,text:'이어서 해줘'}),{accepted:true});
+  for(let i=0;i<50&&calls.length<2;i++)await delay(20);
+  assert.deepEqual([calls[1].executable,calls[1].cwd,calls[1].stdin],[exe,folder,'이어서 해줘']);
+  assert.deepEqual(calls[1].args.slice(0,2),['-C','C:\\Users\\me\\shop']);assert.ok(!calls[1].args.includes('-m'));
+  assert.deepEqual(calls[1].args.slice(-5),['resume','--json','--skip-git-repo-check',x.ids.windows,'-']);
 });
 
 test('runtime fixture the import pane lists sessions, attaches one and continues it from the Work detail',async t=>{
@@ -80,7 +104,13 @@ test('runtime fixture the import pane lists sessions, attaches one and continues
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(server.url+'?import=1');await page.locator('[data-import-route="session"]').click();
   await page.locator('.session-row').first().waitFor();
-  assert.equal(await page.locator('.session-row').count(),3);
+  // One tab per app, opened on the app used last; each counts its conversations.
+  assert.deepEqual(await page.locator('[data-session-tab]').evaluateAll(b=>b.map(x=>x.textContent)),['Claude Code 2','Codex 2']);
+  assert.equal(await page.locator('[data-session-tab="claude"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('.session-row').count(),2);
+  await page.locator('[data-session-tab="codex"]').click();
+  assert.match(await page.locator('#session-list').innerText(),/Windows app · C:\\Users\\me\\shop/u);
+  await page.locator('[data-session-tab="claude"]').click();
   await page.locator(`[data-session-attach="claude:${x.ids.claude}"]`).click();
   await page.locator('#session-log .turn').first().waitFor();
   assert.deepEqual(await page.locator('#session-log .turn p').allInnerTexts(),['서버 서비스 관측 기능을 추가하고 싶어','관측 설계를 정리했어요. token: [REDACTED]']);
