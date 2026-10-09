@@ -60,7 +60,8 @@ export const workImportDraftSchema=workImportPayloadSchema.extend({
 }).strict();
 export type WorkImportDraft=z.infer<typeof workImportDraftSchema>;
 
-export const WORK_IMPORT_DRAFT_MAX_BYTES=64*1024;
+/** A complete answer to the prompt below is a few thousand characters; this leaves room for long original instructions. */
+export const WORK_IMPORT_DRAFT_MAX_CHARS=60_000;
 
 // Rejected before parsing or persistence. A description such as "password required" is allowed;
 // an actual secret value is not. Keep errors value-free so API responses cannot echo credentials.
@@ -143,14 +144,30 @@ export function validateWorkImportDraft(raw:unknown):WorkImportDraft{
 
 /** Parse one JSON object or one fenced JSON block. Surrounding prose is ignored, never executed. */
 export function parseWorkImportDraft(pasted:string):WorkImportDraft{
-  if(typeof pasted!=='string'||Buffer.byteLength(pasted,'utf8')>WORK_IMPORT_DRAFT_MAX_BYTES||pasted.trim().length===0)throw Error('WORK_IMPORT_TEXT_SIZE_INVALID');
+  if(typeof pasted!=='string'||pasted.trim().length===0)throw Error('WORK_IMPORT_TEXT_SIZE_INVALID');
+  if(pasted.length>WORK_IMPORT_DRAFT_MAX_CHARS)throw Error('WORK_IMPORT_TEXT_TOO_LONG');
   rejectSecrets(pasted);
   const fences=[...pasted.matchAll(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gmi)];
   if(fences.length>1)throw Error('WORK_IMPORT_MULTIPLE_JSON_BLOCKS');
   const jsonText=(fences.length===1?fences[0]![1]!:pasted).trim().replace(/^\uFEFF/u,'');
   let raw:unknown;
-  try{raw=JSON.parse(jsonText);}catch{throw Error('WORK_IMPORT_JSON_INVALID');}
+  try{raw=JSON.parse(jsonText);}catch{
+    // A sentence before or after an unfenced object is prose, not part of the answer.
+    const start=jsonText.indexOf('{'),end=jsonText.lastIndexOf('}');
+    try{if(start<0||end<=start)throw Error();raw=JSON.parse(jsonText.slice(start,end+1));}
+    catch{throw Error(start>=0&&unclosed(jsonText.slice(start))?'WORK_IMPORT_JSON_TRUNCATED':'WORK_IMPORT_JSON_INVALID');}
+  }
   return validateWorkImportDraft(raw);
+}
+
+/** An object whose braces or string never close: the answer was cut off, by the AI app or in copying. */
+function unclosed(text:string){
+  let depth=0,quoted=false,escaped=false;
+  for(const char of text){
+    if(quoted){if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char==='"')quoted=false;continue;}
+    if(char==='"')quoted=true;else if(char==='{'||char==='[')depth++;else if(char==='}'||char===']')depth--;
+  }
+  return quoted||depth>0;
 }
 
 export const UNIVERSAL_WORK_MIGRATION_PROMPT=`내가 이 플랫폼에서 쓰던 자동화 한 건을 Agent Office로 옮기려 합니다. 옮긴 뒤에는 내 AI 앱(Codex나 Claude Code)이 내 계정·스킬·도구·권한으로 이 자동화를 직접 실행하고, Agent Office는 일정·실행 기록·결과 전달·일시정지만 맡습니다. 그 앱이 이 JSON만 보고 같은 일을 다시 해낼 수 있도록, 요약보다 실제 지침과 절차를 옮겨 주세요.
@@ -165,7 +182,9 @@ export const UNIVERSAL_WORK_MIGRATION_PROMPT=`내가 이 플랫폼에서 쓰던 
 - dependencies: 앱이 실행하려면 있어야 하는 것(로그인이 필요한 계정, 커넥터, 파일, 프로젝트, 사람의 확인).
 - approval_boundary: 사람 확인 없이는 하지 않던 일(전송, 제출, 결제 등).
 
-각 확인된 내용에는 evidence 항목을 만들고, 해당 필드의 evidence_ids에 그 id를 연결하세요. evidence.quote는 실제로 확인한 짧은 원문이고 source_ref는 그 원문의 위치(예: 자동화 설정의 지침, 지난 실행의 결과)를 적습니다. 보지 못한 내용에는 가짜 근거를 만들지 마세요. 단계와 완료조건은 근거가 없다면 빈 배열로 두고 unknowns에 이유를 적으세요. 한 회차의 완료조건과 반복 Work의 지속 조건을 혼동하지 마세요. 모든 필드는 필수이며 모르는 문자열은 null, 모르는 분류는 unknown, 모르는 배열은 []입니다. JSON 밖의 설명이나 Markdown은 쓰지 마세요.
+각 확인된 내용에는 evidence 항목을 만들고, 해당 필드의 evidence_ids에 그 id를 연결하세요. evidence.quote는 실제로 확인한 원문 한두 문장(200자 안)이고 source_ref는 그 원문의 위치(예: 자동화 설정의 지침, 지난 실행의 결과)를 적습니다. 한 근거가 여러 필드를 받치면 같은 id를 다시 연결하고, 같은 원문을 근거로 여러 번 만들지 마세요. 보지 못한 내용에는 가짜 근거를 만들지 마세요. 단계와 완료조건은 근거가 없다면 빈 배열로 두고 unknowns에 이유를 적으세요. 한 회차의 완료조건과 반복 Work의 지속 조건을 혼동하지 마세요. 모든 필드는 필수이며 모르는 문자열은 null, 모르는 분류는 unknown, 모르는 배열은 []입니다. JSON 코드 블록 하나만 쓰고, 그 밖의 설명은 쓰지 마세요.
+
+분량: 답변 전체는 1만5천 자 안쪽이면 충분합니다. 원문 그대로 옮기는 것은 goal 하나뿐이고, 나머지는 다시 실행하는 데 필요한 사실만 짧게 적습니다. steps는 10개 이하로 단계마다 goal 두세 문장, evidence는 보통 5~15개, unknowns는 항목마다 한 줄입니다. 지난 실행 결과나 대화 내용을 통째로 옮기지 마세요.
 
 선택값: source.platform은 chatgpt_work/grok/telegram/local_project/other/unknown; trigger.kind는 once/schedule/event/manual/unknown; steps[].effect는 read_only/draft_only/local_write/external_write/unknown; delivery.channel은 telegram/email/chat/file/other/unknown; dependencies[].kind는 account/file/project/api/connector/human/other/unknown 중 정확히 하나입니다. 항목 형식은 steps=[{id,goal,depends_on,tool_hints,effect,evidence_ids}], completion=[{id,result,proof,evidence_ids}], dependencies=[{name,kind,evidence_ids}], evidence=[{id,source_ref,quote}], unknowns=[{field,reason}]입니다. id는 영문 소문자로 시작하고 영문 소문자·숫자·밑줄만 사용하세요. steps[].depends_on에는 다른 step의 id만 적고, 계정·연결·사람 같은 의존성은 dependencies에만 적으세요. completion은 성공한 매 회차가 충족해야 하는 조건입니다. 실행 종류마다 결과가 다른 자동화(새 소식 없음·전달함·일부만·실패·차단)는 종류별 규칙을 각각 조건으로 나열하지 말고, "이번 회차의 종류가 결과에 밝혀져 있고 그 종류의 규칙을 지켰다" 한 조건과 종류별 규칙을 그 result 본문에 적으세요. 반복 일정은 trigger.rule에 원문 규칙(RRULE이면 그대로)과 timezone을 적고, 사람이 메시지로 시작하면 kind를 manual로, 외부 사건이 시작하면 event로 두고 rule에 그 시작 조건을 적으세요. 둘 다 있으면 manual로 두고 rule에 반복 조건도 함께 적으세요.
 
@@ -198,7 +217,9 @@ What to include:
 - dependencies: what the app needs to run it (accounts that need a sign-in, connectors, files, projects, a person's confirmation).
 - approval_boundary: what it never did without a person's confirmation (sending, submitting, paying).
 
-Create an evidence item for each confirmed fact and link its id in that field's evidence_ids. evidence.quote is a short piece of original text you actually saw, and source_ref is where it came from (for example, the automation's instructions or the result of the last run). Do not invent evidence for anything you did not see. If steps or completion conditions have no evidence, leave them as empty arrays and give the reason in unknowns. Do not confuse the completion condition of one run with the ongoing condition of a recurring Work. Every field is required: use null for an unknown string, unknown for an unknown category, and [] for an unknown array. Do not write any explanation or Markdown outside the JSON.
+Create an evidence item for each confirmed fact and link its id in that field's evidence_ids. evidence.quote is one or two sentences (under 200 characters) of original text you actually saw, and source_ref is where it came from (for example, the automation's instructions or the result of the last run). When one piece of evidence supports several fields, link the same id again; do not make several evidence items of the same text. Do not invent evidence for anything you did not see. If steps or completion conditions have no evidence, leave them as empty arrays and give the reason in unknowns. Do not confuse the completion condition of one run with the ongoing condition of a recurring Work. Every field is required: use null for an unknown string, unknown for an unknown category, and [] for an unknown array. Write one JSON code block and nothing else.
+
+Length: the whole answer fits well within 15,000 characters. Only goal is carried over word for word; everything else is the facts needed to run it again, written briefly. Keep steps to 10 or fewer with two or three sentences of goal each, evidence usually 5 to 15 items, and one line per unknown. Do not copy whole past results or conversations.
 
 Allowed values: source.platform is exactly one of chatgpt_work/grok/telegram/local_project/other/unknown; trigger.kind is once/schedule/event/manual/unknown; steps[].effect is read_only/draft_only/local_write/external_write/unknown; delivery.channel is telegram/email/chat/file/other/unknown; dependencies[].kind is account/file/project/api/connector/human/other/unknown. Item shapes are steps=[{id,goal,depends_on,tool_hints,effect,evidence_ids}], completion=[{id,result,proof,evidence_ids}], dependencies=[{name,kind,evidence_ids}], evidence=[{id,source_ref,quote}], unknowns=[{field,reason}]. An id starts with a lowercase letter and uses only lowercase letters, digits and underscores. steps[].depends_on names other step ids only; accounts, connectors and people go in dependencies only. completion lists the conditions every successful run must meet. For an automation whose runs end differently (no news, delivered, partial, failed, blocked), do not list one condition per kind of run: write one condition that the result states which kind this run was and kept that kind's rules, and put the rules for each kind in that result text. For a schedule, put the original rule (an RRULE as is) and the timezone in trigger.rule; when a person starts it with a message use kind manual, when an outside event starts it use kind event, and describe the start condition in rule. When both apply, use manual and add the recurring condition to rule.
 
