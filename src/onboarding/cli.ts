@@ -5,8 +5,10 @@ import {shortControlUrl,tailnetControlUrls} from './control-address.js';
 import qrcode from 'qrcode-terminal';
 import {requireCondition} from '../core/contracts.js';
 import {appendSetupActivity} from './setup-activity.js';
+import {modelSettingsPath,readModelSettings} from './model-settings.js';
+import {loadHostConfig} from '../interface/config.js';
 
-export const onboardingHelp='  connect [--state-root PATH]  (opens a loopback-only local connection screen)\n  connection status [--state-root PATH]\n';
+export const onboardingHelp='  connect [--state-root PATH] [--open|--no-open]  (starts the local Control Center; opens its screen on first setup or with --open)\n  connection status [--state-root PATH]\n';
 function rootFrom(args:readonly string[]){
   if(args.length===0)return connectionRoot();requireCondition(args.length===2&&args[0]==='--state-root'&&args[1],'INVALID_CONNECTION_OPTIONS');return args[1]!;
 }
@@ -20,17 +22,27 @@ export function connectSummaryText(summary:{address:string;tailnet_urls?:string[
   lines.push('AI 앱 연결(MCP): '+summary.mcp_command);
   return lines.join('\n');
 }
+/**
+ * Whether `connect` opens the Control Center in the browser: for the first setup (no saved AI app settings yet) or when
+ * asked with --open. After setup an update or reconnect prints the addresses instead; the installer runs connect on every
+ * update, and each run used to add one more browser window (owner, 2026-10-10). --no-open or AGENT_OFFICE_NO_OPEN=1 never opens.
+ */
+export function shouldOpenControl(flags:readonly string[],setUp:boolean,env:NodeJS.ProcessEnv=process.env){
+  if(flags.includes('--no-open')||env.AGENT_OFFICE_NO_OPEN==='1')return false;
+  return flags.includes('--open')||!setUp;
+}
+function setupFinished(root:string){try{return readModelSettings(modelSettingsPath(loadHostConfig(localConnectionPaths(root).runtimeConfig)))!==null;}catch{return false;}}
 /** The installed CLI opens onboarding and preserves the bootstrap trail for the local setup screen. */
 export async function runOnboardingCli(args:readonly string[]){
   if(args[0]==='connect'){
-    const root=rootFrom(args.slice(1));await appendSetupActivity(root,'setup','running','$ agent-office connect');
+    const flags=args.slice(1).filter(arg=>arg==='--open'||arg==='--no-open'),root=rootFrom(args.slice(1).filter(arg=>arg!=='--open'&&arg!=='--no-open'));await appendSetupActivity(root,'setup','running','$ agent-office connect');
     await appendSetupActivity(root,'setup','success','WSL/Linux 실행 환경과 Agent Office 설치를 확인했습니다.');
     const service=await ensureControlService(root);await appendSetupActivity(root,'setup','success',service.reused?'기존 관제센터에 다시 연결했습니다.':'로컬 관제센터를 시작했습니다.');
     // Running connect is the owner choosing the default non-interfering mode (own workspace and background
     // browser, no desktop access, files only by explicit transfer). Recording it here lets `agent-office mcp`
     // work right after install instead of failing until one more click (clean-install check, 2026-10-01).
     if(!readLocalConnection(root)){await approveNonInterferingConnection(root);await appendSetupActivity(root,'runtime','success','기본 실행 모드로 이 컴퓨터를 연결했습니다. 화면과 파일은 건드리지 않습니다.');}
-    const opened=await openControlUrl(service.url);
+    const opened=shouldOpenControl(flags,setupFinished(root))?await openControlUrl(service.url):false;
     let tailnet:string[]=[];try{tailnet=JSON.parse(readFileSync(localConnectionPaths(root).runtimeConfig,'utf8')).observability?.tailnet_hosts??[];}catch{/* the Control Center reports a bad config itself */}
     const summary={status:'control_center_ready',url:service.url+'settings',address:shortControlUrl(service.url).replace(/\/[a-f0-9]{48}\/$/u,'/'),browser_opened:opened,...(tailnet.length?{tailnet_urls:tailnetControlUrls(service.url,tailnet)}:{}),pid:service.pid,reused:service.reused,mcp_command:'agent-office mcp',connection:readLocalConnection(rootFrom(args.slice(1)))?'connected':'awaiting_local_approval'};
     // A person at a terminal gets the addresses to read and a QR code to scan; a script gets the JSON line.

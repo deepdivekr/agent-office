@@ -114,3 +114,12 @@ test('connect tells a person where to open Office: the short address here and, w
   const plain=connectSummaryText({address:'http://office.localhost:4600/',connection:'awaiting_local_approval',mcp_command:'agent-office mcp'});
   assert.match(plain,/Tailscale을 설정하세요/u);assert.match(plain,/승인해 주세요/u);assert.doesNotMatch(plain,/[▀▄█]/u);
 });
+
+test('connect opens the Control Center in the browser for the first setup or when asked, not on every update',async()=>{
+  const {shouldOpenControl}=await import('../dist/onboarding/cli.js');
+  assert.equal(shouldOpenControl([],false,{}),true,'first setup: the screen opens');
+  assert.equal(shouldOpenControl([],true,{}),false,'after setup an update or reconnect prints the addresses only');
+  assert.equal(shouldOpenControl(['--open'],true,{}),true);
+  assert.equal(shouldOpenControl(['--no-open'],false,{}),false);
+  assert.equal(shouldOpenControl([],false,{AGENT_OFFICE_NO_OPEN:'1'}),false);
+});
