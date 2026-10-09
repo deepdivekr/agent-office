@@ -207,7 +207,8 @@ test('runtime fixture a signed-out client waits for the owner instead of moving 
 test('runtime fixture Works that Office proves in code or writes through approved Pack execution keep the host path',async t=>{
   const x=await setup(t,{client:request=>codexTurn(request)}),project=x.config.project.id,id=x.work.work_id,base={route:{pack_family:null},completion_checks:[{id:'a'}]};
   assert.equal(clientRunEligible(x.store,project,id,base),true);
-  for(const family of ['coding.orchestrate','form.draft-submit','record.update','choose.stage'])assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:family}}),false,family);
+  for(const family of ['coding.orchestrate','record.update','choose.stage'])assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:family}}),false,family);
+  assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:'form.draft-submit'}}),true,'a draft on any site runs on the chosen client');
   assert.equal(clientRunEligible(x.store,project,id,{...base,collection_contract:{recipe:{}}}),false);
   assert.equal(clientRunEligible(x.store,project,id,{...base,completion_checks:[{id:'a',native_check:{kind:'x'}}]}),false);
 });
