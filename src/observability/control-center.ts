@@ -270,11 +270,11 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'REMOTE_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
     }
     // Server observation: register an SSH target, discover its services, link groups as Works, refresh on request.
-    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh','work/server/checks','work/server/feed'].includes(suffix)){
+    if(['work/server/targets','work/server/register','work/server/discover','work/server/link','work/server/refresh','work/server/checks','work/server/feed','work/server/mode','work/server/rename'].includes(suffix)){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
       if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
       try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>24000)throw Error('SERVER_REQUEST_TOO_LARGE')}
-        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):suffix.endsWith('/feed')?serverOffice.setFeed(input):await serverOffice.refresh(input);
+        if(rejectStopped())return;const input=JSON.parse(body),result=suffix.endsWith('/targets')?serverOffice.targets():suffix.endsWith('/register')?serverOffice.register(input):suffix.endsWith('/discover')?await serverOffice.discover(input):suffix.endsWith('/link')?serverOffice.link(input):suffix.endsWith('/checks')?serverOffice.setChecks(input):suffix.endsWith('/feed')?serverOffice.setFeed(input):suffix.endsWith('/mode')?serverOffice.setMode(input):suffix.endsWith('/rename')?serverOffice.renameTarget(input):await serverOffice.refresh(input);
         reply(response,200,JSON.stringify(result),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_REQUEST_INVALID'}),'application/json; charset=utf-8')}return;
     }

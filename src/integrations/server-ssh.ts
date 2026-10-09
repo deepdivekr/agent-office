@@ -16,7 +16,7 @@ export type ServerTarget=z.infer<typeof serverTargetSchema>;
  * It is fixed text sent on stdin to `sh -s`; nothing from the owner or the server is put into a command line.
  * Needs systemd 246+ for JSON output; Docker is read only when the SSH user may use it.
  */
-export const SNAPSHOT_SCRIPT=`P=Id,Description,ActiveState,SubState,Result,NRestarts,UnitFileState,FragmentPath,ActiveEnterTimestamp,Triggers,TriggeredBy,Wants,Requires,BindsTo
+export const SNAPSHOT_SCRIPT=`P=Id,Description,ActiveState,SubState,Result,NRestarts,UnitFileState,FragmentPath,ActiveEnterTimestamp,Triggers,TriggeredBy,Wants,Requires,BindsTo,TimersCalendar,TimersMonotonic
 printf '{"format":1,"now":%s,"timers":' "$(date +%s)"
 systemctl list-timers --all --output=json --no-pager 2>/dev/null || printf '[]'
 printf ',"files":'

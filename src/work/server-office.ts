@@ -29,12 +29,14 @@ const NOTE_KO:Record<string,string>={failed:'실패',stopped:'멈춤',last_run_f
 // A snapshot older than this is shown as stale; Office reads each watched server about every two minutes.
 const STALE_MS=10*60_000;
 type TargetRow={id:string;definition:string;snapshot:string|null;observed_at:string|null;error:string|null};
-type WorkRow={work_id:string;target_id:string;units:string;last_status:string|null;checks:string|null;feed?:string|null};
+type WorkRow={work_id:string;target_id:string;units:string;last_status:string|null;checks:string|null;feed?:string|null;mode?:string|null};
 
 function init(store:PackStore){initWorkExecution(store);store.hermesState.exec(`
  CREATE TABLE IF NOT EXISTS office_server_target(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,definition TEXT NOT NULL,created_at TEXT NOT NULL,snapshot TEXT,observed_at TEXT,error TEXT,UNIQUE(project_id,definition));
  CREATE TABLE IF NOT EXISTS office_server_work(work_id TEXT PRIMARY KEY REFERENCES office_work(id),project_id TEXT NOT NULL,target_id TEXT NOT NULL,units TEXT NOT NULL,last_status TEXT,created_at TEXT NOT NULL);
-`);for(const column of ['checks','feed'])try{store.hermesState.exec(`ALTER TABLE office_server_work ADD COLUMN ${column} TEXT`);}catch{/* already there */}}
+
+ CREATE TABLE IF NOT EXISTS office_server_timer_run(project_id TEXT NOT NULL,target_id TEXT NOT NULL,unit TEXT NOT NULL,triggered_at TEXT NOT NULL,result TEXT NOT NULL,seen_at TEXT NOT NULL,PRIMARY KEY(project_id,target_id,unit,triggered_at));
+`);for(const column of ['checks','feed','mode'])try{store.hermesState.exec(`ALTER TABLE office_server_work ADD COLUMN ${column} TEXT`);}catch{/* already there */}}
 const exists=(store:PackStore)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_server_work'").get());
 function watched(store:PackStore,project:string,id:string){
   if(!exists(store))return null;
@@ -53,9 +55,35 @@ function judge(view:NonNullable<ReturnType<typeof watched>>){
 }
 
 /** Board fields for a server Work: its status from the last snapshot of its server. */
+/**
+ * How a server Work runs: on timers (recurring), or always on, waiting for requests or messages (standby). The owner can
+ * set it; otherwise a Work that watches a timer is recurring and one of services or containers only is standby.
+ */
+export function serverMode(view:{units:string[];work:{mode?:string|null}}):'recurring'|'standby'{
+  return view.work.mode==='recurring'||view.work.mode==='standby'?view.work.mode:view.units.some(unit=>unit.endsWith('.timer'))?'recurring':'standby';
+}
 export function serverBoard(store:PackStore,project:string,id:string){
-  const view=watched(store,project,id);if(!view)return null;const {status,health,stale}=judge(view);
-  return {status,run:{kind:'server',id,status},pack:null,has_contract:true,server:{target:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,stale,counts:health?.counts??null,problems:health?.problems.slice(0,3)??[],off:health?.off.length??0,units:view.units.length}};
+  const view=watched(store,project,id);if(!view)return null;const judged=judge(view),{health,stale}=judged,mode=serverMode(view);
+  // A healthy always-on Work sits with what runs now, a healthy timer Work with what repeats.
+  const status=judged.status==='service_ok'&&mode==='standby'?'service_standby':judged.status;
+  return {status,run:{kind:'server',id,status},pack:null,has_contract:true,server:{target:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,stale,counts:health?.counts??null,problems:health?.problems.slice(0,3)??[],off:health?.off.length??0,units:view.units.length,mode}};
+}
+
+/**
+ * A server Work on the timeline: one bar per timer run seen in the window (ok, failed, running), and in words how often
+ * its timers run and when the next one is due.
+ */
+export function serverTimeline(store:PackStore,project:string,id:string,window:{from:number;to:number}){
+  const view=watched(store,project,id);if(!view)return null;
+  const timers=view.units.filter(unit=>unit.endsWith('.timer'));
+  const rows=timers.length&&store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_server_timer_run'").get()
+    ?store.hermesState.prepare(`SELECT unit,triggered_at,result,seen_at FROM office_server_timer_run WHERE project_id=? AND target_id=? AND triggered_at>=? AND unit IN (${timers.map(()=>'?').join(',')}) ORDER BY triggered_at`).all(project,view.target.id,new Date(window.from).toISOString(),...timers) as Array<{unit:string;triggered_at:string;result:string;seen_at:string}>:[];
+  const cycles=rows.map(r=>{const start=Date.parse(r.triggered_at),seen=Date.parse(r.seen_at);
+    return {start:r.triggered_at,end:new Date(Math.min(window.to,r.result==='running'?window.to:Math.max(start+60_000,Math.min(seen,start+15*60_000)))).toISOString(),state:r.result==='running'?'now' as const:r.result==='failed'?'problem' as const:'ok' as const,unit:r.unit};});
+  const byId=new Map((view.snapshot?.units??[]).map(u=>[u.id,u])),scheduled=timers.map(t=>byId.get(t)).filter((u):u is NonNullable<typeof u>=>Boolean(u));
+  const first=scheduled.find(u=>u.schedule)?.schedule??null,others=scheduled.filter(u=>u.schedule).length-1,next=scheduled.map(u=>u.next_run).filter((n):n is number=>typeof n==='number').sort((a,b)=>a-b)[0];
+  return {cycles,marks:[] as never[],schedule:first?{ko:first.ko+(others>0?` 외 ${others}개`:''),en:first.en+(others>0?` +${others} more`:'')}:null,next_at:next?new Date(next*1000).toISOString():null,
+    timers:scheduled.map(u=>({id:u.id,schedule:u.schedule??null,next_at:u.next_run?new Date(u.next_run*1000).toISOString():null}))};
 }
 
 /** The server and units a server Work watches, for a conversation that works on them. */
@@ -67,7 +95,7 @@ export function serverDetail(store:PackStore,project:string,id:string){
   const work=store.officeWorkById(project,id),byId=new Map((view.snapshot?.units??[]).map(u=>[u.id,u]));
   const units=view.units.map(unit=>byId.get(unit)??{id:unit,kind:unit.endsWith('.timer')?'timer':unit.endsWith('.service')?'service':'container',state:view.snapshot?.disabled.includes(unit)?'off':'problem',note:view.snapshot?.disabled.includes(unit)?null:'not_found',description:'',active:'',sub:'',restarts:0,since:null,last_run:null,next_run:null,job:null,links:[],project:null});
   return {id,title:work.title,goal:work.goal,revision:0,run_status:status,completion_verified:false,updated_at:view.target.observed_at??work.updated_at,
-    server:{target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units,checks:view.checks.map(c=>({...c,count:view.snapshot?.checks[c.id]??null})),feed:view.feed.map(f=>({id:f.id,label:f.label,kind:f.kind,path:f.path,query:f.kind==='sqlite'?f.query:null,last_at:f.after||null,error:f.error??null}))}};
+    server:{mode:serverMode(view),mode_set:view.work.mode==='recurring'||view.work.mode==='standby',target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units,checks:view.checks.map(c=>({...c,count:view.snapshot?.checks[c.id]??null})),feed:view.feed.map(f=>({id:f.id,label:f.label,kind:f.kind,path:f.path,query:f.kind==='sqlite'?f.query:null,last_at:f.after||null,error:f.error??null}))}};
 }
 
 export class ServerOffice {
@@ -88,10 +116,37 @@ export class ServerOffice {
     const task=(async()=>{const target=this.target(targetId);
       const checks=[...new Map(this.store.hermesState.prepare('SELECT checks FROM office_server_work WHERE project_id=? AND target_id=? AND checks IS NOT NULL').all(this.config.project.id,targetId).flatMap(row=>JSON.parse(String(row.checks)) as ActivityCheck[]).map(c=>[c.id,c])).values()];
       const feeds=(this.store.hermesState.prepare('SELECT work_id,feed FROM office_server_work WHERE project_id=? AND target_id=? AND feed IS NOT NULL').all(this.config.project.id,targetId) as Array<{work_id:string;feed:string}>).flatMap(row=>(JSON.parse(row.feed) as StoredFeed[]).map(f=>({id:f.id,kind:f.kind,path:f.path,query:f.kind==='sqlite'?f.query:undefined,after:f.after})));
-      try{const {feed,...raw}=await this.probe.snapshot(target,checks,feeds as FeedSource[]),snapshot=parseServerSnapshot(raw);this.store.hermesState.prepare('UPDATE office_server_target SET snapshot=?,observed_at=?,error=NULL WHERE project_id=? AND id=?').run(JSON.stringify(raw),now(),this.config.project.id,targetId);if(feed!==undefined)this.takeFeed(targetId,feed);this.recordChanges(targetId);return snapshot;}
+      try{const {feed,...raw}=await this.probe.snapshot(target,checks,feeds as FeedSource[]),snapshot=parseServerSnapshot(raw);this.store.hermesState.prepare('UPDATE office_server_target SET snapshot=?,observed_at=?,error=NULL WHERE project_id=? AND id=?').run(JSON.stringify(raw),now(),this.config.project.id,targetId);this.recordTimerRuns(targetId,snapshot);if(feed!==undefined)this.takeFeed(targetId,feed);this.recordChanges(targetId);return snapshot;}
       catch(error){const code=error instanceof Error&&/^[A-Z_]+$/u.test(error.message)?error.message:'SERVER_CONNECTION_FAILED';this.store.hermesState.prepare('UPDATE office_server_target SET error=? WHERE project_id=? AND id=?').run(code,this.config.project.id,targetId);this.recordChanges(targetId);return null;}
     })().finally(()=>this.running.delete(targetId));
     this.running.set(targetId,task);return task;
+  }
+  /**
+   * Each timer run seen on the server, for the timeline: a new trigger time is a run; its result is known once its job is
+   * not running any more. Kept eight days.
+   */
+  private recordTimerRuns(targetId:string,snapshot:ServerSnapshot){
+    const db=this.store.hermesState,project=this.config.project.id,at=now();
+    const insert=db.prepare('INSERT OR IGNORE INTO office_server_timer_run VALUES(?,?,?,?,?,?)'),settle=db.prepare("UPDATE office_server_timer_run SET result=?,seen_at=? WHERE project_id=? AND target_id=? AND unit=? AND triggered_at=? AND result='running'");
+    for(const unit of snapshot.units){if(unit.kind!=='timer'||!unit.last_run)continue;
+      const triggered=new Date(unit.last_run*1000).toISOString(),result=unit.running?'running':unit.note==='last_run_failed'?'failed':'ok';
+      insert.run(project,targetId,unit.id,triggered,result,at);if(result!=='running')settle.run(result,at,project,targetId,unit.id,triggered);}
+    db.prepare('DELETE FROM office_server_timer_run WHERE project_id=? AND target_id=? AND triggered_at<?').run(project,targetId,new Date(Date.now()-8*86_400_000).toISOString());
+  }
+  /** The owner's choice of how a server Work runs; 'auto' goes back to judging by its units. */
+  setMode(raw:unknown){
+    const input=z.object({work_id:z.string().uuid(),mode:z.enum(['auto','recurring','standby'])}).strict().parse(raw),project=this.config.project.id;
+    requireCondition(this.store.hermesState.prepare('UPDATE office_server_work SET mode=? WHERE project_id=? AND work_id=?').run(input.mode==='auto'?null:input.mode,project,input.work_id).changes===1,'SERVER_WORK_NOT_FOUND');
+    workActivity(this.store,project,input.work_id,'server.mode',input.mode==='auto'?'실행 방식을 자동 판단으로 돌렸어요.':input.mode==='recurring'?'실행 방식을 반복 실행으로 정했어요.':'실행 방식을 상시 대기로 정했어요.');
+    return {work_id:input.work_id,mode:input.mode};
+  }
+  /** The name the owner gives a server; its address, user and port stay. */
+  renameTarget(raw:unknown){
+    const input=z.object({target_id:z.string().min(1).max(100),name:z.string().trim().min(1).max(60)}).strict().parse(raw),project=this.config.project.id;
+    const row=this.store.hermesState.prepare('SELECT definition FROM office_server_target WHERE project_id=? AND id=?').get(project,input.target_id) as {definition:string}|undefined;requireCondition(row,'SERVER_TARGET_NOT_FOUND');
+    const definition={...JSON.parse(row.definition) as ServerTarget,name:input.name};
+    this.store.hermesState.prepare('UPDATE office_server_target SET definition=? WHERE project_id=? AND id=?').run(JSON.stringify(definition),project,input.target_id);
+    return {target_id:input.target_id,name:input.name};
   }
   /** One activity entry when a Work turns unhealthy or recovers, not one per check. */
   private recordChanges(targetId:string){
