@@ -97,8 +97,11 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
       const shownFiles=allFiles.filter(a=>!isCardFile(a.label)&&!isAppFile(a.label));
       const images=shownFiles.filter(a=>a.kind==='image'),media=shownFiles.find(a=>a.kind==='video'||a.kind==='audio'),doc=shownFiles.find(a=>a.kind==='pdf');
       // The first text, code or table file that reads cleanly gives the card its preview.
-      // An app's own script is behind its card, not a preview.
-      let preview=null;if(!apps.length)for(const a of shownFiles.filter(f=>['code','text','table'].includes(f.kind))){const file=intact.get(a.id)!;preview=artifactPreview(file.path,a.sha256,a.label,file.size,file.mtimeMs);if(preview){preview={...preview,artifact_id:a.id,label:a.label};break;}}
+      // A preview is for a result whose output is code or a table. A result that is a piece of text is read as an article;
+      // the files beside it (its working files, the same text as Markdown) stay under its files. An app's script is behind
+      // its card.
+      const written=String(r.delivery_text||r.text||r.summary||'').trim().length>=300;
+      let preview=null;if(!apps.length&&!written)for(const a of shownFiles.filter(f=>['code','table'].includes(f.kind))){const file=intact.get(a.id)!;preview=artifactPreview(file.path,a.sha256,a.label,file.size,file.mtimeMs);if(preview){preview={...preview,artifact_id:a.id,label:a.label};break;}}
       posts.push({id:'r:'+r.id,kind:'result',work_id:r.work_id,work_title:titles.get(r.work_id),at:r.created_at,result_id:r.id,text:clean(r.delivery_text||r.text||r.summary,4000),
         images:images.slice(0,4).map(a=>({artifact_id:a.id,label:a.label})),image_count:images.length,files:r.artifacts.length,verified:r.work_completion_verified,
         media:media?{kind:media.kind,artifact_id:media.id,label:media.label,bytes:intact.get(media.id)!.size}:null,doc:doc?{artifact_id:doc.id,label:doc.label,bytes:intact.get(doc.id)!.size}:null,preview,card,apps,

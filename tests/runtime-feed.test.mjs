@@ -94,7 +94,7 @@ test('runtime fixture the feed page: pinned needs-you first, then outputs by day
   assert.match(await page.locator('.post.pin').innerText(),/막힌 업무/u);
   const stream=await page.locator('.post:not(.pin) .who strong').allInnerTexts();
   assert.deepEqual(stream.slice(0,3),['카드 만들기','리포트 봇','새 글 정리'],'newest first across Works and server records');
-  assert.equal(await page.locator('.post:not(.pin)').first().locator('.body').innerText(),'카드 4장\n화요일 비','markdown marks are dropped');
+  const first=page.locator('.post:not(.pin)').first();assert.equal(await first.locator('.article .title').innerText(),'카드 4장','a leading heading is the title');assert.equal(await first.locator('.article .lede').innerText(),'화요일 비','markdown is read, not shown');assert.equal(await first.locator('.article .lede strong').innerText(),'화요일');
   const image=await page.locator('.pics img').first().evaluate(img=>new Promise(resolve=>img.complete?resolve(img.naturalWidth):img.onload=()=>resolve(img.naturalWidth)));assert.equal(image,1);
   assert.equal(await page.locator('.post').filter({hasText:'장 마감 리포트'}).locator('.tag').first().innerText(),'sent directly');
   await page.locator('[data-feed-kind="images"]').click();assert.deepEqual(await page.locator('.post:not(.pin) .who strong').allInnerTexts(),['카드 만들기']);
@@ -324,4 +324,32 @@ test('runtime fixture the feed takes presses: answer a question, run an approved
   const status=await page.evaluate(async()=>(await fetch('work/approval',{method:'POST',headers:{'content-type':'application/json','x-agent-driver':'human-office'},body:JSON.stringify({task_id:'none',proposal_hash:'a'.repeat(64),decision:'approve'})})).status);
   assert.equal(status,409);assert.equal((await fetch(server.url+'work/approval/capture?task_id=none')).status,404);
   assert.deepEqual(errors,[]);
+});
+
+test('runtime fixture a text output reads as an article: title, sections, numbered items, safe links; the reader shows it whole; working files are not previewed',async t=>{
+  const x=await fixture(t,'feed-article-'),{chromium}=await import('playwright'),{startControlCenter}=await import('../dist/observability/control-center.js');
+  const w=x.work('article-w','매일 AI 새 글 정리');
+  const body=['# AI 새 글 정리 · 10월 9일','','[메시지 1: X 계정 모니터링]','','1. Tell the AI its budget','저자: **Matt Shumer**  ','원문: [Tell the AI its budget](https://example.com/budget) · [나쁜 링크](javascript:alert(1)) · <img src=x onerror=alert(1)>','','> 인용한 한 줄','','- 첫째','- 둘째','','2. 두 번째 글','@someone "따옴표 안의 말" https://x.com/someone/status/123456789012345','',...Array.from({length:30},(_,i)=>'긴 문단 '+i+' '+'가나다라마바사 '.repeat(8))].join('\n');
+  await x.result(w,new Date(Date.now()-60_000).toISOString(),body,[['DELIVERY.md',Buffer.from(body)],['collector.cjs',Buffer.from('module.exports=1')],['state.json',Buffer.from('{}')]]);
+  x.store.close();
+  const server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();await server.close();});
+  const context=await browser.newContext({viewport:{width:390,height:844}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
+  const page=await context.newPage(),errors=[],dialogs=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.message());d.dismiss();});
+  await page.goto(server.url);await page.locator('.post .article').waitFor();
+  const post=page.locator('.post').filter({hasText:'AI 새 글'});
+  assert.equal(await post.locator('.article .title').innerText(),'AI 새 글 정리 · 10월 9일');
+  assert.equal(await post.locator('.snip').count(),0,'the Markdown copy and working files are not previewed');
+  assert.equal(await post.locator('.lede .kicker').innerText(),'메시지 1: X 계정 모니터링');
+  assert.match(await post.locator('[data-read]').innerText(),/^Keep reading · \d+ min$/u);
+  await post.locator('[data-read]').click();const reader=page.locator('#reader article');await reader.waitFor();
+  assert.equal(await reader.locator('h1').innerText(),'AI 새 글 정리 · 10월 9일');
+  assert.deepEqual(await reader.locator('.prose h4').allInnerTexts(),['1\nTell the AI its budget','2\n두 번째 글']);
+  assert.deepEqual(await reader.locator('.prose a').evaluateAll(a=>a.map(n=>[n.textContent,n.getAttribute('href'),n.target])),[['Tell the AI its budget','https://example.com/budget','_blank'],['x.com/someone/…','https://x.com/someone/status/123456789012345','_blank']],'only https links become links, shown short');
+  assert.equal(await reader.locator('img').count(),0,'no HTML from the text reaches the page');assert.match(await reader.innerText(),/\[나쁜 링크\]\(javascript:alert\(1\)\)/u);
+  assert.equal(await reader.locator('blockquote').innerText(),'인용한 한 줄');assert.deepEqual(await reader.locator('.prose ul li').allInnerTexts(),['첫째','둘째']);
+  assert.equal(await reader.locator('.prose .at').first().innerText(),'@someone');
+  await page.keyboard.press('Escape');assert.equal(await page.locator('#reader').isHidden(),true);
+  await post.locator('[data-read]').click();await reader.locator('[data-reader-open]').click();await page.locator('.work-head h2').waitFor();assert.equal(await page.locator('#reader').isHidden(),true);
+  assert.deepEqual(errors,[]);assert.deepEqual(dialogs,[]);
 });
