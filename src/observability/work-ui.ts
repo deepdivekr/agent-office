@@ -564,7 +564,7 @@ ${feedScript()}
 ${feedCardsScript()}
 ${feedArticleScript()}
 ${workRecordsScript()}
-document.getElementById('open-import').onclick=()=>{go('?import=1');importOpen=true;render();setImportRoute('address');loadMigrationPrompt()};
+document.getElementById('open-import').onclick=()=>{if(new URL(location.href).searchParams.get('import')!=='1')go('?import=1');importOpen=true;render();setImportRoute('address');loadMigrationPrompt()};
 document.getElementById('close-import').onclick=()=>{importRevision++;importOpen=false;importResult=null;render();setMessage('')};
 document.querySelectorAll('[data-import-route]').forEach(button=>button.onclick=()=>{setImportRoute(button.dataset.importRoute);if(button.dataset.importRoute==='external')loadMigrationPrompt()});
 async function loadMigrationPrompt(){const target=document.getElementById('migration-prompt');if(target.value)return;try{const response=await fetch('work/import/prompt',{cache:'no-store'});if(!response.ok)throw Error('이전 프롬프트를 읽지 못했습니다.');const body=await response.text();let data;try{data=JSON.parse(body)}catch{data=body}const prompt=typeof data==='string'?data:window.officeLang==='en'&&typeof data?.prompt_en==='string'&&data.prompt_en.trim()?data.prompt_en:data?.prompt;if(typeof prompt!=='string'||!prompt.trim())throw Error('이전 프롬프트가 비어 있습니다.');target.value=prompt}catch(error){setMessage(String(error.message||error))}}
