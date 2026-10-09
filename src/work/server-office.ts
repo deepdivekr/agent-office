@@ -44,7 +44,10 @@ function watched(store:PackStore,project:string,id:string){
 }
 function judge(view:NonNullable<ReturnType<typeof watched>>){
   const health=view.snapshot?serverHealth(view.snapshot,view.units,view.checks):null;
-  const status:ServerStatus=!view.snapshot?(view.target.error?'service_unreachable':'service_unobserved'):view.target.error?'service_unreachable':health!.status;
+  let status:ServerStatus=!view.snapshot?(view.target.error?'service_unreachable':'service_unobserved'):view.target.error?'service_unreachable':health!.status;
+  // A watched timer whose job is running has no outcome yet: a Work that needed the owner keeps needing them until the
+  // run ends, so one failing job is one notice, not a "recovered" and a new "problem" every run.
+  if(status==='service_ok'&&view.work.last_status==='service_problem'&&view.snapshot?.units.some(unit=>unit.running&&view.units.includes(unit.id)))status='service_problem';
   const stale=!view.target.observed_at||Date.now()-Date.parse(view.target.observed_at)>STALE_MS;
   return {status,health,stale};
 }
