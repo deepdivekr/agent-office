@@ -12,7 +12,8 @@ import {importJevRecommendationSchema,IMPORT_JEV_SELECTION_INSTRUCTIONS,validate
 import {importedWorkAdoption} from './adoption.js';
 
 const id=z.string().uuid();
-export const workImportPasteSchema=z.object({text:z.string().min(1).max(65536)}).strict();
+// The text is measured by the draft parser, which says the answer is too long rather than refusing the request.
+export const workImportPasteSchema=z.object({text:z.string().min(1).max(400_000)}).strict();
 export const workImportScopeSchema=z.string().trim().max(2000);
 export const workImportScanSchema=z.object({path:z.string().min(1).max(2048),scope:workImportScopeSchema.optional()}).strict();
 export const workImportAcceptSchema=z.object({import_id:id,mode:z.enum(['observe','migrate','augment']).default('migrate'),goal:z.string().trim().max(2000).optional(),completion:z.string().trim().max(500).optional(),jev_enabled:z.boolean().default(false),cost_acknowledged:z.boolean().default(false)}).strict();
