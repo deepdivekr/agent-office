@@ -13,7 +13,7 @@ test('Apache license, package metadata and notices remain consistent',()=>{
   assert.equal(lock.packages[''].license,'Apache-2.0');
   // Canonical https://www.apache.org/licenses/LICENSE-2.0.txt, retrieved 2026-09-23.
   assert.equal(createHash('sha256').update(read('LICENSE').replace(/\r\n/gu,'\n')).digest('hex'),'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30');
-  assert.match(read('NOTICE'),/Copyright 2026 Agent Driver contributors/u);
+  assert.match(read('NOTICE'),/Copyright 2026 SHIPIT LABS/u);assert.equal(pkg.author,'SHIPIT LABS (https://x.com/DeepDive_KR)');
   assert.match(read('THIRD_PARTY_NOTICES.md'),/Dependencies keep their own licenses/u);
   assert.match(read('README.md'),/Apache License 2\.0/u);
   assert.doesNotMatch(read('README.md'),/별도 재사용 권한은 부여하지 않습니다/u);

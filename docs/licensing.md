@@ -1,6 +1,6 @@
 # 라이선스와 배포 범위
 
-Agent Driver의 자체 소스와 문서는 [Apache License 2.0](../LICENSE)으로 공개합니다. 저작권 고지는 [NOTICE](../NOTICE), 외부 의존성 범위는 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)에 있습니다.
+Agent Office의 자체 소스와 문서는 SHIPIT LABS가 [Apache License 2.0](../LICENSE)으로 공개합니다. 저작권 고지는 [NOTICE](../NOTICE), 외부 의존성 범위는 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)에 있습니다.
 
 Apache-2.0 조건을 지키면 개인·회사 내부 사용, 수정, 재배포와 상업적 사용이 가능합니다. 이 소스를 이용한 유료 호스팅이나 cloud worker 서비스도 라이선스상 금지하지 않습니다. 같은 권한은 다른 이용자에게도 적용됩니다.
 
