@@ -160,7 +160,7 @@ test('runtime fixture checks reach the next read of the server and a change send
   await office.refreshTarget(target);assert.deepEqual(asked.at(-1),['shop-web.service|market-close.*executed successfully|4320']);
   assert.equal(notices.length,0,'the first healthy read sends nothing');
   count=0;await office.refreshTarget(target);await office.refreshTarget(target);
-  assert.equal(notices.length,1,'one notice per change, not per read');assert.match(notices[0],/^\[서버 확인 필요\] Shop web\nMain VM \(203\.0\.113\.7\)\n확인 필요: 리포트 작업 \(최근 기록 없음\)$/u);
+  assert.equal(notices.length,1,'one notice per change, not per read');assert.match(notices[0],/^\[서버 확인 필요\] Shop web\nMain VM\n확인 필요: 리포트 작업 \(최근 기록 없음\)$/u);
   count=2;await office.refreshTarget(target);assert.match(notices[1],/^\[회복\] Shop web/u);
   assert.throws(()=>office.setChecks({work_id:web,checks:[{label:'x',unit:'a b',pattern:'p',minutes:5}]}));
 });
