@@ -265,3 +265,17 @@ test('runtime contract a destination added after a verified result gets that res
   // Selecting the same destination again sends nothing twice.
   results.setSelection(project,x.work.id,{revision:1,target_ids:['app','tg-added']});await results.dispatchPending(project,x.work.id);assert.equal(received.length,1);
 });
+
+test('runtime contract a result with RECORDS.json adds its items to the Work ledger once; bad items are skipped and nothing else is read',async t=>{
+ const x=await setup(t),fixture=await pastedResultWork(x),{createHash}=await import('node:crypto'),{listRecords,countRecords,addRecords,recordsCsv}=await import('../dist/work/records.js');
+ const items=[{at:'2026-10-09T01:24:00+00:00',source:'TradingView',author:'Stocktwits',title:'Entner: "Ligado is next"',summary:'SpaceX의 Grain 800MHz 인수 뒤 다음은 Ligado라는 전망.',url:'https://example.com/news/ligado?utm=1',subject:'asts'},{at:'2026-10-09T02:16:05Z',source:'X',author:'@LeoCapital_01',title:'SpaceX 800MHz 인수 후에도 AST 포지션은 유지',url:'https://x.com/LeoCapital_01/status/1'},{title:'no date'},{at:'2026-10-08',title:'bad link',url:'javascript:alert(1)'}];
+ const folder=join(x.root,'run-folder');await mkdir(folder,{recursive:true});const path=join(folder,'RECORDS.json'),bytes=Buffer.from(JSON.stringify({records:items}));await writeFile(path,bytes);
+ const result=x.results.record(x.config.project.id,{work_id:fixture.work.id,run_id:fixture.runId,source_kind:'client',work_revision:fixture.work.revision,summary:'Saved copied Work draft',text:'Reviewable report',artifacts:[{label:'RECORDS.json',path,sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length}]});
+ const rows=listRecords(x.store,x.config.project.id,fixture.work.id);
+ assert.deepEqual(rows.map(r=>[r.at,r.source,r.author,r.title,r.subject,r.result_id]),[['2026-10-09T02:16:05.000Z','X','@LeoCapital_01','SpaceX 800MHz 인수 후에도 AST 포지션은 유지',null,result.id],['2026-10-09T01:24:00.000Z','TradingView','Stocktwits','Entner: "Ligado is next"','ASTS',result.id]],'newest first; an item without a date or with a non-web link is skipped');
+ // A later run reporting the same items (same address, another query string) adds nothing.
+ assert.deepEqual(addRecords(x.store,x.config.project.id,fixture.work.id,[{...items[0],url:'https://example.com/news/ligado?utm=2'},items[1]]),{added:0,skipped:0});
+ assert.equal(countRecords(x.store,x.config.project.id,fixture.work.id),2);
+ assert.deepEqual(listRecords(x.store,x.config.project.id,fixture.work.id,{q:'Ligado'}).map(r=>r.author),['Stocktwits']);
+ const csv=recordsCsv(rows);assert.match(csv,/^﻿at,subject,source,author,title,summary,url\r\n/u);assert.match(csv,/"Entner: ""Ligado is next"""/u);
+});

@@ -357,3 +357,24 @@ test('runtime fixture a text output reads as an article: title, sections, number
   await post.locator('[data-read]').click();await reader.locator('[data-reader-open]').click();await page.locator('.work-head h2').waitFor();assert.equal(await page.locator('#reader').isHidden(),true);
   assert.deepEqual(errors,[]);assert.deepEqual(dialogs,[]);
 });
+
+test('runtime fixture a Work detail shows its record ledger newest first, searches it and downloads it as CSV',async t=>{
+  const x=await fixture(t,'records-page-'),{chromium}=await import('playwright'),{startControlCenter}=await import('../dist/observability/control-center.js'),{addRecords}=await import('../dist/work/records.js');
+  const w=x.work('records-w','ASTS 최신 소식');
+  addRecords(x.store,x.config.project.id,w,[{at:'2026-10-08T21:00:00Z',source:'Reuters',title:'AST 브라질 총괄 선임',summary:'브라질 서비스 출시 총괄.',url:'https://example.com/a'},{at:'2026-10-09T02:16:05Z',source:'X',author:'@LeoCapital_01',title:'SpaceX 800MHz 인수 후에도 AST 포지션 유지',url:'https://x.com/LeoCapital_01/status/1',subject:'ASTS'}]);
+  x.store.close();
+  const server=await startControlCenter(x.config),browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();await server.close();});
+  const page=await browser.newPage({viewport:{width:390,height:844}});await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(server.url+'?work='+w);await page.locator('#work-records li').first().waitFor();
+  assert.match(await page.locator('#work-records header').innerText(),/기록\s*2건/u);
+  assert.deepEqual(await page.locator('#work-records li b').allInnerTexts(),['SpaceX 800MHz 인수 후에도 AST 포지션 유지','AST 브라질 총괄 선임']);
+  assert.equal(await page.locator('#work-records li b a').first().getAttribute('href'),'https://x.com/LeoCapital_01/status/1');
+  await page.locator('#records-q').fill('브라질');await page.waitForFunction(()=>document.querySelectorAll('#work-records li').length===1);
+  assert.deepEqual(await page.locator('#work-records li b').allInnerTexts(),['AST 브라질 총괄 선임']);
+  const csv=await page.evaluate(async id=>{const b=new Uint8Array(await (await fetch('work/records.csv?work_id='+id)).arrayBuffer());return {bom:[...b.slice(0,3)],text:new TextDecoder().decode(b)}},w);
+  assert.deepEqual(csv.bom,[0xef,0xbb,0xbf],'a BOM so a spreadsheet reads Korean');assert.match(csv.text,/AST 브라질 총괄 선임/u);assert.match(csv.text,/^at,subject,source,author,title,summary,url/u);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.deepEqual(errors,[]);
+});
