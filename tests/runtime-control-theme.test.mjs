@@ -130,6 +130,8 @@ test('runtime native on a phone the views are one row of tabs and the tools, lan
   await page.locator('h1').click();assert.equal(await page.locator('#side-menu').isVisible(),false,'a tap elsewhere closes it');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.setViewportSize({width:1280,height:900});
-  assert.equal(await page.locator('#menu-toggle').isVisible(),false);assert.equal(await page.locator('header .display-options #lang-toggle').count(),1,'back in the header on a wide screen');
+  assert.equal(await page.locator('#menu-toggle').isVisible(),false);
+  // The move back follows the media query's change event, which lands after the resize.
+  await page.locator('header .display-options #lang-toggle').waitFor({timeout:5000}).catch(()=>{});assert.equal(await page.locator('header .display-options #lang-toggle').count(),1,'back in the header on a wide screen');
   assert.deepEqual(errors,[]);
 });
