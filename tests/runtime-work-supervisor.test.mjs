@@ -63,18 +63,24 @@ test('runtime fixture maintenance admission fence also stops activated superviso
  allowed=true;supervisor.tick();const end=await finished(x);assert.equal(end.run_id,run.run_id);assert.equal(end.state,'succeeded');assert.ok(x.model.calls.length>calls);
 });
 
-test('runtime contract semantic stage controls reject stale targets and attribute direction changes to the current run',async t=>{
+test('runtime contract a direction needs no step: any is taken for the Work, a planned one is recorded with it, and it belongs to the current run',async t=>{
  const x=await setup(t),supervisor=new WorkSupervisor(x.store,x.config,x.model,{auto_start:false});x.cleanup.push(()=>supervisor.close());
  const work=x.store.intakeWork(x.config.project.id,x.work.work_id),spec={...work.spec,plan:{...work.spec.plan,steps:[{id:'collect',goal:'Collect records',observable_outcome:'Source records retained',depends_on:[],effect:'read_only',tool_hints:[],evidence_ids:[]}]}};
  x.store.hermesState.prepare('UPDATE office_intake SET spec=? WHERE work_id=?').run(JSON.stringify(spec),work.id);
  const runId=randomUUID(),at=new Date().toISOString();
  x.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,checkpoint,config_hash,model_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(runId,x.config.project.id,work.id,work.revision,'paused','null',x.config.fingerprint,0,at,at);
- assert.throws(()=>supervisor.action({work_id:work.id,revision:work.revision,action:'edit',stage_id:'removed_stage',instruction:'Keep two records'}),/WORK_CLIENT_STAGE_UNKNOWN/u);
- assert.equal(x.store.intakeWork(x.config.project.id,work.id).revision,work.revision);
- supervisor.action({work_id:work.id,revision:work.revision,action:'edit',stage_id:'collect',instruction:'Keep two records'});
+ // Owner 2026-10-11: no step has to be chosen; a direction naming a step that is not planned is still the Work's.
+ supervisor.action({work_id:work.id,revision:work.revision,action:'edit',stage_id:'removed_stage',instruction:'Keep one record'});
+ const first=x.store.intakeWork(x.config.project.id,work.id);assert.equal(first.revision,work.revision+1);
+ const noStep=JSON.parse(x.store.hermesState.prepare("SELECT spec FROM office_work_revision WHERE work_id=? AND revision=?").get(work.id,first.revision).spec);assert.equal(noStep.step_id,'next');
+ supervisor.action({work_id:work.id,revision:first.revision,action:'edit',stage_id:'collect',instruction:'Keep two records'});
  const activity=x.store.hermesState.prepare("SELECT metadata FROM office_activity WHERE work_id=? AND kind='supervisor.edit' ORDER BY id DESC LIMIT 1").get(work.id);
  const metadata=JSON.parse(activity.metadata);assert.equal(metadata.run_id,runId);assert.equal(metadata.stage_id,'collect');assert.match(metadata.stage_binding,/^[a-f0-9]{64}$/u);
  assert.equal(supervisorStatus(x.store,x.config.project.id,work.id).state,'paused');
+ // A direction from the conversation or the feed names no step ('next') and is taken.
+ const again=x.store.intakeWork(x.config.project.id,work.id);
+ supervisor.action({work_id:work.id,revision:again.revision,action:'edit',stage_id:'next',instruction:'Use the English term as it is'});
+ assert.equal(x.store.intakeWork(x.config.project.id,work.id).revision,again.revision+1);
 });
 test('runtime contract dispatched calls without receipts expose the actual interruption and never count as completed progress',async t=>{
  const x=await setup(t),supervisor=new WorkSupervisor(x.store,x.config,x.model,{auto_start:false});x.cleanup.push(()=>supervisor.close());
