@@ -140,13 +140,14 @@ export class ServerOffice {
     workActivity(this.store,project,input.work_id,'server.mode',input.mode==='auto'?'실행 방식을 자동 판단으로 돌렸어요.':input.mode==='recurring'?'실행 방식을 반복 실행으로 정했어요.':'실행 방식을 상시 대기로 정했어요.');
     return {work_id:input.work_id,mode:input.mode};
   }
-  /** The name the owner gives a server; its address, user and port stay. */
-  renameTarget(raw:unknown){
-    const input=z.object({target_id:z.string().min(1).max(100),name:z.string().trim().min(1).max(60)}).strict().parse(raw),project=this.config.project.id;
-    const row=this.store.hermesState.prepare('SELECT definition FROM office_server_target WHERE project_id=? AND id=?').get(project,input.target_id) as {definition:string}|undefined;requireCondition(row,'SERVER_TARGET_NOT_FOUND');
-    const definition={...JSON.parse(row.definition) as ServerTarget,name:input.name};
-    this.store.hermesState.prepare('UPDATE office_server_target SET definition=? WHERE project_id=? AND id=?').run(JSON.stringify(definition),project,input.target_id);
-    return {target_id:input.target_id,name:input.name};
+  /** The owner's settings for one server, changed in the server registration: its name, and where and as whom to connect.
+   * A new address, user or port drops the last reading, which belonged to the old connection. */
+  updateTarget(raw:unknown){
+    const {target_id,...rest}=z.object({target_id:z.string().min(1).max(100)}).passthrough().parse(raw),project=this.config.project.id;
+    const definition=serverTargetSchema.parse(rest);requireCondition(clean(definition.name,80)===definition.name,'SERVER_CREDENTIAL_LIKE_INPUT');
+    const old=this.target(target_id),moved=old.host!==definition.host||old.user!==definition.user||old.port!==definition.port;
+    this.store.hermesState.prepare(`UPDATE office_server_target SET definition=?${moved?',snapshot=NULL,observed_at=NULL,error=NULL':''} WHERE project_id=? AND id=?`).run(JSON.stringify(definition),project,target_id);
+    return {target_id,...definition};
   }
   /** One activity entry when a Work turns unhealthy or recovers, not one per check. */
   private recordChanges(targetId:string){
