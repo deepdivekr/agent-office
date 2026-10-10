@@ -204,13 +204,13 @@ test('runtime fixture a signed-out client waits for the owner instead of moving 
   assert.equal(x.runs.length,1);assert.equal(x.runs[0].executable,'/fake/codex');
 });
 
-test('runtime fixture Works that Office proves in code or writes through approved Pack execution keep the host path',async t=>{
+test('runtime fixture every Work runs on the chosen client; only coding keeps its own orchestration (owner 2026-10-10: no host executor)',async t=>{
   const x=await setup(t,{client:request=>codexTurn(request)}),project=x.config.project.id,id=x.work.work_id,base={route:{pack_family:null},completion_checks:[{id:'a'}]};
   assert.equal(clientRunEligible(x.store,project,id,base),true);
-  for(const family of ['coding.orchestrate','record.update','choose.stage'])assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:family}}),false,family);
-  assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:'form.draft-submit'}}),true,'a draft on any site runs on the chosen client');
-  assert.equal(clientRunEligible(x.store,project,id,{...base,collection_contract:{recipe:{}}}),false);
-  assert.equal(clientRunEligible(x.store,project,id,{...base,completion_checks:[{id:'a',native_check:{kind:'x'}}]}),false);
+  assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:'coding.orchestrate'}}),false,'coding keeps its own orchestration');
+  for(const family of ['form.draft-submit','record.update','choose.stage'])assert.equal(clientRunEligible(x.store,project,id,{...base,route:{pack_family:family}}),true,family+' runs on the chosen client');
+  assert.equal(clientRunEligible(x.store,project,id,{...base,collection_contract:{recipe:{}}}),true,'a sealed collection too');
+  assert.equal(clientRunEligible(x.store,project,id,{...base,completion_checks:[{id:'a',native_check:{kind:'x'}}]}),true,'a Work with code checks too');
 });
 
 test('runtime fixture the client environment keeps the owner variables and withholds API keys and Office internals',()=>{

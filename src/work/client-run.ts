@@ -14,7 +14,6 @@ import {mediaExecutorBrief} from './media-executor.js';
 import {type WorkActivityMetadata} from './activity.js';
 import {workClientChoiceSchema,type WorkClientChoice} from './contracts.js';
 import {type ModelSettings} from '../onboarding/model-settings.js';
-import {customPackWorkBinding} from './custom-pack-repeat.js';
 import {workImportExecutionOwner} from './import-authority.js';
 import {WORK_COMPLETION_REPAIR_BUDGET,boundWorkToolValue,type WorkClientCheckpoint,type WorkClientResult,type WorkClientToolReceipt} from './client-executor.js';
 
@@ -107,15 +106,13 @@ export function clientRunArgs(choice:Pick<WorkClientChoice,'id'|'model'|'effort'
   return ['-p','--output-format','stream-json','--verbose','--dangerously-skip-permissions',...(model?['--model',model]:[]),...(effort?['--effort',effort]:[]),
     ...(extra.length?['--mcp-config',JSON.stringify({mcpServers:Object.fromEntries(extra.map(server=>[server.id,server.command?{type:'stdio',command:server.command,args:server.args??[]}:{type:'http',url:server.url}]))})]:[]),'--disallowedTools',OFFICE_CONTROL_TOOLS.map(tool=>`mcp__agent-driver__${tool}`).join(','),...(session?[session.resume?'--resume':'--session-id',session.id]:[])];
 }
-/** Works whose completion Office proves in code (sealed collections, native checks), whose writes go through Office's
- * approved Pack execution, coding Works (their own project), custom Pack repeats and Works another runtime still owns
- * keep the host's own path. A pasted Work that Office accepted as its own is run like any other (live 2026-10-03: the
- * owner's imported derivatives Work was kept on the host path and met its wait again). */
-export function clientRunEligible(store:PackStore,project:string,workId:string,spec:{route:{pack_family:string|null};collection_contract?:unknown;completion_checks:Array<{native_check?:unknown}>}){
-  // A draft on any site is the client's to fill with its own browser tools (owner 2026-10-10: an X article draft through
-  // Aside); the host's form Pack fills only registered forms, so a Work there could never finish.
-  return !['coding.orchestrate','record.update','choose.stage'].includes(spec.route.pack_family??'')&&!spec.collection_contract&&!spec.completion_checks.some(check=>check.native_check)
-    &&!customPackWorkBinding(store,project,workId)&&workImportExecutionOwner(store,project,workId)!=='original_runtime';
+/** Every Work runs on the client chosen at intake (owner 2026-10-10: "Office's own executor must not step in"): drafts,
+ * record changes and choices on any site, sealed collections, Works with code checks and custom Pack repeats alike; the
+ * host's write Packs reach only registered targets and its tools have no shell, so a Work kept there could not finish.
+ * Two paths are not the host executor and stay: coding Works, whose orchestration drives the Codex and Claude Code CLIs
+ * itself, and imported Works another runtime still owns. A run the host loop already started is handed over on resume. */
+export function clientRunEligible(store:PackStore,project:string,workId:string,spec:{route:{pack_family:string|null}}){
+  return spec.route.pack_family!=='coding.orchestrate'&&workImportExecutionOwner(store,project,workId)!=='original_runtime';
 }
 
 export interface ClientRunEvent {kind:'tool.started'|'tool.result'|'model.result';tool_name:string;summary:string;status:'running'|'succeeded'|'failed';}
