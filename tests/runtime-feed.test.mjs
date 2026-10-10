@@ -316,9 +316,13 @@ test('runtime fixture the feed takes presses: answer a question, run an approved
   await page.locator('.appcard pre').waitFor();assert.match(dialog,/node tool\.mjs/u);
   assert.equal(await page.locator('.appcard pre').innerText(),'기간 30');assert.deepEqual(await page.locator('.appcard td').allInnerTexts(),['A사','+11%']);
   assert.equal(await page.locator('.appcard').getAttribute('data-approved'),'true');
-  // A draft card copies and opens the mail app; a reply puts its text into the Work conversation.
+  // A draft card copies and opens the mail app.
   assert.match(await page.locator('.draft + .press a').getAttribute('href'),/^mailto:buyer%40example\.com\?subject=/u);
-  await page.locator('[data-card-reply]').click();await page.locator('.work-head h2').waitFor();assert.ok(page.url().includes(stay),'the reply opens its Work');
+  // A reply asks first in a sheet (to whom, what), then goes to the Work's session; one that cannot take it opens the Work.
+  await page.locator('[data-card-reply]').click();const sheet=page.locator('#feed-confirm');await sheet.locator('blockquote').waitFor();
+  assert.match(await sheet.locator('blockquote').innerText(),/A 호텔로 진행해/u);await sheet.locator('[data-fc="no"]').click();assert.equal(await sheet.isVisible(),false,'cancel sends nothing');assert.ok(!page.url().includes('work='));
+  await page.locator('[data-card-reply]').click();await sheet.locator('[data-fc="yes"]').click();
+  await page.locator('.work-head h2').waitFor();assert.ok(page.url().includes(stay),'a Work that takes no instruction now opens with it');
   await page.waitForFunction(()=>document.getElementById('message').textContent.includes('A 호텔로 진행해'),null,{timeout:6000});assert.equal(await page.locator('#chat-input').count(),0,'a Work without a run takes no instruction: the text is copied and shown');
   // The approval routes answer only for a held approval.
   const status=await page.evaluate(async()=>(await fetch('work/approval',{method:'POST',headers:{'content-type':'application/json','x-agent-driver':'human-office'},body:JSON.stringify({task_id:'none',proposal_hash:'a'.repeat(64),decision:'approve'})})).status);
