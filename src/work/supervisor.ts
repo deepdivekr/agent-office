@@ -198,9 +198,10 @@ export class WorkSupervisor {
     assertWorkConnected(this.store,project,work.id);
     requireCondition(status,'WORK_EXECUTION_NOT_FOUND');requireCondition(work.revision===input.revision,'WORK_REVISION_CONFLICT');
     const semantic=businessSteps((work.spec as WorkProposal|null)?.plan);
-    // 'next' names no step: a direction from the conversation or the feed applies to what comes next (live 2026-10-11:
-    // a Work with planned steps refused every message from its conversation box).
-    if(input.stage_id&&input.stage_id!=='next'&&semantic.length)requireCondition(semantic.some(step=>step.id===input.stage_id),'WORK_CLIENT_STAGE_UNKNOWN');
+    // A direction is for the Work: it goes to the same client session as it is, with or without planned steps, and no
+    // step has to be chosen (owner 2026-10-11, after a Work with steps refused every message from its conversation box).
+    // A named step that is in the plan is still recorded with it; any other names none.
+    const selected=semantic.find(step=>step.id===input.stage_id);
     const reconcilePackRefusal=status.state==='reconciliation_required'&&['resume','retry'].includes(input.action)&&status.can_resume;
     requireCondition(status.state!=='reconciliation_required'||reconcilePackRefusal,'WORK_RECONCILIATION_REQUIRED');
     if(['resume','retry'].includes(input.action))requireCondition(workImportExecutionOwner(this.store,project,work.id)!=='original_runtime','ORIGINAL_RUNTIME_CONNECTION_REQUIRED');
@@ -216,11 +217,10 @@ export class WorkSupervisor {
         preserveRejectedPackCall(this.store,row,checkpoint,at);
       }
       this.store.hermesState.prepare('UPDATE office_intake SET paused=?,revision=?,updated_at=? WHERE project_id=? AND work_id=? AND revision=?').run(Number(paused),revision,at,project,work.id,work.revision);
-      const direction={run_id:status.run_id,step_id:input.stage_id??'next',instruction:input.instruction??'',created_at:at};
+      const direction={run_id:status.run_id,step_id:selected?.id??'next',instruction:input.instruction??'',created_at:at};
       this.store.hermesState.prepare('INSERT INTO office_work_revision VALUES(?,?,?,?,?,?)').run(work.id,revision,input.action==='edit'?'direction_changed':paused?'paused':'resumed',JSON.stringify(input.action==='edit'?direction:work.spec),JSON.stringify(work.answers),at);
       this.store.hermesState.prepare('UPDATE office_supervisor SET work_revision=?,state=?,reason=NULL,retry_at_ms=0,resume_wait=?,replan_required=CASE WHEN ? THEN 1 ELSE replan_required END,model_revision=?,updated_at=? WHERE project_id=? AND run_id=?').run(revision,paused?'paused':'queued',Number(!paused),Number(input.action==='edit'),readModelSettings(modelSettingsPath(this.config))?.revision??0,at,project,status.run_id);
       this.store.hermesState.prepare('UPDATE office_work SET updated_at=? WHERE project_id=? AND id=?').run(at,project,work.id);
-      const selected=semantic.find(step=>step.id===input.stage_id);
       workActivity(this.store,project,work.id,`supervisor.${input.action}`,input.action==='edit'?`지침 변경 · ${input.instruction}`:paused?'실행 중단을 요청했습니다. 완료한 단계는 보존됩니다.':'저장한 진행 지점에서 실행을 재개합니다.',{run_id:status.run_id,...(selected?{stage_id:selected.id,stage_binding:stageBinding(selected)}:{})});
       this.store.hermesState.exec('COMMIT');
     }catch(error){this.store.hermesState.exec('ROLLBACK');throw error;}
