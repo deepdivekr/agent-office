@@ -153,6 +153,8 @@ test('MCP contract actual SDK transport publishes and invokes execution/control,
   assert.match(catalog.tools.find(tool=>tool.name==='runtime_work_results').description,/Office-owned copied Work output.*local Control Center/u);
   assert.match(client.getInstructions(),/Validated pasted definitions accepted for migration without an original-runtime binding can run in Office after consent/u);
   assert.doesNotMatch(client.getInstructions(),/Imported workflows.*never re-executed by the new-Work loop/u);
+  // Owner 2026-10-10: a revision of something already handed over goes to that Work's session, not to a new Work.
+  assert.match(client.getInstructions(),/is a direction to that Work: runtime_work_control edit with its work_id, then resume/u);
   const call=async(name,args)=>{const reply=await client.callTool({name,arguments:args});assert.notEqual(reply.isError,true,JSON.stringify(reply));return JSON.parse(reply.content[0].text);};
   x.work=await call('runtime_work_start',{request_id:'catalog-work',prompt:'Report the registered search Pack family.'});
   const begun=await call('runtime_work_execute',{work_id:x.work.work_id,revision:x.work.revision,cost_acknowledged:true});await hold.ready;assert.equal(begun.accepted,true);
