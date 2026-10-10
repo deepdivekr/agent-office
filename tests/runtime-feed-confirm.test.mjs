@@ -21,6 +21,7 @@ test('runtime fixture a reply button asks in a sheet and then sends the instruct
   await page.locator('[data-card-reply]').filter({hasText:'Send as is'}).click();
   const sheet=page.locator('#feed-confirm');await sheet.locator('blockquote').waitFor();
   assert.match(await sheet.locator('.fc-to').innerText(),/Clinic appointment email → Claude Code/u,'it says to whom');
+  assert.ok((await sheet.locator('[data-fc="yes"]').boundingBox()).height<56,'its buttons keep their size');
   await sheet.locator('[data-fc="yes"]').click();await page.waitForFunction(()=>document.getElementById('message').textContent.includes('Sent'));
   assert.deepEqual(sent,[{work_id:clinic.id,revision:4,action:'edit',instruction:'Send it as written',stage_id:'next'}]);
   assert.ok(!page.url().includes('work='),'it stays in the feed');assert.deepEqual(dialogs,[],'no browser box');assert.deepEqual(errors,[]);
