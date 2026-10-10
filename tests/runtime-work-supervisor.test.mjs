@@ -75,6 +75,10 @@ test('runtime contract semantic stage controls reject stale targets and attribut
  const activity=x.store.hermesState.prepare("SELECT metadata FROM office_activity WHERE work_id=? AND kind='supervisor.edit' ORDER BY id DESC LIMIT 1").get(work.id);
  const metadata=JSON.parse(activity.metadata);assert.equal(metadata.run_id,runId);assert.equal(metadata.stage_id,'collect');assert.match(metadata.stage_binding,/^[a-f0-9]{64}$/u);
  assert.equal(supervisorStatus(x.store,x.config.project.id,work.id).state,'paused');
+ // A direction from the conversation or the feed names no step ('next') and is taken.
+ const again=x.store.intakeWork(x.config.project.id,work.id);
+ supervisor.action({work_id:work.id,revision:again.revision,action:'edit',stage_id:'next',instruction:'Use the English term as it is'});
+ assert.equal(x.store.intakeWork(x.config.project.id,work.id).revision,again.revision+1);
 });
 test('runtime contract dispatched calls without receipts expose the actual interruption and never count as completed progress',async t=>{
  const x=await setup(t),supervisor=new WorkSupervisor(x.store,x.config,x.model,{auto_start:false});x.cleanup.push(()=>supervisor.close());

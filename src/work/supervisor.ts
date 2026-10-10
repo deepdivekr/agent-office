@@ -198,7 +198,9 @@ export class WorkSupervisor {
     assertWorkConnected(this.store,project,work.id);
     requireCondition(status,'WORK_EXECUTION_NOT_FOUND');requireCondition(work.revision===input.revision,'WORK_REVISION_CONFLICT');
     const semantic=businessSteps((work.spec as WorkProposal|null)?.plan);
-    if(input.stage_id&&semantic.length)requireCondition(semantic.some(step=>step.id===input.stage_id),'WORK_CLIENT_STAGE_UNKNOWN');
+    // 'next' names no step: a direction from the conversation or the feed applies to what comes next (live 2026-10-11:
+    // a Work with planned steps refused every message from its conversation box).
+    if(input.stage_id&&input.stage_id!=='next'&&semantic.length)requireCondition(semantic.some(step=>step.id===input.stage_id),'WORK_CLIENT_STAGE_UNKNOWN');
     const reconcilePackRefusal=status.state==='reconciliation_required'&&['resume','retry'].includes(input.action)&&status.can_resume;
     requireCondition(status.state!=='reconciliation_required'||reconcilePackRefusal,'WORK_RECONCILIATION_REQUIRED');
     if(['resume','retry'].includes(input.action))requireCondition(workImportExecutionOwner(this.store,project,work.id)!=='original_runtime','ORIGINAL_RUNTIME_CONNECTION_REQUIRED');
