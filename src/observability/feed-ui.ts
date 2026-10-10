@@ -18,7 +18,9 @@ export const feedCss=`.sr-only{position:absolute;width:1px;height:1px;overflow:h
 .post .body{margin:0;font-size:14.5px;line-height:1.65;white-space:pre-line;overflow-wrap:anywhere;color:var(--text);opacity:.92;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;overflow:hidden}.post.open .body{display:block}
 .post .more{align-self:flex-start;border:0;background:none;padding:0;min-height:0;color:var(--dim);font:12.5px var(--sans);text-decoration:underline}
 .post .pics{display:grid;gap:6px;grid-template-columns:2fr 1fr;grid-template-rows:140px 140px;margin:0}.post .pics.n1{grid-template-columns:1fr;grid-template-rows:280px}.post .pics.n2{grid-template-columns:1fr 1fr;grid-template-rows:220px}
-.post .pics img{width:100%;height:100%;object-fit:cover;border-radius:10px;background:var(--bg);display:block}.post .pics .big{grid-row:span 2}.post .pics .plus{position:relative}.post .pics .plus b{position:absolute;inset:0;display:grid;place-items:center;background:rgba(16,19,23,.6);border-radius:10px;font:600 22px var(--mono);color:#e6e8eb}
+.post .pics img{width:100%;height:100%;object-fit:cover;border-radius:10px;background:var(--bg);display:block;cursor:zoom-in}.post img.capture{cursor:zoom-in}
+/* A picture opened from the feed: the whole screen, the picture fitted; arrows when the result has more than one. */
+.img-viewer{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:rgba(6,8,11,.92);touch-action:pan-y}.img-viewer[hidden]{display:none}.img-viewer img{max-width:96vw;max-height:88vh;object-fit:contain;border-radius:6px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.5)}.img-viewer button{position:absolute;display:grid;place-items:center;width:44px;height:44px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(16,19,23,.7);color:#fff;font:400 26px/1 var(--sans)}.img-viewer .iv-close{top:14px;right:14px}.img-viewer .iv-prev{left:14px;top:50%;margin-top:-22px}.img-viewer .iv-next{right:14px;top:50%;margin-top:-22px}.img-viewer .iv-bar{position:absolute;bottom:14px;left:0;right:0;display:flex;justify-content:center;gap:14px;font:12px var(--mono);color:#cfd5de}.img-viewer .iv-bar a{color:#cfd5de}.post .pics .big{grid-row:span 2}.post .pics .plus{position:relative}.post .pics .plus b{position:absolute;inset:0;display:grid;place-items:center;background:rgba(16,19,23,.6);border-radius:10px;font:600 22px var(--mono);color:#e6e8eb}
 .post .acts{display:flex;gap:4px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px}.post .acts button{min-height:36px;border:0;background:none;color:var(--dim);font:12.5px var(--sans);padding:0 10px;border-radius:8px}.post .acts button:hover{background:var(--raise);color:var(--text)}
 .feed-day{display:flex;align-items:center;gap:12px;font:500 11.5px var(--mono);letter-spacing:.1em;color:var(--dim)}.feed-day::after{content:"";flex:1;height:1px;background:var(--line)}
 .feed-rail section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
@@ -40,6 +42,24 @@ export const feedCss=`.sr-only{position:absolute;width:1px;height:1px;overflow:h
 @media(max-width:760px){.post .player{margin:0 -16px;border-radius:0}.post{border-radius:0;border-left:0;border-right:0;margin:0 -16px;padding:14px 16px}.post .tags{max-width:none}.post .pics{grid-template-rows:110px 110px}.post .pics.n1{grid-template-rows:220px}.post .acts button{min-height:44px}}`;
 
 export function feedScript(){return `
+// One viewer for every picture in the feed: arrows, the keyboard and a sideways swipe move between the pictures of
+// one result; the backdrop, × and Escape close it.
+let viewerList=[],viewerAt=0,viewerTouch=null;
+function imageViewer(){let node=document.getElementById('img-viewer');if(node)return node;
+  node=document.createElement('div');node.id='img-viewer';node.className='img-viewer';node.hidden=true;node.setAttribute('role','dialog');node.setAttribute('aria-modal','true');
+  node.innerHTML='<img alt=""><button type="button" class="iv-close" aria-label="'+esc(ff(['닫기','Close']))+'">×</button><button type="button" class="iv-prev" aria-label="'+esc(ff(['이전 이미지','Previous picture']))+'">‹</button><button type="button" class="iv-next" aria-label="'+esc(ff(['다음 이미지','Next picture']))+'">›</button><div class="iv-bar"><span class="iv-count"></span><a class="iv-open" target="_blank" rel="noopener">'+esc(ff(['원본 열기','Open original']))+'</a></div>';
+  node.addEventListener('click',event=>{if(event.target.closest('.iv-prev'))viewerStep(-1);else if(event.target.closest('.iv-next'))viewerStep(1);else if(!event.target.closest('img,.iv-bar'))closeImageViewer()});
+  node.addEventListener('touchstart',event=>{viewerTouch=event.touches[0].clientX},{passive:true});
+  node.addEventListener('touchend',event=>{if(viewerTouch===null)return;const dx=event.changedTouches[0].clientX-viewerTouch;viewerTouch=null;if(Math.abs(dx)>50)viewerStep(dx<0?1:-1)});
+  document.addEventListener('keydown',event=>{if(node.hidden)return;if(event.key==='Escape')closeImageViewer();else if(event.key==='ArrowLeft')viewerStep(-1);else if(event.key==='ArrowRight')viewerStep(1)});
+  document.body.append(node);return node}
+function viewerShow(){const node=imageViewer(),item=viewerList[viewerAt],img=node.querySelector('img');img.src=item.src;img.alt=item.alt||'';
+  node.querySelector('.iv-open').href=item.src.replace(/&inline=1$/u,'');const many=viewerList.length>1;
+  node.querySelector('.iv-prev').hidden=!many;node.querySelector('.iv-next').hidden=!many;node.querySelector('.iv-count').textContent=many?(viewerAt+1)+' / '+viewerList.length:''}
+function viewerStep(delta){if(viewerList.length<2)return;viewerAt=(viewerAt+delta+viewerList.length)%viewerList.length;viewerShow()}
+function openImageViewer(list,at){viewerList=list;viewerAt=Math.max(0,at);viewerShow();imageViewer().hidden=false;document.documentElement.style.overflow='hidden';imageViewer().querySelector('.iv-close').focus()}
+function closeImageViewer(){const node=document.getElementById('img-viewer');if(!node||node.hidden)return;node.hidden=true;document.documentElement.style.overflow=''}
+
 let feed=null,feedAt=0,feedTried=0,feedLoading=false,feedFailed=false,feedKind='all',feedWork='',feedSeenAt='',feedOpen=new Set();
 try{feedSeenAt=localStorage.getItem('office-feed-seen')||''}catch{}
 const ff=pair=>pair[window.officeLang==='en'?1:0];
@@ -97,6 +117,7 @@ const kept=new Map([...app.querySelectorAll('.post video,.post audio')].filter(m
 app.innerHTML='<div class="feed"><div class="feed-main">'+tools+watchLineHtml(feed.works.filter(w=>!feedWork||w.id===feedWork))+approvals.map(approvalHtml).join('')+pins.map(feedPinHtml).join('')+(stream||(pins.length||approvals.length?'':'<div class="empty">'+esc(feedKind==='all'&&!feedWork&&!q?ff(['아직 산출물이 없어요. 업무가 결과를 내면 여기에 쌓여요.','No outputs yet. Results land here as your Works produce them.']):ff(['조건에 맞는 산출물이 없어요.','No output matches.']))+'</div>'))+(feed.next_before&&feedKind!=='attention'?'<button type="button" class="feed-end" id="feed-more">'+esc(ff(['이전 산출물 더 보기','Older outputs']))+'</button>':'')+'</div>'+feedRailHtml(feed.works)+'</div>';
 for(const m of app.querySelectorAll('.post video,.post audio')){const old=kept.get(m.getAttribute('src'));if(old)m.replaceWith(old)}}
 app.addEventListener('click',event=>{if(view!=='feed'||selected)return;const t=event.target;
+const pic=t.closest('.post .pics img, .post img.capture');if(pic){const all=[...pic.closest('.pics, .post').querySelectorAll(pic.matches('.capture')?'img.capture':'.pics img')];openImageViewer(all.map(img=>({src:img.currentSrc||img.src,alt:img.alt})),all.indexOf(pic));return}
 const kind=t.closest('[data-feed-kind]');if(kind){feedKind=kind.dataset.feedKind;renderBoard();return}
 const more=t.closest('[data-feed-more]');if(more){const id=more.dataset.feedMore;feedOpen.has(id)?feedOpen.delete(id):feedOpen.add(id);renderBoard();return}
 const open=t.closest('[data-feed-open]');if(open){markFeedSeen();openWork(open.dataset.feedOpen);return}
