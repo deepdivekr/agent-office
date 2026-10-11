@@ -1,5 +1,23 @@
 # Work 완료 경로 복구 — 진행 기록
 
+## 담당 AI 변경의 MCP·스킬 거짓 승계 수정 (2026-10-11)
+
+- 기준 revision: main `de7120d1a7cfaa6d2534fcd1e3d7e19bffae3ad2` (PR #147 포함).
+  브랜치: `fix/client-handoff-verification`. 사용자 요청에 따른 제한된 신뢰성 수정이며,
+  Part A의 거짓 성공 방지/정상 결과 유지 원칙을 따른다.
+- 격리된 MCP 서버·임시 설정·Work DB에서 설정만 존재, 연결 거부, HTTP 404/401/403,
+  초기화/도구 목록 실패, 이름만 같은 다른 대상, SKILL.md 없는 폴더의 거짓 성공을 재현했다.
+- 실제 대상 설정·MCP 초기화·필요 도구 목록 확인으로 승계를 판정한다. 미확인은
+  `carried=false`와 별도 화면 문구·재확인 지침으로 남긴다. 스킬은 읽을 수 있는 SKILL.md를
+  확인한다. 정상 HTTP/stdio/Windows 서버·스킬과 양방향 전환은 유지한다.
+- 빌드 및 관련 56/56 테스트, 화면 문구·상태 19/19 테스트 통과(합계 75개),
+  ledger 199개 통과, 공개 경계 검사 895개 PASS.
+  frozen quick suite는 Chromium v1243 누락으로 브라우저 사례 실패 후 진행이 멈춰 중단했다.
+  Chromium 설치도 다운로드 결과가 유효한 ZIP이 아니어서 실패했다. 전체 suite 통과는 미확인.
+- [상세 비교표·검증 한계](handoff-verification-2026-10-11.md). 실제 사용자 수용 검증·과거 운영
+  오인계 여부는 미확인. 다음: 브랜치 커밋·push 및 검토용 PR, 브라우저가 준비된 CI에서
+  전체 quick suite 확인. 릴리스·개인 설치 반영은 별도 작업.
+
 Authority: [Work 완료 경로 복구 및 자율 운영 계획](work-completion-and-autonomy-plan.md)
 and [AGENTS.md](../AGENTS.md). 이전 이력: [custom-pack-refactoring-progress.md](custom-pack-refactoring-progress.md).
 Baseline: main f077e04 (PR #36). Branch: claude/workflow-validation-issues-u9mild.
