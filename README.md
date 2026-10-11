@@ -41,7 +41,7 @@ So we built the feed. It puts the results of every Work in one stream, newest fi
 
 ## A look inside
 
-**Work board** — describe the work in one line and follow it by status.
+**Work board** — describe the work in one line and follow it by status. The sidebar holds Feed and Work; All, Needs you, Running and the other views are tabs inside Work.
 
 ![Work board with Needs you, Running, Recurring, On hold and Ended columns](docs/images/en/work-overview.png)
 
@@ -167,7 +167,8 @@ Work you repeat often can be saved, once verified, as a named and versioned cust
 ## Who runs the work?
 
 Each Work runs on the AI app chosen when it was started (Codex or Claude Code, with a model and reasoning effort), using that app's own settings, skills and MCP servers.
-That app keeps the Work for its whole life: when its sign-in or allowance runs out, the Work waits; it never moves to another app.
+That app keeps the Work: when its sign-in or allowance runs out, the Work waits, and Office never moves it to another app by itself.
+To move a Work yourself, use **Change** next to the app name on the Work detail, between runs. Office reads the earlier runs for what the new app lacks (Codex's built-in image generation, an MCP server, a skill) and drafts a handoff direction that goes with the change, such as leaving only the pictures to `codex exec`. The next run starts a new session on the new app with the same Work folder and records.
 
 - **LLM**: splits the work, handles unfamiliar situations, and replans.
 - **Jev (optional)**: short, typed decisions defined by the Pack.
@@ -211,7 +212,7 @@ npm test
 
 Use Node.js **22.22.0** and npm **11.11.0**. The default test suite excludes long soak tests.
 
-README pictures are made with `node scripts/docs/capture-readme-feed.mjs en|ko` (board, timeline and feed with sample data) and `scripts/docs/capture-readme-ui.mjs` (Work detail).
+README pictures are made with `node scripts/docs/capture-readme-feed.mjs en|ko` (board, timeline and feed with sample data). The Work detail is a real run of the sample sales-log task on a fresh install (`agent-office connect --state-root <new folder>`).
 
 [Apache License 2.0](LICENSE) · © 2026 SHIPIT LABS. Connected models, browsers, and services have their own licenses and terms.
 
