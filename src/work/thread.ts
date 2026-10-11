@@ -25,7 +25,9 @@ const firstLine=(text:string)=>text.split('\n').map(line=>line.replace(/^[\s#>*\
 const basename=(label:string)=>label.split(/[\\/]/u).at(-1)||label;
 
 export function threadFromRecords(input:ThreadInput):WorkThread{
-  const results=[...input.results].sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  // A pause for a new direction saves the run again; when that repeats the reply before it, it is not a new reply (live
+  // 2026-10-12: the owner's latest direction showed above the same earlier reply).
+  const results=[...input.results].sort((a,b)=>a.created_at.localeCompare(b.created_at)).filter((r,i,all)=>!i||r.summary!==all[i-1]!.summary);
   const triggers:Array<{kind:TriggerKind;text:string|null;at:string}>=[{kind:'request',text:input.prompt,at:input.created_at},
     ...input.directions.map(d=>({kind:'direction' as const,text:d.instruction,at:d.created_at})),
     ...input.events.filter(e=>e.kind==='schedule.started'||e.kind==='supervisor.retry').map(e=>({kind:e.kind==='schedule.started'?'scheduled' as const:'retry' as const,text:null,at:e.created_at}))];

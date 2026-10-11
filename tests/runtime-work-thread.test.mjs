@@ -96,3 +96,12 @@ test('runtime native work/thread answers from the real Control Center for a new 
   const thread=await response.json();
   assert.deepEqual([thread.turns[0].role,thread.turns[0].kind,thread.turns[0].text,thread.items.length],['owner','request','새 글 정리',0]);
 });
+
+// Live 2026-10-12: a direction paused a run waiting for the owner, and the pause saved the same reply again a moment
+// later; the owner's direction then showed above an old reply instead of last.
+test('a reply saved again by a pause is not a new reply, so the owner direction stays last',()=>{
+  const t=threadFromRecords({...input,directions:[...input.directions,{instruction:'1',created_at:'2026-10-08T06:00:00.000Z'}],
+    results:[...input.results,result('r4','06:00','## Expanded every summary\n\n- `DELIVERY.md`: longer summaries')].map(r=>r.id==='r4'?{...r,created_at:'2026-10-08T06:00:00.030Z'}:r)});
+  assert.deepEqual(t.turns.at(-1),{role:'owner',kind:'direction',text:'1',at:'2026-10-08T06:00:00.000Z'});
+  assert.equal(t.items.length,3,'the repeat is not a cycle either');
+});
