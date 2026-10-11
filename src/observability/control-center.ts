@@ -1,5 +1,5 @@
 import {serveUiAsset} from './ui-assets.js';
-import {defaultWorkClient} from '../work/client-run.js';
+import {changeWorkClient,defaultWorkClient} from '../work/client-run.js';
 import {FileExplorerRoutes} from './files-http.js';
 import {dirname,join} from 'node:path';
 import {pruneWorkFolders} from '../work/storage.js';
@@ -29,7 +29,7 @@ import {appApproveInput,appRunInput,approveApp,readAppManifest,runApp} from '../
 import {ServerChat} from '../work/server-chat.js';
 import {FeedPushWatcher} from './feed-push.js';
 import {readWorkBoard,readWorkDetail,readFeed,readWorkTimeline} from './work-view.js';
-import {workStartActionSchema,workDefineSchema,workAnswerActionSchema,workReconnectSchema,workPauseActionSchema,workJevSchema} from '../work/contracts.js';
+import {workStartActionSchema,workDefineSchema,workAnswerActionSchema,workReconnectSchema,workPauseActionSchema,workJevSchema,workClientChoiceSchema} from '../work/contracts.js';
 import {WorkRuntime} from '../work/runtime.js';
 import {WorkDispatcher,workDispatchOptions,workExecuteSchema} from '../work/dispatch.js';
 import {WorkImportRuntime,importedCodingReadiness,workImportPasteSchema,workImportScanSchema,workImportAcceptSchema,workImportCodingStartSchema,workImportCodingStepSchema} from '../work/import-runtime.js';
@@ -322,6 +322,14 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         const input=z.object({work_id:z.string().min(1).max(128),hidden:z.boolean()}).strict().parse(JSON.parse(body));
         reply(response,200,JSON.stringify(setWorkHidden(store,config.project.id,input.work_id,input.hidden)),'application/json; charset=utf-8');
       }catch{reply(response,409,JSON.stringify({error:'WORK_HIDE_FAILED'}),'application/json; charset=utf-8');}return;
+    }
+    if(suffix==='work/client'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>2048)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
+        const input=z.object({work_id:z.string().min(1).max(128),client:workClientChoiceSchema}).strict().parse(JSON.parse(body));
+        reply(response,200,JSON.stringify({work_id:input.work_id,client:changeWorkClient(store,config.project.id,input.work_id,input.client)}),'application/json; charset=utf-8');
+      }catch(error){const code=error instanceof Error&&/^WORK_CLIENT_/u.test(error.message)?error.message:'WORK_CLIENT_CHANGE_FAILED';reply(response,409,JSON.stringify({error:code}),'application/json; charset=utf-8');}return;
     }
     // Sessions the owner started in their own Claude Code or Codex app: list, attach as a Work, continue while idle.
     if(['work/session/list','work/session/attach','work/session/send'].includes(suffix)){

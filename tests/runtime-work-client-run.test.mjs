@@ -12,7 +12,7 @@ import {WorkSupervisor,supervisorStatus} from '../dist/work/supervisor.js';
 import {WorkResults} from '../dist/work/results.js';
 import {WorkDeliverySettings,deliverySettingsPath} from '../dist/work/delivery-settings.js';
 import {saveModelSettings,readModelSettings,modelSettingsPath} from '../dist/onboarding/model-settings.js';
-import {enableClientRun,disableClientRun,pinWorkClient,workClientChoice,workFolder,clientRunEnvironment,clientRunArgs,clientRunEligible,defaultWorkClient} from '../dist/work/client-run.js';
+import {changeWorkClient,enableClientRun,disableClientRun,pinWorkClient,workClientChoice,workFolder,clientRunEnvironment,clientRunArgs,clientRunEligible,defaultWorkClient} from '../dist/work/client-run.js';
 import {mkdirSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 
@@ -473,4 +473,30 @@ test('runtime fixture a carried session the client cannot find gives the run a s
   const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded',JSON.stringify(second));
   assert.deepEqual(x.runs.slice(1).map(r=>r.args.includes('resume')),[true,false]);
   assert.ok(activity(x).some(row=>row.summary.includes('새 세션으로 시작합니다: CLIENT_NATIVE_SESSION_MISSING')));
+});
+// Owner 2026-10-11: a Work Codex ran is moved to Claude by the owner. Not while a run is going; the next run starts a new
+// Claude session, not a resume of the Codex one, with the same Work folder and records.
+test('runtime fixture the owner moves a Work to the other client between runs; the next run is a new session there',async t=>{
+  let release;const gate=new Promise(resolve=>{release=resolve;});
+  const x=await setup(t,{client:async(request,count)=>{
+    if(request.executable.endsWith('codex')){request.onStdout(line({type:'thread.started',thread_id:thread}));release();await new Promise((_,reject)=>request.signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true}));}
+    const id=request.args[request.args.indexOf('--session-id')+1];writeFileSync(join(request.cwd,'case-1.png'),'png');
+    request.onStdout(line({type:'system',subtype:'init',session_id:id,permissionMode:'bypassPermissions'}));
+    request.onStdout(line({type:'result',subtype:'success',is_error:false,result:'case-1.png 를 만들었습니다.',session_id:id}));
+    return {code:0,stdout:'',stderr:''};
+  }});
+  const project=x.config.project.id,claude={id:'claude',model:'opus',effort:'high'};
+  x.supervisor.start(x.work.work_id,x.work.revision,true);x.supervisor.activate();x.supervisor.tick();
+  await gate;await delay(50);
+  assert.throws(()=>changeWorkClient(x.store,project,x.work.work_id,claude),/WORK_CLIENT_RUN_ACTIVE/u,'not while Codex is running');
+  let work=x.store.intakeWork(project,x.work.work_id);x.supervisor.action({work_id:x.work.work_id,revision:work.revision,action:'pause'});
+  assert.equal((await settle(x,['paused'])).state,'paused');
+  assert.deepEqual(changeWorkClient(x.store,project,x.work.work_id,claude),claude);
+  assert.deepEqual(workClientChoice(x.store,project,x.work.work_id),claude);
+  work=x.store.intakeWork(project,x.work.work_id);x.supervisor.action({work_id:x.work.work_id,revision:work.revision,action:'resume'});x.supervisor.tick();
+  const end=await settle(x,['succeeded','failed','awaiting_review','waiting_auth']);assert.equal(end.state,'succeeded',JSON.stringify(end));
+  const last=x.runs.at(-1);assert.equal(last.executable,'/fake/claude');
+  assert.ok(last.args.includes('--session-id')&&!last.args.includes('--resume'),'a new Claude session, not the Codex thread');
+  assert.deepEqual([last.args[last.args.indexOf('--model')+1],last.args[last.args.indexOf('--effort')+1]],['opus','high']);
+  assert.ok(activity(x).some(row=>row.kind==='client_changed'&&row.summary==='client_changed · Claude Code · opus · high'));
 });
