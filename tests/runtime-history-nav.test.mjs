@@ -13,10 +13,10 @@ test('runtime fixture views are history entries: back and forward (the phone edg
   t.after(async()=>{await browser.close();await server.close();await rm(root,{recursive:true,force:true});});
   const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   const state=async()=>[new URL(page.url()).search,await page.locator('#nav-back').isVisible()];
-  await page.goto(server.url);await page.locator('#view-tabs').waitFor();
+  await page.goto(server.url);await page.locator('#page-tabs').waitFor();
   assert.deepEqual(await state(),['',false],'the first page has nothing to go back to');
   assert.equal(await page.locator('.tabs-arrow').first().evaluate(e=>getComputedStyle(e).display),'none','a touch screen swipes the tabs; no arrows');
-  await page.locator('#view-tabs .nav[data-view="all"]').click();await page.waitForFunction(()=>location.search==='?view=all');
+  await page.locator('[data-nav="work"]').click();await page.waitForFunction(()=>location.search==='?view=all');
   assert.deepEqual(await state(),['?view=all',true]);
   await page.goBack();await page.waitForFunction(()=>location.search==='');
   assert.deepEqual(await state(),['',false]);

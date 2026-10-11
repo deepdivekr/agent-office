@@ -44,7 +44,13 @@ dialog.help p{margin:0 0 14px;line-height:1.6;white-space:pre-line}dialog.help f
 .notice{min-height:20px;margin:10px 0;color:var(--accent);font:12.5px var(--mono);overflow-wrap:anywhere}
 .tagline{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;font:11.5px var(--mono);color:var(--faint)}.tagline span:last-child{margin-left:auto}
 /* Desktop: the views and the tools are lists in the sidebar; the phone-only controls stay out of sight. */
-.brand-row{display:flex;align-items:center;gap:8px}.menu-toggle,.tabs-arrow,.side-menu .menu-feed,.nav-back{display:none}.views,.tabs,.side-menu{display:flex;flex-direction:column;gap:2px}
+.brand-row{display:flex;align-items:center;gap:8px}.menu-toggle,.nav-back{display:none}.pages,.side-menu{display:flex;flex-direction:column;gap:2px}
+/* Work views: one row of rounded tabs under the Work page's header, scrolled sideways or with the arrows. */
+.views{display:flex;flex-direction:row;align-items:center;gap:6px;min-width:0;margin:0 0 14px}.views[hidden]{display:none}.tabs{display:flex;flex-direction:row;gap:6px;overflow-x:auto;scroll-behavior:smooth;scrollbar-width:none;min-width:0;flex:1}.tabs::-webkit-scrollbar{display:none}
+.tabs .nav{flex:none;width:auto;white-space:nowrap;padding:7px 12px;border:1px solid var(--line);border-radius:10px;gap:6px}.tabs .nav.on{background:var(--panel);border-color:var(--line2)}
+.tabs-arrow{display:grid;place-items:center;flex:none;width:30px;height:34px;padding:0;border-radius:8px;font:600 18px var(--sans);color:var(--dim)}.views:not(.overflow) .tabs-arrow{display:none}
+/* A finger swipes the row itself: no arrows on a touch screen (their smooth scroll made iOS Safari jump and blank the row), and the cut edge shows there is more. */
+@media(pointer:coarse){.tabs-arrow{display:none}.views.overflow .tabs{-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent)}}
 /* Language and theme are icons only; their names stay in the accessible labels. */
 .display-options [data-lang-code],.display-options [data-theme-label]{display:none}.display-options .lang,.display-options .theme{padding:7px 9px}
 @media(max-width:760px){.app{grid-template-columns:1fr;grid-template-rows:auto 1fr;background:var(--bg);position:relative}.side{position:static;height:auto;display:flex;flex-direction:column;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}.brand{padding:0}.brand-sub,.side .sec,.side .foot,.paths,.agents{display:none}.main{padding:16px 16px 36px}
@@ -53,24 +59,14 @@ dialog.help p{margin:0 0 14px;line-height:1.6;white-space:pre-line}dialog.help f
 .nav-back:not([hidden]){display:grid;place-items:center;flex:none;width:36px;height:36px;margin-left:-6px;padding:0;border:0;background:none;font:400 30px/1 var(--sans);color:var(--text)}.menu-toggle svg{width:20px;height:20px}
 /* On a phone the language and theme buttons live in the menu, icons only like everywhere else. */
 .side-menu .display-options{margin:4px 0 0;padding:6px 4px 2px;border-top:1px solid var(--line);gap:6px}.side-menu .display-options .lang,.side-menu .display-options .theme{min-width:40px;min-height:36px;justify-content:center}
-/* Views: one row of rounded tabs, scrolled sideways or with the arrows. */
-.views{flex-direction:row;align-items:center;gap:6px;min-width:0}.tabs{flex-direction:row;gap:6px;overflow-x:auto;scroll-behavior:smooth;scrollbar-width:none;min-width:0;flex:1}.tabs::-webkit-scrollbar{display:none}
-.tabs .nav{flex:none;width:auto;white-space:nowrap;padding:7px 12px;border:1px solid var(--line);border-radius:10px;gap:6px}.tabs .nav.on,.tabs .nav[aria-current=page]{background:var(--panel);border-color:var(--line2)}.tabs .feed-tab{display:none}
-.tabs-arrow{display:grid;place-items:center;flex:none;width:30px;height:34px;padding:0;border-radius:8px;font:600 18px var(--sans);color:var(--dim)}.views:not(.overflow) .tabs-arrow{visibility:hidden}
-/* A finger swipes the row itself: no arrows on a touch screen (their smooth scroll made iOS Safari jump and blank the row), and the cut edge shows there is more. */
-@media(pointer:coarse){.tabs-arrow{display:none}.views.overflow .tabs{-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent)}}
+/* Feed and Work: two tabs under the brand. */
+.pages{flex-direction:row;gap:6px}.pages .nav{flex:none;width:auto;white-space:nowrap;padding:7px 14px;border:1px solid var(--line);border-radius:10px;gap:6px}.pages .nav.on,.pages .nav[aria-current=page]{background:var(--panel);border-color:var(--line2)}
 /* Tools: behind the menu button, a panel under the top right. */
-.side-menu{display:none;position:absolute;top:58px;right:12px;z-index:30;min-width:150px;padding:4px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.35)}.side.menu-open .side-menu{display:flex}.side-menu .nav{padding:7px 12px;font-size:13.5px}.side-menu .menu-feed{display:flex}}@media(max-width:480px){.candidate-row{grid-template-columns:1fr}.candidate-row>button{min-height:36px}}`;
+.side-menu{display:none;position:absolute;top:58px;right:12px;z-index:30;min-width:150px;padding:4px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.35)}.side.menu-open .side-menu{display:flex}.side-menu .nav{padding:7px 12px;font-size:13.5px}}@media(max-width:480px){.candidate-row{grid-template-columns:1fr}.candidate-row>button{min-height:36px}}`;
 
 export type ShellPage='work'|'settings'|'connections';
-/** Sidebar links are plain anchors so every view is one click away and pages stay independent. */
-export function sidebarHtml(page:ShellPage){
-  const current=(value:ShellPage)=>page===value?' aria-current="page"':'';
-  // On a phone the views become one row of tabs and the tools move behind the menu button at the top right.
-  return `<aside class="side" aria-label="메뉴"><div class="brand-row"><button type="button" class="nav-back" id="nav-back" aria-label="뒤로" hidden>‹</button><a class="brand" href="./" aria-label="피드">agent-office<i aria-hidden="true"></i></a><button type="button" class="menu-toggle" id="menu-toggle" aria-label="메뉴 열기" aria-expanded="false" aria-controls="side-menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div><div class="brand-sub">로컬 연결 · MCP</div>
-<div class="sec">업무</div>
-<div class="views"><button type="button" class="tabs-arrow" data-tabs-step="-1" aria-label="이전 보기" tabindex="-1">‹</button><nav class="tabs" id="view-tabs" aria-label="업무 보기">
-<a class="nav feed-tab" href="./" data-view="feed">피드<span class="n" data-count="feed"></span></a>
+/** The Work page's own tabs, under its header: what used to be the sidebar's list of views. */
+export const workViewsHtml=`<div class="views" id="work-views"><button type="button" class="tabs-arrow" data-tabs-step="-1" aria-label="이전 보기" tabindex="-1">‹</button><nav class="tabs" id="view-tabs" aria-label="업무 보기">
 <a class="nav" href="./?view=all" data-view="all">전체<span class="n" data-count="all"></span></a>
 <a class="nav" href="./?view=attention" data-view="attention">확인 필요<span class="n warn" data-count="attention"></span></a>
 <a class="nav" href="./?view=active" data-view="active">실행 중<span class="n" data-count="active"></span></a>
@@ -78,10 +74,18 @@ export function sidebarHtml(page:ShellPage){
 <a class="nav" href="./?view=hold" data-view="hold">보류<span class="n" data-count="hold"></span></a>
 <a class="nav" href="./?view=done" data-view="done">종료된 업무<span class="n" data-count="done"></span></a>
 <a class="nav" href="./?view=hidden" data-view="hidden">숨김<span class="n" data-count="hidden"></span></a>
-</nav><button type="button" class="tabs-arrow" data-tabs-step="1" aria-label="다음 보기" tabindex="-1">›</button></div>
+</nav><button type="button" class="tabs-arrow" data-tabs-step="1" aria-label="다음 보기" tabindex="-1">›</button></div>`;
+/** Sidebar links are plain anchors so every view is one click away and pages stay independent. */
+export function sidebarHtml(page:ShellPage){
+  const current=(value:ShellPage)=>page===value?' aria-current="page"':'';
+  // On a phone Feed and Work are two tabs at the top and the tools move behind the menu button at the top right.
+  return `<aside class="side" aria-label="메뉴"><div class="brand-row"><button type="button" class="nav-back" id="nav-back" aria-label="뒤로" hidden>‹</button><a class="brand" href="./" aria-label="피드">agent-office<i aria-hidden="true"></i></a><button type="button" class="menu-toggle" id="menu-toggle" aria-label="메뉴 열기" aria-expanded="false" aria-controls="side-menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div><div class="brand-sub">로컬 연결 · MCP</div>
+<nav class="pages" id="page-tabs" aria-label="화면">
+<a class="nav" href="./" data-view="feed">피드<span class="n" data-count="feed"></span></a>
+<a class="nav" href="./?view=all" data-nav="work">업무<span class="n warn" data-count="work"></span></a>
+</nav>
 <div class="sec">도구</div>
 <div class="side-menu" id="side-menu">
-<a class="nav menu-feed" href="./" data-view="feed">피드</a>
 <a class="nav" href="./?import=1" data-nav="import">가져오기</a>
 <a class="nav" href="connections" data-nav="connections"${current('connections')}>사이트</a>
 <a class="nav" href="settings"${current('settings')}>설정</a>
@@ -157,17 +161,18 @@ fetch('settings/mcp',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(view=>
 export const uiCss=baseUiCss+pressFeedbackCss+segmentCss+sliderCss+agentsCss;
 // The phone menu button and the arrows of the view tabs.
 const sideScript=`(()=>{const back=document.getElementById('nav-back');if(back){const sync=()=>{back.hidden=!(history.state?.office||!document.getElementById('app')&&document.referrer.startsWith(location.origin))};sync();addEventListener('popstate',sync);addEventListener('office:nav',sync);back.addEventListener('click',()=>history.back())}})();
-(()=>{const side=document.querySelector('.side'),toggle=document.getElementById('menu-toggle'),tabs=document.getElementById('view-tabs');if(!side||!toggle||!tabs)return;
+(()=>{const side=document.querySelector('.side'),toggle=document.getElementById('menu-toggle'),tabs=document.getElementById('view-tabs');if(!side||!toggle)return;
 const open=value=>{side.classList.toggle('menu-open',value);toggle.setAttribute('aria-expanded',String(value))};
 toggle.addEventListener('click',event=>{event.stopPropagation();open(!side.classList.contains('menu-open'))});
 // The click's own path, because the theme button swaps its icon (the clicked node) before the click arrives here.
 document.addEventListener('click',event=>{if(side.classList.contains('menu-open')&&!event.composedPath().includes(document.getElementById('side-menu')))open(false)});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')open(false)});
 document.getElementById('side-menu').addEventListener('click',event=>{if(event.target.closest('a'))open(false)});
-const views=tabs.parentElement,fit=()=>views.classList.toggle('overflow',tabs.scrollWidth>tabs.clientWidth+1);fit();addEventListener('resize',fit);new MutationObserver(fit).observe(tabs,{subtree:true,characterData:true,childList:true});
 const menu=document.getElementById('side-menu'),options=document.querySelector('.display-options'),phone=matchMedia('(max-width:760px)');
 // The page's language and theme buttons move into the menu on a phone and back to the header otherwise.
 if(options){const mark=document.createComment('display-options');options.before(mark);const place=()=>{if(phone.matches)menu.append(options);else mark.after(options)};phone.addEventListener('change',place);place();}
+// The Work page's tabs, under its header.
+if(tabs){const views=tabs.parentElement,fit=()=>views.classList.toggle('overflow',tabs.scrollWidth>tabs.clientWidth+1);fit();addEventListener('resize',fit);new MutationObserver(fit).observe(views,{subtree:true,characterData:true,childList:true,attributes:true,attributeFilter:['hidden']});
 views.querySelectorAll('[data-tabs-step]').forEach(button=>button.addEventListener('click',()=>tabs.scrollBy({left:Number(button.dataset.tabsStep)*Math.max(120,tabs.clientWidth*.6)})));
-const on=tabs.querySelector('.on,[aria-current=page]');if(on)on.scrollIntoView({block:'nearest',inline:'center'})})();`;
+const on=tabs.querySelector('.on,[aria-current=page]');if(on)on.scrollIntoView({block:'nearest',inline:'center'})}})();`;
 export const themeScript=themeOnlyScript+'\n'+pressFeedbackScript+'\n'+segmentScript+'\n'+sliderScript+'\n'+agentsScript+'\n'+sideScript;
