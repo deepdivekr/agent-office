@@ -131,6 +131,12 @@ async function usableUrl(url:string){
  * off anywhere on the Windows side, a server that needs values Office does not pass on (environment, headers, tokens) or
  * whose arguments could not be read, an SSE server, the Codex desktop app's internals and Office's own server. Unlike the
  * owner's tools Office calls itself, these are handed to the owner's own client. */
+/** The MCP server names a client run gets here: the client's own local config, then the Windows-side ones Office adds. */
+export async function clientServerNames(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment)){
+  const local=homes.find(place=>place.side==='local');
+  const own=client==='codex'?codexEntries(text(join(environment.CODEX_HOME??(local?join(local.home,'.codex'):''),'config.toml'))):local?jsonEntries(join(environment.CLAUDE_CONFIG_DIR??local.home,'.claude.json')):[];
+  return new Set([...own.filter(entry=>!entry.disabled).map(entry=>entry.key),...(await windowsClientServers(client,environment,homes)).map(server=>server.id)]);
+}
 export async function windowsClientServers(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment),options:{mount?:string;reachable?:(url:string)=>Promise<boolean>}={}):Promise<ClientRunMcpServer[]>{
   const windows=homes.find(place=>place.side==='windows'),local=homes.find(place=>place.side==='local');if(!windows)return [];
   const mount=options.mount??'/mnt',reachable=options.reachable??usableUrl;
