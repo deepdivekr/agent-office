@@ -7,7 +7,7 @@
 
 Nothing stops silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 
-**English** · [한국어](README.ko.md) · [v0.5.0 release notes](docs/releases/v0.5.0.md)
+**English** · [한국어](README.ko.md) · [v0.6.0 release notes](docs/releases/v0.6.0.md)
 
 It is also a local MCP server, so Codex, Claude Code, Cursor, OpenCode, Hermes or another MCP client can hand it work.
 Install and run it as `agent-office`. The old `agent-driver` command remains a compatibility alias.
@@ -83,7 +83,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.5.0/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.6.0/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
