@@ -1,5 +1,6 @@
 import {serveUiAsset} from './ui-assets.js';
 import {changeWorkClient,defaultWorkClient} from '../work/client-run.js';
+import {clientHandoffCheck} from '../work/client-handoff.js';
 import {FileExplorerRoutes} from './files-http.js';
 import {dirname,join} from 'node:path';
 import {pruneWorkFolders} from '../work/storage.js';
@@ -322,6 +323,12 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         const input=z.object({work_id:z.string().min(1).max(128),hidden:z.boolean()}).strict().parse(JSON.parse(body));
         reply(response,200,JSON.stringify(setWorkHidden(store,config.project.id,input.work_id,input.hidden)),'application/json; charset=utf-8');
       }catch{reply(response,409,JSON.stringify({error:'WORK_HIDE_FAILED'}),'application/json; charset=utf-8');}return;
+    }
+    if(suffix==='work/client/check'){
+      const id=url.searchParams.get('id')??'',to=url.searchParams.get('client');
+      if(!id||id.length>128||(to!=='codex'&&to!=='claude')){reply(response,400,'work id and client required');return;}
+      try{reply(response,200,JSON.stringify(await clientHandoffCheck(store,config.project.id,id,to)),'application/json; charset=utf-8');}
+      catch{reply(response,404,JSON.stringify({error:'WORK_NOT_FOUND'}),'application/json; charset=utf-8');}return;
     }
     if(suffix==='work/client'){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}

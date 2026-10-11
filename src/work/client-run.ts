@@ -166,7 +166,7 @@ function claudeEvent(event:Json,state:RunState):ClientRunEvent[]{
   if(event.type==='assistant')return content.map(object).flatMap((block):ClientRunEvent[]=>{
     if(block.type==='tool_use'){
       const tool=claudeTool(text(block.name)),input=object(block.input);state.tools.set(text(block.id),tool);count(state,tool);
-      return [{kind:'tool.started',tool_name:tool,summary:text(input.command)||text(input.file_path)||text(input.url)||text(input.query)||text(input.description)||text(input.prompt)||tool,status:'running'}];
+      return [{kind:'tool.started',tool_name:tool,summary:text(input.command)||text(input.file_path)||text(input.url)||text(input.query)||text(input.description)||text(input.prompt)||text(input.skill)||tool,status:'running'}];
     }
     return block.type==='text'&&text(block.text).trim()?[{kind:'model.result',tool_name:'message',summary:text(block.text),status:'succeeded'}]:[];
   });
