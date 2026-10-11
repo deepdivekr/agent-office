@@ -11,7 +11,7 @@ import {sanitizeCodingReply} from '../coding/reply-safety.js';
 import {ownerMcpEnabled,windowsClientServers,mcpServerAnswers,type ClientRunMcpServer} from '../integrations/owner-mcp.js';
 import {ownerEnvironmentContext} from '../integrations/client-environment.js';
 import {mediaExecutorBrief} from './media-executor.js';
-import {type WorkActivityMetadata} from './activity.js';
+import {executionRecord,workActivity,type WorkActivityMetadata} from './activity.js';
 import {workClientChoiceSchema,type WorkClientChoice} from './contracts.js';
 import {type ModelSettings} from '../onboarding/model-settings.js';
 import {workImportExecutionOwner} from './import-authority.js';
@@ -76,6 +76,18 @@ export function pinWorkClient(store:PackStore,project:string,workId:string,choic
   const pinned=workClientChoice(store,project,workId);if(pinned)return pinned;
   const value=choice??defaultWorkClient(settings);if(!value)return null;
   pinTable(store).prepare('INSERT OR IGNORE INTO office_work_client(project_id,work_id,client,pinned_at,model,effort) VALUES(?,?,?,?,?,?)').run(project,workId,value.id,new Date().toISOString(),value.model,value.effort);
+  return workClientChoice(store,project,workId);
+}
+/** The owner's own change of the Work's client, between runs (owner 2026-10-11: move a Work Codex ran to Claude). The
+ * next run starts a new session on the new client with the Work folder and records as they are; nothing else switches it. */
+export function changeWorkClient(store:PackStore,project:string,workId:string,choice:WorkClientChoice){
+  store.officeWorkById(project,workId);const value=workClientChoiceSchema.parse(choice),spec=store.intakeWork(project,workId).spec as {route:{pack_family:string|null}}|null;
+  if(!spec||!clientRunEligible(store,project,workId,spec)||!workClientChoice(store,project,workId))throw Error('WORK_CLIENT_NOT_CHANGEABLE');
+  const supervised=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_supervisor'").get()?store.hermesState.prepare('SELECT state FROM office_supervisor WHERE project_id=? AND work_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1').get(project,workId) as {state:string}|undefined:undefined;
+  const lease=executionRecord(store,project,workId);
+  if(['queued','running','retry_wait'].includes(supervised?.state??'')||lease?.owner&&lease.lease_until_ms>Date.now())throw Error('WORK_CLIENT_RUN_ACTIVE');
+  pinTable(store).prepare('UPDATE office_work_client SET client=?,model=?,effort=?,pinned_at=? WHERE project_id=? AND work_id=?').run(value.id,value.model,value.effort,new Date().toISOString(),project,workId);
+  workActivity(store,project,workId,'client_changed',`client_changed · ${[value.id==='claude'?'Claude Code':'Codex',value.model,value.effort].filter(Boolean).join(' · ')}`);
   return workClientChoice(store,project,workId);
 }
 export const workFolder=(config:Pick<HostConfig,'dbPath'>,workId:string)=>join(dirname(config.dbPath),'work-folders',workId);
@@ -343,7 +355,8 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   // Owner direction 2026-10-08: a recurring Work keeps one conversation. Its next run continues the session the previous
   // run ended with (Claude answers a resume from another folder under a new ID, which onSession then keeps).
   const carried=input.previous_session??null;
-  let cp:WorkClientCheckpoint=input.checkpoint?.client_session?input.checkpoint:{format:1,work_id,run_id,binding:hashJson({work_id,run_id,client}),turn:0,pending:null,observations:[],summary:'',
+  // A run saved on the other client before the owner changed it starts over on this one (its session is not this app's).
+  let cp:WorkClientCheckpoint=input.checkpoint?.client_session?.client===client?input.checkpoint:{format:1,work_id,run_id,binding:hashJson({work_id,run_id,client}),turn:0,pending:null,observations:[],summary:'',
     client_session:{client,session_id:carried??(client==='claude'?randomUUID():null),confirmed:Boolean(carried),started_ms:Date.now(),finished:false,direction_at:latest,repairs:0,...(carried?{carried:true}:{})}};
   const session=()=>cp.client_session!;
   const update=(changes:Partial<NonNullable<WorkClientCheckpoint['client_session']>>)=>{cp={...cp,client_session:{...session(),...changes}};input.save(cp);};
