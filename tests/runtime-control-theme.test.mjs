@@ -115,16 +115,21 @@ test('runtime native theme syncs tabs and keeps localized controls visible on a 
   assert.deepEqual(errors,[]);
 });
 
-test('runtime native on a phone the views are one row of tabs and the tools, language and theme sit behind the menu button',async t=>{
+// Owner 2026-10-11: Feed and Work are the pages; All, Needs you and the other views are tabs inside Work, so the Feed shows none of them.
+test('runtime native on a phone Feed and Work are two tabs, the Work views are one row inside Work, and the tools, language and theme sit behind the menu button',async t=>{
   const {page,server,errors}=await setup(t,{viewport:{width:390,height:844}});
+  await page.goto(server.url);await page.locator('#page-tabs').waitFor();
+  assert.deepEqual(await page.locator('#page-tabs .nav:visible').allInnerTexts(),['Feed','Work']);
+  assert.equal(await page.locator('#work-views').isVisible(),false,'the Feed shows no Work views');
   await page.goto(server.url+'?view=recurring');await page.locator('#view-tabs').waitFor();
+  assert.ok(await page.locator('#page-tabs [data-nav="work"]').evaluate(a=>a.classList.contains('on')),'Work is the open page');
   const tabs=await page.locator('#view-tabs .nav:visible').evaluateAll(n=>n.map(a=>[a.dataset.view,Math.round(a.getBoundingClientRect().top)]));
-  assert.deepEqual(tabs.map(t=>t[0]),['all','attention','active','recurring','hold','done','hidden'],'Feed is in the menu, not a tab');
+  assert.deepEqual(tabs.map(t=>t[0]),['all','attention','active','recurring','hold','done','hidden']);
   assert.equal(new Set(tabs.map(t=>t[1])).size,1,'one row');
   assert.ok(await page.locator('#view-tabs [data-view="recurring"]').evaluate(a=>{const r=a.getBoundingClientRect(),box=a.parentElement.getBoundingClientRect();return a.classList.contains('on')&&r.left>=box.left-1&&r.right<=box.right+1}),'the open view is in sight');
   assert.equal(await page.locator('#side-menu').isVisible(),false);assert.equal(await page.locator('#lang-toggle').isVisible(),false);
   await page.locator('#menu-toggle').click();
-  assert.deepEqual(await page.locator('#side-menu a.nav:visible').allInnerTexts(),['Feed','Import','Sites','Settings']);
+  assert.deepEqual(await page.locator('#side-menu a.nav:visible').allInnerTexts(),['Import','Sites','Settings']);
   assert.equal(await page.locator('#side-menu #lang-toggle').isVisible(),true);assert.equal(await page.locator('#side-menu #theme-toggle').isVisible(),true);
   await page.locator('#theme-toggle').click();assert.equal(await page.locator('#side-menu').isVisible(),true,'switching the theme keeps the menu open');
   await page.locator('h1').click();assert.equal(await page.locator('#side-menu').isVisible(),false,'a tap elsewhere closes it');
