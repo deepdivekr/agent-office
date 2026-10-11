@@ -15,7 +15,7 @@ async function fixture(t,name){
   let n=0;const result=async(workId,at,text,pictures=[])=>{const folder=join(dirname(config.dbPath),'work-folders',workId,String(++n));await mkdir(folder,{recursive:true});
     const artifacts=[];for(const [label,bytes] of pictures){await writeFile(join(folder,label),bytes);artifacts.push({id:'artifact-'+artifacts.length,path:join(folder,label),label,sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,media_type:null});}
     const id=`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-    store.hermesState.prepare('INSERT INTO office_result VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,config.project.id,workId,'run-'+n,'client',0,'succeeded','verified','client-output',JSON.stringify({binding_revision:0,summary:text.split('\n')[0],text,delivery_text:text,completion_verified:true,artifacts,sources:[]}),'x'+n,at);
+    store.hermesState.prepare('INSERT INTO office_result VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,config.project.id,workId,'run-'+n,'client',0,'succeeded','verified','client-output',JSON.stringify({binding_revision:0,summary:text.split('\n')[0],text:text+'\n\n── RECORDS.json ──\n{"items":[]}',delivery_text:text,completion_verified:true,artifacts,sources:[]}),'x'+n,at);
     return {id,folder};};
   return {root,config,store,results,work,result,workActivity};
 }
@@ -107,7 +107,7 @@ test('runtime fixture the feed page: pinned needs-you first, then outputs by day
   assert.deepEqual(await page.locator('.result-table thead th').evaluateAll(n=>n.map(t=>t.textContent)),['Time','Output','Images · files','Delivery','State']);
   assert.equal(await page.locator('.result-table .rdetail').count(),0);assert.equal(await page.locator('.work-results a[download]').count(),0,'no download list until a cycle is opened');
   await page.locator('[data-result-toggle]').first().click();await page.locator('.rdetail pre').waitFor();
-  assert.match(await page.locator('.rdetail pre').innerText(),/카드 4장/u);assert.equal(await page.locator('.rdetail .rpics img').count(),1);assert.equal(await page.locator('.rdetail details summary').first().innerText(),'Files 1');
+  assert.match(await page.locator('.rdetail pre').innerText(),/카드 4장/u);assert.doesNotMatch(await page.locator('.rdetail pre').innerText(),/RECORDS\.json/u,'the message the owner gets, not the check record with its JSON files');assert.equal(await page.locator('.rdetail .rpics img').count(),1);assert.equal(await page.locator('.rdetail details summary').first().innerText(),'Files 1');
   await page.locator('#back').click();await page.locator('.post').first().waitFor();
   await page.goto(server.url+'settings');await page.locator('a.brand').click();await page.locator('.post').first().waitFor();
   // The installable app and its push plumbing.
