@@ -76,7 +76,7 @@ function codexEntries(config:string):ServerEntry[]{
   return [...sections].map(([key,entry])=>{const args=array(entry.body,'args');return {key,command:scalar(entry.body,'command'),args:args??[],url:scalar(entry.body,'url'),disabled:/^enabled\s*=\s*false/mu.test(entry.body),
     env:Object.fromEntries([...entry.env.matchAll(new RegExp(`^([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(?:${tomlString})`,'gmu'))].map(match=>[match[1]!,tomlValue(match[2],match[3])??''])),
     startup_timeout_sec:number(entry.body,'startup_timeout_sec'),tool_timeout_sec:number(entry.body,'tool_timeout_sec'),
-    incomplete:args===null||entry.headers||/^(?:env|env_vars|bearer_token_env_var|http_headers|env_http_headers)\s*[.=]/mu.test(entry.body)};});
+    incomplete:args===null||entry.headers||/^(?:env|env_vars|bearer_token_env_var|http_headers|env_http_headers|enabled_tools|disabled_tools)\s*[.=]/mu.test(entry.body)};});
 }
 /** Whether a Codex config.toml defines this server name in any form: a table, a dotted key, or an entry of [mcp_servers]. */
 function codexDefines(config:string,key:string){
@@ -89,7 +89,7 @@ function jsonEntries(path:string):ServerEntry[]{
   let parsed:{mcpServers?:Record<string,{command?:unknown;args?:unknown;env?:unknown;url?:unknown;disabled?:unknown;headers?:unknown;type?:unknown}>}={};
   try{parsed=JSON.parse(text(path)||'{}') as typeof parsed;}catch{return [];}
   return Object.entries(parsed.mcpServers??{}).filter(([,value])=>value&&typeof value==='object').map(([key,value])=>({key,command:typeof value.command==='string'?value.command:undefined,args:strings(value.args),url:typeof value.url==='string'?value.url:undefined,env:stringMap(value.env),disabled:value.disabled===true,
-    incomplete:Boolean(value.headers&&typeof value.headers==='object'&&Object.keys(value.headers).length),type:typeof value.type==='string'?value.type:undefined}));
+    incomplete:Boolean(value.headers&&typeof value.headers==='object'&&Object.keys(value.headers).length)||value.args!==undefined&&(!Array.isArray(value.args)||!value.args.every(arg=>typeof arg==='string')),type:typeof value.type==='string'?value.type:undefined}));
 }
 /** The owner's own "agent-driver" entry in this client's local config, however it was registered (Office's node entrypoint or the
  * agent-office launcher): what Office's registration view and register step reconcile with instead of adding a second one. */
@@ -123,7 +123,12 @@ const urlAnswered=new Map<string,number>();
  * minutes; a server that did not answer is asked again on the next run. */
 async function usableUrl(url:string){
   const at=urlAnswered.get(url);if(at&&Date.now()-at<600_000)return true;
-  try{const response=await fetch(url,{method:'GET',signal:AbortSignal.timeout(1500)});if([401,403].includes(response.status))return false;urlAnswered.set(url,Date.now());return true;}catch{return false;}
+  try{
+    const response=await fetch(url,{method:'GET',signal:AbortSignal.timeout(1500)});await response.body?.cancel();
+    // Some MCP endpoints require POST, a session or an Accept header. This is discovery, not proof of MCP access.
+    if(!response.ok&&![400,405,406].includes(response.status))return false;
+    urlAnswered.set(url,Date.now());return true;
+  }catch{return false;}
 }
 /** Windows-side servers a client started here cannot see (live 2026-10-03: Aside, the owner's main browser, is registered
  * only in the Windows Codex app). A Windows program is started from here through the /mnt mount; a URL server is kept when
@@ -133,9 +138,12 @@ async function usableUrl(url:string){
  * owner's tools Office calls itself, these are handed to the owner's own client. */
 /** The MCP server names a client run gets here: the client's own local config, then the Windows-side ones Office adds. */
 export async function clientServerNames(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment)){
-  const local=homes.find(place=>place.side==='local');
-  const own=client==='codex'?codexEntries(text(join(environment.CODEX_HOME??(local?join(local.home,'.codex'):''),'config.toml'))):local?jsonEntries(join(environment.CLAUDE_CONFIG_DIR??local.home,'.claude.json')):[];
+  const own=clientEntries(client,environment,homes);
   return new Set([...own.filter(entry=>!entry.disabled).map(entry=>entry.key),...(await windowsClientServers(client,environment,homes)).map(server=>server.id)]);
+}
+function clientEntries(client:'codex'|'claude',environment:NodeJS.ProcessEnv,homes:EnvironmentHome[]){
+  const local=homes.find(place=>place.side==='local');
+  return client==='codex'?codexEntries(text(join(environment.CODEX_HOME??(local?join(local.home,'.codex'):''),'config.toml'))):local?jsonEntries(join(environment.CLAUDE_CONFIG_DIR??local.home,'.claude.json')):[];
 }
 export async function windowsClientServers(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment),options:{mount?:string;reachable?:(url:string)=>Promise<boolean>}={}):Promise<ClientRunMcpServer[]>{
   const windows=homes.find(place=>place.side==='windows'),local=homes.find(place=>place.side==='local');if(!windows)return [];
@@ -169,18 +177,56 @@ const connectLaunch:Connect=async(launch,environment)=>{
 };
 const reads=(tool:{name:string;annotations?:{readOnlyHint?:boolean|undefined;destructiveHint?:boolean|undefined}|undefined})=>tool.annotations?.destructiveHint!==true&&(tool.annotations?.readOnlyHint===true||tool.annotations?.readOnlyHint===undefined&&readVerb.test(tool.name)&&!writeVerb.test(tool.name));
 
-/** Whether a server finishes the MCP handshake and lists its tools in time (live 2026-10-08: aside.exe existed but closed
- * during initialize, and the run was still told it was its browser). A connection that opens after the time is closed. */
+/** A single deadline covers initialization and every tools/list page. Never invokes a tool. */
+async function mcpTools(launch:Launch,environment:NodeJS.ProcessEnv,timeoutMs:number,connect:Connect):Promise<Set<string>|null>{
+  let timer:NodeJS.Timeout|undefined,expired=false,connection:Awaited<ReturnType<Connect>>|undefined;
+  const checking=(async()=>{
+    const opened=await connect(launch,environment);
+    if(expired){await opened.client.close().catch(()=>{});return null;}
+    connection=opened;
+    const names=new Set<string>(),cursors=new Set<string>();let cursor:string|undefined;
+    do{
+      const page=await opened.client.listTools(cursor?{cursor}:undefined,{timeout:timeoutMs});
+      if(expired)return null;
+      for(const tool of page.tools)names.add(tool.name);
+      cursor=page.nextCursor;
+      if(cursor){if(cursors.has(cursor))return null;cursors.add(cursor);}
+    }while(cursor);
+    return names;
+  })();
+  try{return await Promise.race([checking,new Promise<null>(resolve=>{timer=setTimeout(()=>{expired=true;resolve(null);},timeoutMs);})]);}
+  catch{return null;}
+  finally{expired=true;clearTimeout(timer);await connection?.client.close().catch(()=>{});}
+}
+/** Whether a server finishes the MCP handshake and lists its tools in time. Late connections are closed. */
 export async function mcpServerAnswers(server:ClientRunMcpServer,timeoutMs=15_000,connect:Connect=connectLaunch):Promise<boolean>{
   const launch:Launch=server.url?{kind:'http',url:server.url}:{kind:'stdio',command:server.command??'',args:server.args??[],env:{}};
-  let timer:NodeJS.Timeout|undefined,expired=false;
-  const opening=connect(launch,process.env);
-  opening.then(connection=>{if(expired)void connection.client.close().catch(()=>{});},()=>{});
-  try{
-    const connection=await Promise.race([opening,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(Error('MCP_HANDSHAKE_TIMEOUT'));},timeoutMs);})]);
-    try{await connection.client.listTools(undefined,{timeout:timeoutMs});return true;}catch{return false;}finally{await connection.client.close().catch(()=>{});}
-  }catch{return false;}
-  finally{clearTimeout(timer);}
+  return await mcpTools(launch,process.env,timeoutMs,connect)!==null;
+}
+export type McpHandoffStatus={verification:'verified'|'unavailable'|'unverified';reason?:'configuration'|'connection'|'different_target'|'missing_tools'};
+/** Check only servers used by this Work, using each client's effective local/Windows definition. Configs that cannot be
+ * faithfully represented (auth headers, SSE, tool filters, etc.) stay unverified. No config, URL or secret enters the result.
+ * Run history contains server/tool names, not endpoint identities: current source config is the comparison baseline. */
+export async function clientMcpHandoff(from:'codex'|'claude',to:'codex'|'claude',used:Map<string,string[]>,environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment),options:{timeoutMs?:number;connect?:Connect}={}):Promise<Map<string,McpHandoffStatus>>{
+  const effective=async(client:'codex'|'claude')=>{
+    const servers=new Map<string,Launch|null>();
+    for(const entry of clientEntries(client,environment,homes))if(used.has(entry.key)){
+      const unsupported=entry.disabled||entry.incomplete||entry.type==='sse'||/\$\{/u.test(JSON.stringify(entry));
+      servers.set(entry.key,unsupported?null:launchOf('local',entry));
+    }
+    for(const server of await windowsClientServers(client,environment,homes))if(used.has(server.id)&&!servers.has(server.id))servers.set(server.id,server.url?{kind:'http',url:server.url}:{kind:'stdio',command:server.command??'',args:server.args??[],env:{}});
+    return servers;
+  };
+  const [previous,next]=await Promise.all([effective(from),effective(to)]),result=new Map<string,McpHandoffStatus>();
+  const identityOf=(launch:Launch)=>JSON.stringify(launch.kind==='http'?{kind:launch.kind,url:new URL(launch.url).href}:{...launch,env:Object.fromEntries(Object.entries(launch.env).sort())});
+  await Promise.all([...used].map(async([name,tools])=>{
+    const source=previous.get(name),target=next.get(name);
+    if(!target||!source){result.set(name,{verification:'unverified',reason:'configuration'});return;}
+    if(identityOf(source)!==identityOf(target)){result.set(name,{verification:'unverified',reason:'different_target'});return;}
+    const found=await mcpTools(target,environment,options.timeoutMs??5000,options.connect??connectLaunch);
+    result.set(name,found===null?{verification:'unverified',reason:'connection'}:tools.every(tool=>found.has(tool))?{verification:'verified'}:{verification:'unavailable',reason:'missing_tools'});
+  }));
+  return result;
 }
 let snapshot:OwnerMcpSnapshot|null=null,definitions=new Map<string,ServerDefinition>(),refreshing:Promise<OwnerMcpSnapshot>|null=null,enabled=false;
 /** Looks at every server once and keeps the result until it is asked to look again. */
