@@ -686,6 +686,7 @@ const EN:Record<string,string>={
 const RULES:Array<[string,string]>=[
 ['^(\\d+) / (\\d+) 단계$','$1 / $2 stages'],
 ['^단계 (\\d+)$','Step $1'],
+['^실행을 마쳤습니다\\. 만든 파일 (\\d+)개를 결과로 저장했습니다\\.$','Finished; the $1 files it made are saved as the result.'],
 ['^지침 변경 · (.+)$','Instruction changed · $1'],
 ['^(.+) · 저장된 모델$','$1 · saved model'],
 ['^(\\S+) 기본값만$','$1 default only'],
