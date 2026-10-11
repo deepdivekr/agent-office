@@ -23,9 +23,12 @@ client's own agent (Codex `exec --json` or Claude Code `-p` stream-json) with th
 owner's own settings, skills, plugins and MCP servers, in an Office-owned Work
 folder (src/work/client-run.ts). The owner chooses the client, model and
 reasoning effort for each Work at intake (onboarding only sets the defaults).
-One client per Work for its whole life, Office's own judgments for the Work
-included: no routing or session handoff between clients (a client calling
-another CLI by itself is its own behaviour). Permissions default to everything allowed, as in
+One client per Work, Office's own judgments for the Work included: Office never
+routes a Work or hands its session to another client by itself. Only the owner
+moves a Work to the other client, between runs (owner 2026-10-11; the change
+sheet lists what the earlier runs used that the new client lacks and drafts a
+handoff direction); the next run starts a new session there. A client calling
+another CLI by itself is its own behaviour. Permissions default to everything allowed, as in
 the client app; Office does not approve actions one by one. Office records the
 events, pauses between turns, hands a new direction to the same client session
 as it is (no Office replanning, owner 2026-10-04), schedules and delivers. A client run is complete when its client reports each

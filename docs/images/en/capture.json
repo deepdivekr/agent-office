@@ -1,7 +1,7 @@
 {
-  "source_version": "0.4.0",
-  "ui_base_commit": "124d92d31a36e6085c55d87b2311f87f218669d8",
-  "captured_at": "2026-10-07T07:21:00Z",
+  "source_version": "0.5.0",
+  "ui_base_commit": "112b394f70ef21373610cbc7ecf9ffdcfc5e9b68",
+  "captured_at": "2026-10-11T08:39:30Z",
   "sample_data": true,
   "live_task_run": true,
   "paid_model_calls": 0,
@@ -13,10 +13,10 @@
   ],
   "checks": [
     "one real client run completed and its completion criteria were reported met",
-    "board view selected",
     "dark theme",
     "English capture contains no untranslated Korean",
-    "no page errors"
+    "no page errors",
+    "board view selected"
   ],
   "client": "Codex · gpt-6.1-sol · low (subscription)",
   "task": "Summarize a made-up three-month sales log into report.md (no web access, nothing sent outside)",
