@@ -84,7 +84,7 @@ export function sidebarHtml(page:ShellPage){
 <a class="nav menu-feed" href="./" data-view="feed">피드</a>
 <a class="nav" href="./?import=1" data-nav="import">가져오기</a>
 <a class="nav" href="connections" data-nav="connections"${current('connections')}>사이트</a>
-<a class="nav" href="settings"${page==='connections'?' aria-current="page"':current('settings')}>설정</a>
+<a class="nav" href="settings"${current('settings')}>설정</a>
 </div>
 <a class="nav" id="connections" href="connections" hidden>사이트 로그인</a>
 <div class="sec">에이전트</div><div class="agents" id="side-agents"></div> <div class="sec">업무 처리</div><div class="paths"><span class="pth p-code">코드</span><span class="pth p-jev">Jev</span><span class="pth p-llm">AI</span><span class="pth p-human">사용자</span></div>
