@@ -127,9 +127,13 @@ export async function startManagedControlService(configPath:string,previous?:URL
     stopOperation=(async()=>{await operation?.catch(()=>{});if(current)await closeOwned(current);finish();})();return stopOperation;
   }};
 }
-export async function openControlUrl(url:string){
+/** The settings page a connect opens; the first setup asks for the guide (?welcome=1). */
+export function controlOpenTarget(url:string,welcome=false){
   if(!validControlUrl(url))throw Error('CONTROL_CENTER_URL_INVALID');
-  const target=shortControlUrl(url,'settings'),windows=process.platform==='win32'||Boolean(process.env.WSL_INTEROP||process.env.WSL_DISTRO_NAME),executable=windows?'powershell.exe':process.platform==='darwin'?'open':'xdg-open';
+  return shortControlUrl(url,'settings')+(welcome?'?welcome=1':'');
+}
+export async function openControlUrl(url:string,welcome=false){
+  const target=controlOpenTarget(url,welcome),windows=process.platform==='win32'||Boolean(process.env.WSL_INTEROP||process.env.WSL_DISTRO_NAME),executable=windows?'powershell.exe':process.platform==='darwin'?'open':'xdg-open';
   const args=windows?['-NoProfile','-NonInteractive','-Command',`Start-Process -FilePath '${target}'`]:[target];
   return new Promise<boolean>(resolve=>{const child=spawn(executable,args,{stdio:'ignore',windowsHide:true,shell:false});const timer=setTimeout(()=>{child.kill();resolve(false);},5000);child.once('error',()=>{clearTimeout(timer);resolve(false);});child.once('exit',code=>{clearTimeout(timer);resolve(code===0);});});
 }

@@ -42,7 +42,8 @@ test('runtime native theme changes immediately without losing a draft and persis
     // Settings performs one read-only connection probe on initialization. Bind
     // that exact request to this navigation instead of blaming asynchronous
     // bootstrap work on the theme button or allowing every future probe.
-    const bootstrap=route==='settings'?page.waitForRequest(request=>request.method()==='POST'&&request.url()===server.url+'settings/refresh'):null;
+    // It opens at the AI app step (settings/mcp/check) while no app is registered, else at Work defaults (settings/refresh).
+    const bootstrap=route==='settings'?page.waitForRequest(request=>request.method()==='POST'&&[server.url+'settings/refresh',server.url+'settings/mcp/check'].includes(request.url())):null;
     await page.goto(server.url+route);
     if(bootstrap)bootstrapRequests.add(await bootstrap);
     await color(page,light);

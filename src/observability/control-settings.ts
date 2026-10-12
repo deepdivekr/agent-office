@@ -27,7 +27,7 @@ export class ControlSettings{
   readonly maintenance:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>;
   maintenanceBusy:()=>boolean=()=>false;
   private maintenanceOperation=false;private maintenanceOwnRequest=false;
-  constructor(readonly config:HostConfig,readonly auth:Pick<SubscriptionAuthFlowController,'connections'|'view'|'start'|'close'>=new SubscriptionAuthFlowController(),readonly environment:NodeJS.ProcessEnv=process.env,readonly fetcher:typeof fetch=fetch,readonly mcp=new McpRegistrationController(dirname(config.path),environment),readonly activity=new SetupActivityStream(dirname(config.path)),readonly bootstrap=new ClientBootstrapController(environment,undefined,fetcher),readonly browsers=new BrowserSetupController(config,{environment}),maintenance?:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>){
+  constructor(readonly config:HostConfig,readonly auth:Pick<SubscriptionAuthFlowController,'connections'|'view'|'start'|'close'|'submitCode'>=new SubscriptionAuthFlowController(),readonly environment:NodeJS.ProcessEnv=process.env,readonly fetcher:typeof fetch=fetch,readonly mcp=new McpRegistrationController(dirname(config.path),environment),readonly activity=new SetupActivityStream(dirname(config.path)),readonly bootstrap=new ClientBootstrapController(environment,undefined,fetcher),readonly browsers=new BrowserSetupController(config,{environment}),maintenance?:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>){
     this.path=modelSettingsPath(config);
     this.maintenance=maintenance??new ClientMaintenanceController({statePath:join(dirname(this.path),'cli-maintenance.json'),environment,fixture:config.environment==='fixture',isBusy:()=>this.maintenanceBusy()||this.busy&&!this.maintenanceOwnRequest||this.authenticationBusy()});
   }
@@ -231,6 +231,11 @@ export class ControlSettings{
           const value=body as {client?:unknown;flow?:unknown};
           if(!value||!['codex','claude','opencode','cursor','hermes'].includes(String(value.client))||!['device','browser'].includes(String(value.flow))){send(400,{error:'INVALID_CLIENT_FLOW'});return true;}
           await this.activity.record('ai','running','공식 AI 로그인 절차를 시작했습니다.');send(202,await this.auth.start(value.client as McpRegistrationClient,value.flow as 'device'|'browser'));
+        }else if(suffix==='settings/login/code'){
+          const value=body as {client?:unknown;code?:unknown};
+          if(!value||value.client!=='claude'||typeof value.code!=='string'){send(400,{error:'INVALID_LOGIN_CODE'});return true;}
+          try{const view=this.auth.submitCode('claude',value.code.trim());await this.activity.record('ai','running','로그인 코드를 Claude Code에 전달했습니다.');send(202,view);}
+          catch(error){send(409,{error:error instanceof Error?error.message:'CLIENT_LOGIN_CODE_NOT_EXPECTED'});}
         }else if(suffix==='settings/client/install'){
           const value=body as {client?:unknown};if(!value||!['codex','claude','opencode','cursor','hermes'].includes(String(value.client))){send(400,{error:'CLIENT_INSTALL_TARGET_INVALID'});return true;}
           const client=value.client as McpRegistrationClient,name=({codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor CLI',hermes:'Hermes'} as const)[client];

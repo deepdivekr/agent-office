@@ -19,13 +19,17 @@ export type SubscriptionAuthFlowKind='browser'|'device';
 export type SubscriptionAuthFlowState='idle'|'starting'|'waiting'|'completed'|'failed'|'unavailable';
 export interface SubscriptionAuthFlowView {
   client_id:SubscriptionClientId;flow:SubscriptionAuthFlowKind|null;state:SubscriptionAuthFlowState;
-  device_url?:string;auth_url?:string;user_code?:string;reason:string;credentials_exposed:false;
+  device_url?:string;auth_url?:string;user_code?:string;
+  /** The official sign-in page shows a code to paste back into the CLI (Claude Code without a terminal). */
+  needs_code?:true;reason:string;credentials_exposed:false;
 }
 export interface SubscriptionClientConnection extends SubscriptionClientStatus {
   supported_login_flows:SubscriptionAuthFlowKind[];connection:SubscriptionAuthFlowView;
 }
 export interface ProcessRequest {
   executable:string;args:string[];stdin?:string;cwd?:string;timeout_ms:number;signal?:AbortSignal;
+  /** Keeps stdin open and hands over a writer (a sign-in code pasted on the settings screen). */
+  stdin_open?:(write:(text:string)=>void)=>void;
   output_limit_bytes?:number;
   login_browser?:'ui';
   /** A client running a Work gets the owner's environment instead of the short allowlist. */
@@ -68,7 +72,7 @@ export const nativeProcessRunner:SafeProcessRunner={run(request){
     child.once('error',fail);
     child.once('close',code=>{if(!settled){settled=true;clearTimeout(timer);resolve({code,stdout,stderr});}});
     timer=setTimeout(()=>{stop();fail(Error('CLIENT_TIMEOUT'));},request.timeout_ms);
-    child.stdin.end(request.stdin);
+    if(request.stdin_open)request.stdin_open(text=>{if(!settled)child.stdin.write(text);});else child.stdin.end(request.stdin);
   });
 }};
 
@@ -176,19 +180,27 @@ function safeLoginArtifacts(id:SubscriptionClientId,text:string){
     const url=new URL(match[0]);if(url.username||url.password||url.href.length>4096||[...url.searchParams.keys()].some(key=>/token|secret|password/iu.test(key)))continue;
     if(['codex','opencode'].includes(id)&&url.origin==='https://auth.openai.com'&&url.pathname==='/codex/device'&&!url.search&&!url.hash)device_url=url.href;
     if(id==='cursor'&&url.origin==='https://cursor.com'&&url.pathname==='/loginDeepControl'&&url.searchParams.get('mode')==='login'&&url.searchParams.get('redirectTarget')==='cli')auth_url=url.href;
-    if(id==='claude'&&url.origin==='https://claude.ai'&&url.pathname==='/oauth/authorize')auth_url=url.href;
+    if(id==='claude'&&(url.origin==='https://claude.ai'&&url.pathname==='/oauth/authorize'||url.origin==='https://claude.com'&&url.pathname==='/cai/oauth/authorize'))auth_url=url.href;
   }catch{}
-  const codeContext=text.match(/(?:one[- ]time|device|verification)?\s*code\s*(?:is|:)?\s*([A-Z0-9]{4,8}-[A-Z0-9]{4,8})/iu);
+  // Codex 0.162 prints the code on the line after "Enter this one-time code (expires in 15 minutes)".
+  const codeContext=clean.match(/\bcode\b[^\n]*?\n?[^\S\n]*\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/iu);
   if(codeContext)user_code=codeContext[1]!.toUpperCase();
-  return {...(device_url?{device_url}:{}),...(auth_url?{auth_url}:{}),...(device_url&&user_code?{user_code}:{})};
+  return {...(device_url?{device_url}:{}),...(auth_url?{auth_url}:{}),...(device_url&&user_code?{user_code}:{}),...(id==='claude'&&auth_url&&/paste code here/iu.test(clean)?{needs_code:true as const}:{})};
 }
 
 /** Owns only official CLI processes. It never opens or reads a client's credential store. */
 export class SubscriptionAuthFlowController {
-  private readonly active=new Map<SubscriptionClientId,{view:SubscriptionAuthFlowView;abort:AbortController;output:string;binding:string}>();
+  private readonly active=new Map<SubscriptionClientId,{view:SubscriptionAuthFlowView;abort:AbortController;output:string;binding:string;write?:((text:string)=>void)|undefined}>();
   private readonly starts=new Map<SubscriptionClientId,Promise<SubscriptionAuthFlowView>>();
   private closed=false;
   constructor(readonly environment:NodeJS.ProcessEnv=process.env,readonly runner:SafeProcessRunner=nativeProcessRunner){}
+  /** Hands the code the official sign-in page showed to the waiting CLI; the code itself is never kept or shown. */
+  submitCode(id:SubscriptionClientId,code:string){
+    const entry=this.active.get(id);
+    requireCondition(Boolean(entry?.write)&&entry!.view.state==='waiting'&&entry!.view.needs_code===true,'CLIENT_LOGIN_CODE_NOT_EXPECTED');
+    requireCondition(/^[A-Za-z0-9#_.~-]{8,512}$/u.test(code),'CLIENT_LOGIN_CODE_INVALID');
+    entry!.write!(code+'\n');return this.view(id);
+  }
   view(id:SubscriptionClientId){
     const entry=this.active.get(id);
     if(entry&&entry.view.reason!=='connection_changed'&&entry.binding!==clientBinding(id,this.environment,this.runner,false)){
@@ -218,7 +230,7 @@ export class SubscriptionAuthFlowController {
     if(binding!==clientBinding(id,this.environment,this.runner))return {client_id:id,flow,state:'unavailable',reason:'connection_changed',credentials_exposed:false};
     if(status.status==='ready')return {client_id:id,flow,state:'completed',reason:'existing_session_reused',credentials_exposed:false} satisfies SubscriptionAuthFlowView;
     if(status.status!=='signed_out'&&status.status!=='expired')return {client_id:id,flow,state:'unavailable',reason:status.reason,credentials_exposed:false} satisfies SubscriptionAuthFlowView;
-    const abort=new AbortController(),entry={view:{client_id:id,flow,state:'starting',reason:'official_cli_starting',credentials_exposed:false} as SubscriptionAuthFlowView,abort,output:'',binding:clientBinding(id,environment,this.runner,false)};
+    const abort=new AbortController(),entry={view:{client_id:id,flow,state:'starting',reason:'official_cli_starting',credentials_exposed:false} as SubscriptionAuthFlowView,abort,output:'',binding:clientBinding(id,environment,this.runner,false),write:undefined as ((text:string)=>void)|undefined};
     this.active.set(id,entry);
     const currentEntry=()=>{this.view(id);return !this.closed&&!abort.signal.aborted&&this.active.get(id)===entry;};
     const observe=(text:string)=>{
@@ -227,7 +239,7 @@ export class SubscriptionAuthFlowController {
       entry.view={client_id:id,flow,state:'waiting',reason:flow==='device'?'waiting_for_device_confirmation':'waiting_for_browser_confirmation',...artifacts,credentials_exposed:false};
     };
     invalidateClient(id,this.runner);
-    void Promise.resolve().then(()=>{requireCondition(currentEntry(),'CLIENT_LOGIN_CANCELLED');return this.runner.run({executable:clientExecutable(id,environment),args,timeout_ms:10*60_000,signal:abort.signal,...(id==='cursor'?{login_browser:'ui' as const}:{}),onStdout:observe,onStderr:observe});}).then(async result=>{
+    void Promise.resolve().then(()=>{requireCondition(currentEntry(),'CLIENT_LOGIN_CANCELLED');return this.runner.run({executable:clientExecutable(id,environment),args,timeout_ms:10*60_000,signal:abort.signal,...(id==='claude'?{stdin_open:(write:(text:string)=>void)=>{entry.write=write;}}:{}),...(id==='cursor'?{login_browser:'ui' as const}:{}),onStdout:observe,onStderr:observe});}).then(async result=>{
       if(!currentEntry())return;
       if(result.code!==0){entry.view={client_id:id,flow,state:'failed',reason:'official_cli_login_failed',credentials_exposed:false};return;}
       invalidateClient(id,this.runner);

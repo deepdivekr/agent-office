@@ -203,8 +203,10 @@ export async function runClient(request:{client:RunClient;model:string|null;effo
   const result=await runner.run({executable:request.windows?.executable??executable(request.client),args:clientRunArgs({id:request.client,model:request.model,effort:request.effort},request.folder,request.session,request.windows?false:codexHasOffice(),request.servers),cwd:request.windows?.cwd??request.folder,stdin:request.prompt,timeout_ms:request.timeout_ms??7_200_000,signal:request.signal,env:clientRunEnvironment(),keep_stdout:false,output_limit_bytes:8_388_608,onStdout:observe});
   observe('\n');
   const completed=result.code===0&&state.done&&!state.turnFailed;
+  // The client's own error event names the failure; its stderr is read only when there is none (clean-install check
+  // 2026-10-12: Codex's "Selected model is at capacity" with its stderr read as an expired login).
   const failure=`${state.failure}\n${result.stderr.slice(-4000)}`,missing=Boolean(request.session?.resume)&&/no (?:conversation|session|thread) found|(?:session|conversation|thread)[^\n]{0,100}(?:not found|does not exist)/iu.test(failure);
-  return {session_id:state.session,final_message:state.final,completed,reason:completed?null:missing?'CLIENT_NATIVE_SESSION_MISSING':`CLIENT_${classifyClientFailure(failure).toUpperCase()}`,counts:state.counts};
+  return {session_id:state.session,final_message:state.final,completed,reason:completed?null:missing?'CLIENT_NATIVE_SESSION_MISSING':`CLIENT_${classifyClientFailure(state.failure&&state.failure!=='turn failed'?state.failure:failure).toUpperCase()}`,counts:state.counts};
 }
 
 const mediaTypes:Record<string,string>={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf','.md':'text/markdown','.txt':'text/plain','.csv':'text/csv','.json':'application/json','.html':'text/html','.mp4':'video/mp4','.mp3':'audio/mpeg','.zip':'application/zip','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation'};

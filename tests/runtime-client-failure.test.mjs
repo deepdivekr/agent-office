@@ -124,3 +124,18 @@ test('a Claude design call that fails with a passing error is classified as a pr
   await assert.rejects(model.call('design','Choose.',{work_id:'work-1',run_id:'run-1'},schema),/^Error: STRUCTURED_MODEL_UNAVAILABLE$/u);
   assert.deepEqual(model.calls.map(call=>[call.provider,call.failure_kind]),[['claude','provider_unavailable']]);
 });
+
+// Clean-install check (2026-10-12): Codex ended a first Work with "Selected model is at capacity" and the Work showed
+// "sign-in needed". The client's own error event decides; an overloaded model is an outage to wait out.
+test('runtime a Codex run that ends at model capacity waits for the provider instead of asking for a new sign-in',async()=>{
+  const {enableClientRun,disableClientRun,runClient}=await import('../dist/work/client-run.js');
+  assert.equal(classifyClientFailure('Selected model is at capacity. Please try a different model.'),'provider_unavailable');
+  assert.equal(classifyClientFailure('codex_error_info: server_overloaded'),'provider_unavailable');
+  const folder=await mkdtemp(join(tmpdir(),'capacity-'));
+  const lines=[{type:'thread.started',thread_id:'t1'},{type:'turn.started'},{type:'error',message:'Selected model is at capacity. Please try a different model.'},{type:'turn.failed',error:{message:'Selected model is at capacity. Please try a different model.'}}].map(JSON.stringify).join('\n')+'\n';
+  enableClientRun({executable:()=>process.execPath,servers:async()=>[],runner:{run:async request=>{request.onStdout?.(lines);return {code:1,stdout:lines,stderr:'Reading additional input from stdin...\nWARN auth: token refresh failed, using the cached session\n'};}}});
+  try{
+    const outcome=await runClient({client:'codex',model:null,effort:null,folder,prompt:'p',session:null,signal:new AbortController().signal,onSession(){},onEvent(){}});
+    assert.equal(outcome.completed,false);assert.equal(outcome.reason,'CLIENT_PROVIDER_UNAVAILABLE');
+  }finally{disableClientRun();await rm(folder,{recursive:true,force:true});}
+});
