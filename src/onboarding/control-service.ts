@@ -8,6 +8,10 @@ import {loadHostConfig,type HostConfig} from '../interface/config.js';
 import {shortControlUrl} from './control-address.js';
 import type {ControlCenterServer} from '../observability/control-center.js';
 
+/** The environment variable a restarted Control Center reads its previous address from (then removes). */
+export const PREVIOUS_CONTROL_URL='AGENT_OFFICE_PREVIOUS_CONTROL_URL';
+/** How a Control Center process starts: the config in its arguments, the previous address only in its environment. */
+export function controlServiceLaunch(entry:string,config:string,previous?:string,environment:NodeJS.ProcessEnv=process.env){return {args:[entry,config],env:{...environment,...(previous?{[PREVIOUS_CONTROL_URL]:previous}:{})}};}
 export function validControlUrl(value:unknown):value is string{try{const url=new URL(String(value));return url.protocol==='http:'&&url.hostname==='127.0.0.1'&&Boolean(url.port)&&/^\/[a-f0-9]{48}\/$/u.test(url.pathname)&&!url.username&&!url.password&&!url.search&&!url.hash;}catch{return false;}}
 type HostCommandResult={code:number|null;stdout:string};
 function runWindowsProbe(script:string):Promise<HostCommandResult>{
@@ -185,7 +189,9 @@ export async function ensureControlService(root:string,options:ControlServiceSta
   let child:ChildProcess|undefined,startFailure:unknown,lockReleased=false;
   try{
     const entry=fileURLToPath(new URL('./control-service-entry.js',import.meta.url));
-    child=(options.spawnChild??((entry,config,previous)=>spawn(process.execPath,[entry,config,...(previous?[previous]:[])],{detached:true,stdio:['ignore','ignore','ignore','ipc'],windowsHide:true,shell:false})))(entry,paths.runtimeConfig,prior?.url);
+    // The previous address carries the capability: it goes in the environment, which only this user can read, not in the
+    // arguments every local account can list (security review 2026-10-13).
+    child=(options.spawnChild??((entry,config,previous)=>{const launch=controlServiceLaunch(entry,config,previous);return spawn(process.execPath,launch.args,{detached:true,stdio:['ignore','ignore','ignore','ipc'],windowsHide:true,shell:false,env:launch.env});}))(entry,paths.runtimeConfig,prior?.url);
     const owned=child;
     const record=await new Promise<ControlServiceRecord>((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('CONTROL_CENTER_START_TIMEOUT')),30_000);owned.once('error',()=>{clearTimeout(timer);reject(Error('CONTROL_CENTER_START_FAILED'));});owned.once('exit',()=>{clearTimeout(timer);reject(Error('CONTROL_CENTER_START_FAILED'));});owned.once('message',message=>{const value=message as ControlServiceRecord&{start_error?:unknown};if(value?.start_error==='CONTROL_CENTER_WINDOWS_UNREACHABLE'){clearTimeout(timer);reject(Error(value.start_error));return;}if(!value||value.pid!==owned.pid||!validControlUrl(value.url)||value.config!==paths.runtimeConfig){clearTimeout(timer);reject(Error('CONTROL_CENTER_START_FAILED'));return;}clearTimeout(timer);resolve(value);});});
     await (options.publishRecord??publishControlServiceRecord)(recordPath,record);

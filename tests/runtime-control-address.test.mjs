@@ -130,3 +130,13 @@ test('connect opens the Control Center in the browser for the first setup or whe
   assert.match(controlOpenTarget(url,true),/:4600\/a{48}\/settings\?welcome=1$/u);assert.match(controlOpenTarget(url),/\/settings$/u);
   assert.throws(()=>controlOpenTarget(url+'settings?welcome=1'),/CONTROL_CENTER_URL_INVALID/u);
 });
+
+// Security review 2026-10-13: a restart passed the previous address, with its capability, as an argument that every
+// local account can read in the process list. It goes in the environment, readable by this user only.
+test('a restarted Control Center gets its previous address in the environment, not in its arguments',async()=>{
+  const {controlServiceLaunch,PREVIOUS_CONTROL_URL}=await import('../dist/onboarding/control-service.js');
+  const previous='http://127.0.0.1:4600/'+'b'.repeat(48)+'/',launch=controlServiceLaunch('/entry.js','/config.json',previous,{PATH:'/usr/bin'});
+  assert.deepEqual(launch.args,['/entry.js','/config.json']);assert.equal(launch.args.join(' ').includes('b'.repeat(48)),false);
+  assert.equal(launch.env[PREVIOUS_CONTROL_URL],previous);assert.equal(launch.env.PATH,'/usr/bin');
+  assert.equal(controlServiceLaunch('/entry.js','/config.json',undefined,{}).env[PREVIOUS_CONTROL_URL],undefined);
+});
