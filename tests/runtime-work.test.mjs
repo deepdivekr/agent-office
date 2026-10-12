@@ -74,6 +74,10 @@ test('the planner receives the owner\'s standing instructions and skills when a 
   enableOwnerEnvironment(()=>owner);t.after(()=>disableOwnerEnvironment());
   await x.api.call('runtime_work_start',{request_id:'owner-env-on',prompt:'환경과 함께 등록'});
   assert.deepEqual(inputs.at(-1).owner_environment,owner);assert.match(inputs.at(-1).host_execution_facts.owner_environment,/Neither grants a tool, a permission or a fact/u);
+  // An API planner may be another provider: the owner's files stay with their own apps (security review 2026-10-13).
+  const {saveModelSettings,modelSettingsPath}=await import('../dist/onboarding/model-settings.js');
+  saveModelSettings(modelSettingsPath(x.config),{revision:0,onboarding_step:2,selection:{mode:'api',client:'codex',client_models:{codex:null,claude:null},api_provider:'openai',api_model:'gpt-x',api_base_url:'',reasoning:'low',jev:'off'},api_action:'replace',api_key:'fixture-key-never-sent-to-provider'},{});
+  await x.api.call('runtime_work_start',{request_id:'owner-env-api',prompt:'API로 등록'});assert.equal(inputs.at(-1).owner_environment,undefined);
 });
 test('the planner is told where results already go and never asks for a recipient',async t=>{
   const {WorkRuntime}=await import('../dist/work/runtime.js');

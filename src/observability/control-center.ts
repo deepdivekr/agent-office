@@ -6,7 +6,7 @@ import {dirname,join} from 'node:path';
 import {pruneWorkFolders} from '../work/storage.js';
 import {createReadStream} from 'node:fs';
 import {inlineType} from '../work/artifact-kind.js';
-import {randomBytes,randomUUID} from 'node:crypto';
+import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {PackStore,type RuntimeActivity} from '../packs/store.js';
 import {workAutonomy,workDelegation,workModelDataApproved,type HostConfig} from '../interface/config.js';
@@ -192,10 +192,12 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     // The app icon carries nothing private, and a phone fetches it without the page's cookie when it adds Office to its home screen.
     const icon=({'/icon-180.png':'icon-180.png','/icon-512.png':'icon-512.png','/apple-touch-icon.png':'icon-180.png','/apple-touch-icon-precomposed.png':'icon-180.png'} as Record<string,string>)[url.pathname];
     if(icon&&await serveUiAsset(request,response,icon))return;
-    if(url.pathname.startsWith(base)){suffix=url.pathname.slice(base.length);
+    // The capability is compared in constant time (security review 2026-10-13).
+    const sameToken=(value:string|undefined)=>typeof value==='string'&&value.length===token.length&&timingSafeEqual(Buffer.from(value),Buffer.from(token));
+    if(sameToken(url.pathname.slice(1,1+token.length))&&url.pathname.charAt(token.length+1)==='/'){suffix=url.pathname.slice(base.length);
       // A page opened through the capability path on the short host or a tailnet name keeps the token in a host-only cookie and continues at the short address.
       if((requestHost===shortHost||onTailnet)&&request.method==='GET'&&!/[/.]/u.test(suffix)&&String(request.headers.accept??'').includes('text/html')){response.writeHead(303,{'set-cookie':`${CAPABILITY_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict${onTailnet?'; Secure':''}`,location:`/${suffix}${url.search}`,'cache-control':'no-store'});response.end();return;}
-    }else if((requestHost===shortHost||onTailnet)&&cookieValue(request.headers.cookie,CAPABILITY_COOKIE)===token)suffix=url.pathname.slice(1);
+    }else if((requestHost===shortHost||onTailnet)&&sameToken(cookieValue(request.headers.cookie,CAPABILITY_COOKIE)))suffix=url.pathname.slice(1);
     else{reply(response,404,requestHost===shortHost||onTailnet?'not found. Open the Control Center with: agent-office connect':'not found');return;}
     if(settings.maintenanceRunning&&['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix)){reply(response,503,JSON.stringify({error:'CLI_UPDATE_IN_PROGRESS'}),'application/json; charset=utf-8');return;}
     const managementAction=request.method==='POST'||request.method==='GET'&&(['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix));
@@ -328,6 +330,8 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       }catch{reply(response,409,JSON.stringify({error:'WORK_HIDE_FAILED'}),'application/json; charset=utf-8');}return;
     }
     if(suffix==='work/client/check'){
+      // It can start the owner's MCP servers: only the Office page asks it (security review 2026-10-13).
+      if(request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||request.headers['sec-fetch-site']==='same-site'){reply(response,403,'forbidden');return;}
       const id=url.searchParams.get('id')??'',to=url.searchParams.get('client');
       if(!id||id.length>128||(to!=='codex'&&to!=='claude')){reply(response,400,'work id and client required');return;}
       try{reply(response,200,JSON.stringify(await clientHandoffCheck(store,config.project.id,id,to)),'application/json; charset=utf-8');}
