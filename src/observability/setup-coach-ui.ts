@@ -22,9 +22,10 @@ function target(){
   const panel=document.getElementById('step-'+step);if(!panel||panel.hidden)return null;
   if(step===0){
     const install=pick(panel,'.client button',/^(설치|Install)/),login=pick(panel,'.client button',/^(로그인|Sign in)/),connect=pick(panel,'.client button.primary',/^(연결|Connect)/);
+    // Work runs on the WSL app, so it is installed and signed in before any connect (clean-install check, 2026-10-12)
+    if(install&&!(bootstrapState&&(bootstrapState.clients||[]).some(c=>(c.id==='codex'||c.id==='claude')&&c.installed)))return [install,L('먼저 AI 앱 하나를 설치해요. Claude Code나 Codex 중 쓰는 쪽이면 돼요.','Install one AI app first: Claude Code or Codex, whichever you use.')];
+    if(login&&!(bootstrapState&&(bootstrapState.connections||[]).some(c=>c.status==='ready')))return [login,L('이 앱에 로그인하세요. 업무는 이 계정의 구독으로 실행돼요.','Sign in to this app. Work runs on this account’s subscription.')];
     if(connect)return [connect,L('Agent Office를 이 AI 앱에 연결해요. 앱의 MCP 목록에 등록되고, 앱 설정은 그대로예요.','Connect Agent Office to this AI app. It is added to the app’s MCP list; the app’s own settings stay as they are.')];
-    if(login)return [login,L('이 앱에 로그인하세요. 업무는 이 계정의 구독으로 실행돼요.','Sign in to this app. Work runs on this account’s subscription.')];
-    if(install&&!(mcpState&&mcpState.registered_count))return [install,L('먼저 AI 앱 하나를 설치해요. Claude Code나 Codex 중 쓰는 쪽이면 돼요.','Install one AI app first: Claude Code or Codex, whichever you use.')];
     const next=document.getElementById('mcp-next');if(visible(next))return [next,L('연결됐어요. 다음 단계로 가세요.','Connected. Go on to the next step.')];
     return null;
   }
@@ -69,6 +70,7 @@ document.addEventListener('click',e=>{if(e.target.closest('[data-step],[data-nex
 const appReady=()=>Boolean(mcpState&&mcpState.registered_count)&&Boolean(bootstrapState&&(bootstrapState.connections||[]).some(c=>c.status==='ready'));
 // only the first-run address (?welcome=1) moves the page; a link to a step (settings#browsers) is kept
 const start=()=>{if(started||off||!initialized)return;started=true;if(moved||!welcome)return;if(!appReady()&&step!==0)void action(()=>show(0));};
-const wait=setInterval(()=>{if(initialized){clearInterval(wait);start();later();}},200);
+// after the settings page has shown its first step (busy), or its own choice would land after the guide's
+const wait=setInterval(()=>{if(initialized&&!busy){clearInterval(wait);start();later();}},200);
 window.officeCoach={render};later();
 })();`;

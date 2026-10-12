@@ -43,3 +43,36 @@ test('runtime fixture the first-run guide lights the next action, starting with 
   assert.equal(await page.locator('.coach-bubble').count(),0,'dismissed stays off without ?welcome=1');
   assert.deepEqual(errors,[]);
 });
+
+// Clean-install check (2026-10-12): connect approves the computer itself, so a fresh install has no app registered,
+// the computer connected and onboarding_step 2. Settings opened at Work defaults and asked for a model of an app
+// that was not installed yet.
+test('runtime fixture a fresh install opens settings at the AI app step',async t=>{
+  const json=(res,value)=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
+  const settings={revision:0,configured:false,onboarding_step:2,selection:{mode:'subscription',client:'auto',client_models:{},api_provider:'openai',api_model:'',api_base_url:'',reasoning:'low',jev:'off'},computer:{connected:true},work_model_data:{editable:true,approved:false}};
+  const mcp={agent_driver:{installed:true},clients:[{id:'codex',registration:'not_registered',automatic:true}],registered_count:0,windows_bridge:null};
+  const bootstrap={clients:[{id:'codex',label:'Codex',installed:false,managed_install:true}],connections:[{id:'codex',status:'unavailable',supported_login_flows:['device'],connection:{client_id:'codex',state:'idle'}}]};
+  const server=createServer((req,res)=>{
+    const url=new URL(req.url,'http://127.0.0.1');
+    if(url.pathname==='/settings'){res.writeHead(200,{'content-type':'text/html'});res.end(settingsHtml('fixture'));return;}
+    if(url.pathname==='/settings/activity'){res.writeHead(204);res.end();return;}
+    if(url.pathname==='/settings/status')return json(res,settings);
+    if(url.pathname==='/settings/mcp')return json(res,mcp);
+    if(url.pathname==='/settings/bootstrap')return json(res,bootstrap);
+    if(url.pathname==='/settings/mcp/check')return json(res,{mcp,bootstrap});
+    if(url.pathname==='/delivery/status')return json(res,{revision:0,targets:[],default_target_ids:['app']});
+    json(res,{});
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const browser=await chromium.launch({headless:true});
+  t.after(async()=>{await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+  // and a Korean browser with no saved choice reads Korean (the served /^ko\b/ had lost its backslash)
+  const page=await browser.newPage({viewport:{width:1440,height:900},locale:'ko-KR'});
+  await page.goto('http://127.0.0.1:'+server.address().port+'/settings?welcome=1');
+  await page.locator('.coach-bubble').waitFor();await page.waitForTimeout(600);
+  assert.equal(await page.locator('#step-0').isVisible(),true);assert.equal(await page.locator('#step-2').isVisible(),false);
+  assert.match(await page.locator('.coach-bubble').innerText(),/^1 \/ 5/u);
+  assert.equal(await page.evaluate(()=>document.documentElement.lang),'ko');
+  // nothing installed: install comes first, even where the Windows side already has the app to connect
+  assert.match(await page.locator('.coach-focus').innerText(),/^설치$/u);
+});

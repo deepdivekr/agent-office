@@ -55,6 +55,38 @@ test('runtime official auth flow exposes only allowlisted device URL and one-tim
   assert.equal(controller.view('codex').state,'completed');assert.equal(controller.view('codex').reason,'client_reported_ready');controller.close();
 });
 
+// Clean-install check (2026-10-12): the fixtures above were written by hand and passed while the real CLIs left the
+// owner without a code (Codex 0.162 prints it on the next line) or a link (Claude Code 2.1.296 moved to claude.com).
+test('runtime official sign-in reads the code and link the current Codex and Claude Code CLIs print',async()=>{
+  const codexOut='\r\nWelcome to Codex [v\u001b[90m0.162.1\u001b[0m]\r\n\u001b[90mOpenAI\'s command-line coding agent\u001b[0m\r\n\r\nFollow these steps to sign in with ChatGPT using device code authorization:\r\n\r\n1. Open this link in your browser and sign in to your account\r\n   \u001b[94mhttps://auth.openai.com/codex/device\u001b[0m\r\n\r\n2. Enter this one-time code \u001b[90m(expires in 15 minutes)\u001b[0m\r\n   \u001b[94mWXYZ-9K8J7\u001b[0m\r\n\r\n\u001b[90mContinue only if you started this login in Codex. If a website or another person gave you this code, cancel.\u001b[0m\r\n';
+  const claudeUrl='https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=user%3Ainference&code_challenge=abc&code_challenge_method=S256&state=xyz';
+  const written=[];let finishClaude;let claudeReady=false;
+  const runner={async run(request){
+    const command=executableId(request)+' '+request.args.join(' ');
+    if(command==='codex login status')return {code:1,stdout:'',stderr:'Not logged in'};
+    if(command==='codex login --device-auth'){assert.equal(request.stdin_open,undefined,'only Claude Code reads a pasted code');request.onStdout?.(codexOut);return new Promise(()=>{});}
+    if(command==='claude auth status')return {code:claudeReady?0:1,stdout:JSON.stringify({loggedIn:claudeReady,authMethod:'claude.ai',apiProvider:'firstParty',subscriptionType:'pro'}),stderr:''};
+    if(command==='claude auth login --claudeai'){
+      request.stdin_open(text=>{written.push(text);claudeReady=true;finishClaude();});
+      request.onStdout?.('Opening browser to sign in…\nIf the browser didn\'t open, visit: '+claudeUrl+'\nPaste code here if prompted > ');
+      return new Promise(resolve=>{finishClaude=()=>resolve({code:0,stdout:'Login successful',stderr:''});});
+    }
+    throw Error('unexpected command '+command);
+  }};
+  const controller=new SubscriptionAuthFlowController(fixtureEnvironment(),runner);
+  const codex=await controller.start('codex','device');
+  assert.equal(codex.device_url,'https://auth.openai.com/codex/device');assert.equal(codex.user_code,'WXYZ-9K8J7');assert.equal(codex.needs_code,undefined);
+  const claude=await controller.start('claude','browser');
+  assert.equal(claude.auth_url,claudeUrl);assert.equal(claude.needs_code,true);
+  assert.throws(()=>controller.submitCode('codex','abcdefgh12'),/CLIENT_LOGIN_CODE_NOT_EXPECTED/u);
+  assert.throws(()=>controller.submitCode('claude','bad code\nrm -rf'),/CLIENT_LOGIN_CODE_INVALID/u);
+  controller.submitCode('claude','AbC123_def-456#state789');
+  assert.deepEqual(written,['AbC123_def-456#state789\n']);
+  await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(controller.view('claude').state,'completed');assert.equal(JSON.stringify(controller.view('claude')).includes('AbC123'),false);
+  controller.close();
+});
+
 test('runtime status probe distinguishes an expired client session even when the official status command exits nonzero',async()=>{
   const status=await probeSubscriptionClient('codex',fixtureEnvironment(), {async run(){return {code:1,stdout:'',stderr:'Your session expired. Run codex login again for private@example.test.'};}});
   assert.deepEqual(status,{id:'codex',status:'expired',auth:'unknown',structured_bridge:true,reason:'client_reported_expired'});

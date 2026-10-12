@@ -122,4 +122,8 @@ test('connect opens the Control Center in the browser for the first setup or whe
   assert.equal(shouldOpenControl(['--open'],true,{}),true);
   assert.equal(shouldOpenControl(['--no-open'],false,{}),false);
   assert.equal(shouldOpenControl([],false,{AGENT_OFFICE_NO_OPEN:'1'}),false);
+  // v0.7.0 passed service.url+'settings?welcome=1' to the opener, which accepts the bare address only: every first connect failed.
+  const {controlOpenTarget}=await import('../dist/onboarding/control-service.js'),url='http://127.0.0.1:4600/'+'a'.repeat(48)+'/';
+  assert.match(controlOpenTarget(url,true),/:4600\/a{48}\/settings\?welcome=1$/u);assert.match(controlOpenTarget(url),/\/settings$/u);
+  assert.throws(()=>controlOpenTarget(url+'settings?welcome=1'),/CONTROL_CENTER_URL_INVALID/u);
 });
