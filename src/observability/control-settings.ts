@@ -253,8 +253,9 @@ export class ControlSettings{
         }else if(suffix==='settings/mcp/register'){
           const value=body as {client?:unknown};if(!value||!['codex','claude','opencode','cursor','hermes'].includes(String(value.client))){send(400,{error:'MCP_CLIENT_INVALID'});return true;}
           const name=({codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes'} as const)[value.client as McpRegistrationClient];
-          await this.activity.record('mcp','running',`${name}에 agent-office mcp 등록 요청`);
-          const started=Date.now(),result=await this.mcp.register(value.client as McpRegistrationClient);await this.activity.record('mcp','success',`${name} MCP 등록 완료 · ${((Date.now()-started)/1000).toFixed(1)}초`);send(200,result);
+          await this.activity.record('mcp','running',`${(body as {side?:unknown}).side==='windows'?'Windows ':''}${name}에 agent-office mcp 등록 요청`);
+          const windows=(body as {side?:unknown}).side==='windows';if(windows&&!['codex','claude'].includes(String(value.client))){send(400,{error:'MCP_CLIENT_INVALID'});return true;}
+          const started=Date.now(),result=windows?await this.mcp.registerWindows(value.client as 'codex'|'claude'):await this.mcp.register(value.client as McpRegistrationClient);await this.activity.record('mcp','success',`${name} MCP 등록 완료 · ${((Date.now()-started)/1000).toFixed(1)}초`);send(200,result);
         }else if(suffix==='settings/work-data'){
           const approved=body&&typeof body==='object'?(body as {approved?:unknown}).approved:undefined;
           if(this.connection().kind!=='local'||typeof approved!=='boolean'){send(400,{error:'WORK_DATA_APPROVAL_INVALID'});return true;}

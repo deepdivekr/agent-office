@@ -10,7 +10,6 @@
 [English](README.md) · **한국어** · [v0.6.0 변경 내역](docs/releases/v0.6.0.md)
 
 로컬 MCP 서버이기도 해서 Codex, Claude Code, Cursor, OpenCode, Hermes 같은 MCP 클라이언트가 업무를 넘길 수 있습니다.
-명령 이름은 `agent-office`입니다. 이전 `agent-driver` 명령도 호환용으로 남아 있습니다.
 
 ## 피드: 결과가 모이는 곳
 
