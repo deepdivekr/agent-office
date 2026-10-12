@@ -191,6 +191,8 @@ test('runtime unit supervisor UI uses actual activity for motion, distinguishes 
  context.sample.supervisor.live=false;assert.equal(vm.runInNewContext('liveStageHtml(sample)',context),'');
  context.sample.supervisor={state:'waiting_auth',live:false,reason:'BROWSER_AUTH_REQUIRED',can_pause:false,can_resume:true,can_edit:true};
  const waiting=vm.runInNewContext('supervisorHtml(sample)',context);assert.match(waiting,/Complete authentication in Site sign-in/);assert.doesNotMatch(waiting,/data-busy="true"|data-supervisor-action|[가-힣]/u);
+ context.sample.supervisor={state:'waiting_auth',live:false,reason:'CLIENT_AUTH_EXPIRED',can_pause:false,can_resume:true,can_edit:true};
+ const client=vm.runInNewContext('supervisorHtml(sample)',context);assert.doesNotMatch(client,/Site sign-in/u);assert.match(client,/data-supervisor-action="resume"/u,'an AI app sign-in is renewed in Settings, then the Work runs again from here');
  vm.runInNewContext('renderStageDialog()',context);assert.match(dialog.innerHTML,/data-stage-action="resume"/);
  context.sample.schedule={state:'enabled',owner:'office',next_run_at:'2026-09-30T11:00:00Z',timezone:'Asia/Seoul'};
  const combined=vm.runInNewContext('scheduleHtml(sample)+workResultsHtml(sample)',context);assert.equal((combined.match(/class="panel work-schedule"/gu)||[]).length,1);assert.match(combined,/Asia\/Seoul/);assert.match(combined,/Next run/);
