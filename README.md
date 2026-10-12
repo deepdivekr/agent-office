@@ -88,7 +88,7 @@ bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/age
 
 You can [review the installer](install.sh) first.
 It prepares a dedicated Node.js, dependencies, and Chromium, then opens the Control Center.
-Missing system libraries produce setup instructions; the installer does not run privileged commands.
+If Chromium's system libraries are missing, the installer asks once at the terminal and installs them with sudo; nothing else runs with admin rights, and without a terminal it prints the command instead.
 
 ### Connect in the Control Center
 

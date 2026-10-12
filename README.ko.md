@@ -87,7 +87,7 @@ bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/age
 
 설치 전에 [스크립트](install.sh)를 확인할 수 있습니다.
 설치기는 전용 Node.js·의존성·Chromium을 준비하고 관제센터를 엽니다.
-시스템 라이브러리가 부족하면 필요한 명령을 알려 주고, 관리자 권한은 쓰지 않습니다.
+Chromium에 필요한 시스템 라이브러리가 없으면 터미널에서 한 번 묻고 sudo로 설치합니다. 관리자 권한은 이 설치에만 쓰고, 터미널이 아니면 실행할 명령만 알려 줍니다.
 
 ### 관제센터에서 연결
 
