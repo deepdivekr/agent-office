@@ -31,6 +31,8 @@ const ObservabilityConfigSchema=z.object({
   // Names that reach the Control Center through `tailscale serve`, as the browser sends them (port included).
   // MagicDNS names only: any other name could be pointed at this computer by someone else's DNS.
   tailnet_hosts:z.array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9][a-z0-9-]{0,62})*\.ts\.net(?::\d{1,5})?$/u)).max(4).default([]),
+  // A profile's own fixed port (4601-4699), so its address and bookmark stay the same; the original Office uses 4600.
+  control_port:z.number().int().min(1024).max(65535).optional(),
 }).strict();
 export type ControlSurface=z.infer<typeof VncSurfaceSchema>|z.infer<typeof BrowserSurfaceSchema>;
 export type ObservabilityConfig=z.infer<typeof ObservabilityConfigSchema>;

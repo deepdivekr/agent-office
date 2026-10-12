@@ -113,6 +113,16 @@ Aside·Neo는 따로 설치하고 실행해야 합니다. 관제센터에서 연
 MCP를 직접 등록하려면 `agent-office mcp`를 쓰고, Windows 앱에는 관제센터가 보여 주는 WSL 연결 명령을 씁니다.
 [첫 실행 안내](docs/first-run.md) · [MCP 설정](docs/agent-interface.md)
 
+#### 한 컴퓨터에서 Office 두 개
+
+개인 업무와 회사 업무는 프로필로 나눕니다. 프로필마다 데이터(`~/.agent-office-profiles/<이름>`), 고정 포트(4601~4699), MCP 이름(`agent-office-<이름>`)이 따로 있습니다.
+
+```bash
+~/.local/bin/agent-office --profile work connect
+```
+
+로고 옆에 프로필 이름이 표시되고, 한 Office의 업무가 다른 Office의 업무를 시작하거나 바꾸지 못합니다. 두 Office 모두 내 계정으로 실행되므로 기록과 알림은 나뉘지만 파일 접근까지 나뉘지는 않습니다. 다른 업무가 닿으면 안 되는 회사 데이터는 별도 Windows 계정이나 다른 컴퓨터에서 쓰세요.
+
 ## 어떤 업무를 맡기나요?
 
 > 매일 아침 7시 반에 주요 뉴스 세 가지를 출처와 함께 정리해서 텔레그램으로 보내줘.

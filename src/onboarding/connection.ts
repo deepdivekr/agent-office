@@ -5,6 +5,7 @@ import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,resolve,sep} from 'node:path';
 import {z} from 'zod';
 import {requireCondition} from '../core/contracts.js';
+import {officeProfile,profileRoot} from './profile.js';
 
 export const nonInterferingConnectionMode='non_interfering' as const;
 export const localConnectionState=z.object({
@@ -42,6 +43,7 @@ export function connectionRoot(environment:NodeJS.ProcessEnv=process.env,home=ho
   requireCondition(current===undefined||legacy===undefined||safeRoot(current)===safeRoot(legacy),'CONNECTION_ROOT_CONFLICT');
   const configured=current??legacy;
   if(configured!==undefined)return safeRoot(configured);
+  const profile=officeProfile(environment);if(profile)return safeRoot(profileRoot(home,profile));
   const office=join(home,'.agent-office'),driver=join(home,'.agent-driver');
   const hasState=(root:string)=>existsSync(join(root,'runtime-config.json'))||existsSync(join(root,'connection.json'));
   requireCondition(!(hasState(office)&&hasState(driver)),'CONNECTION_ROOT_AMBIGUOUS');
@@ -65,11 +67,21 @@ export async function approveNonInterferingConnection(root=connectionRoot(),now=
   await writePrivateJson(paths.state,state);return {state,paths};
 }
 /** Prepare only inert host configuration. MCP default still requires separate human connection approval. */
+/** A profile's port: the first of 4601-4699 nothing listens on, chosen once when the profile is made. */
+async function freeProfilePort(){
+  const {createServer}=await import('node:net');
+  for(let port=4601;port<4700;port++){
+    const free=await new Promise<boolean>(resolve=>{const server=createServer();server.once('error',()=>resolve(false));server.listen(port,'127.0.0.1',()=>server.close(()=>resolve(true)));});
+    if(free)return port;
+  }
+  throw Error('PROFILE_PORT_UNAVAILABLE');
+}
 export async function prepareLocalConnection(root=connectionRoot()){
   const paths=localConnectionPaths(root);await mkdir(paths.root,{recursive:true,mode:0o700});await mkdir(paths.workspace,{recursive:true,mode:0o700});await mkdir(paths.data,{recursive:true,mode:0o700});
   // An existing folder keeps the mode it had: Office's own folders are made private every time (security review 2026-10-13).
   for(const folder of [paths.root,paths.workspace,paths.data])await chmod(folder,0o700);
-  const runtimeConfig={schema_version:1,project_id:'agent-driver-local',caller_ref:'local-agent',account_ref:'owner',worktree:'workspace',data_dir:'data',environment:'production',recovery_policy:'auto_resume'};
+  const profile=officeProfile(),port=profile&&!existsSync(paths.runtimeConfig)?await freeProfilePort():null;
+  const runtimeConfig={schema_version:1,project_id:'agent-driver-local',caller_ref:'local-agent',account_ref:'owner',worktree:'workspace',data_dir:'data',environment:'production',recovery_policy:'auto_resume',...(port?{observability:{control_port:port}}:{})};
   try{await writeFile(paths.runtimeConfig,JSON.stringify(runtimeConfig,null,2)+'\n',{mode:0o600,flag:'wx'});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
   return paths;
 }

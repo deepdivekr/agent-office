@@ -1,3 +1,4 @@
+import {profileArgs} from './profile.js';
 import {readFileSync} from 'node:fs';
 import {approveNonInterferingConnection,connectionRoot,localConnectionPaths,readLocalConnection} from './connection.js';
 import {ensureControlService,openControlUrl} from './control-service.js';
@@ -46,7 +47,7 @@ export async function runOnboardingCli(args:readonly string[]){
     if(!readLocalConnection(root)){await approveNonInterferingConnection(root);await appendSetupActivity(root,'runtime','success','기본 실행 모드로 이 컴퓨터를 연결했습니다. 화면과 파일은 건드리지 않습니다.');}
     const opened=shouldOpenControl(flags,setupFinished(root))?await openControlUrl(service.url,!setupFinished(root)):false;
     let tailnet:string[]=[];try{tailnet=JSON.parse(readFileSync(localConnectionPaths(root).runtimeConfig,'utf8')).observability?.tailnet_hosts??[];}catch{/* the Control Center reports a bad config itself */}
-    const summary={status:'control_center_ready',url:service.url+'settings',address:shortControlUrl(service.url).replace(/\/[a-f0-9]{48}\/$/u,'/'),browser_opened:opened,...(tailnet.length?{tailnet_urls:tailnetControlUrls(service.url,tailnet)}:{}),pid:service.pid,reused:service.reused,mcp_command:'agent-office mcp',connection:readLocalConnection(root)?'connected':'awaiting_local_approval'};
+    const summary={status:'control_center_ready',url:service.url+'settings',address:shortControlUrl(service.url).replace(/\/[a-f0-9]{48}\/$/u,'/'),browser_opened:opened,...(tailnet.length?{tailnet_urls:tailnetControlUrls(service.url,tailnet)}:{}),pid:service.pid,reused:service.reused,mcp_command:['agent-office',...profileArgs(),'mcp'].join(' '),connection:readLocalConnection(root)?'connected':'awaiting_local_approval'};
     // A person at a terminal gets the addresses to read and a QR code to scan; a script gets the JSON line.
     console.log(process.stdout.isTTY?connectSummaryText(summary):JSON.stringify(summary));return true;
   }

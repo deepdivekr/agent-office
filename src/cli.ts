@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { resolve, dirname } from 'node:path';
 import { requireCondition } from './core/contracts.js';
-const args=process.argv.slice(2),command=args[0]??'help',options=new Map<string,string>();
+import { takeProfileArgument } from './onboarding/profile.js';
+// `--profile NAME` selects a second Office (its own data, port and MCP name) for every command.
+const args=takeProfileArgument(process.argv.slice(2)),command=args[0]??'help',options=new Map<string,string>();
 // Default stdio is only a bridge to the shared service. Explicit-config stdio
 // remains a bounded compatibility path; neither preloads unrelated commands.
 async function dispatch():Promise<boolean>{

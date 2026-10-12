@@ -114,6 +114,16 @@ To reopen the Control Center, run this in the same Ubuntu environment:
 For manual MCP registration, use `agent-office mcp`. Windows apps use the WSL command shown in the Control Center.
 [First-run guide](docs/first-run.md) · [MCP configuration](docs/agent-interface.md)
 
+#### A second Office on the same computer
+
+Keep personal and business Work apart with a profile. Each profile has its own data (`~/.agent-office-profiles/<name>`), a fixed port of its own (4601–4699) and its own MCP name (`agent-office-<name>`):
+
+```bash
+~/.local/bin/agent-office --profile work connect
+```
+
+The profile's name is shown next to the logo, and a Work in one Office cannot start or change Works in the other. Both run as your account, so a profile separates records and notices, not file access; for business data that other Works must not reach, use a separate Windows account or computer.
+
 ## What can I ask it to do?
 
 > Every morning at 7:30, send me the three main news stories with sources on Telegram.

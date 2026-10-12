@@ -1,3 +1,4 @@
+import {officeMcpName} from '../onboarding/profile.js';
 import {randomUUID} from 'node:crypto';
 import {existsSync,readFileSync} from 'node:fs';
 import {chmod,mkdir,rename,writeFile} from 'node:fs/promises';
@@ -51,9 +52,9 @@ export async function configureHermes(options:HermesIntegrationOptions={}){
   const current=source?parse(source):null;
   requireCondition(current===null||typeof current==='object'&&!Array.isArray(current),'HERMES_CONFIG_INVALID');
   const document=parseDocument(source||'{}\n');requireCondition(document.errors.length===0,'HERMES_CONFIG_INVALID');
-  document.setIn(['mcp_servers','agent-driver'],hermesAgentDriverEntry(command,args));
+  document.setIn(['mcp_servers',officeMcpName()],hermesAgentDriverEntry(command,args));
   await writePrivate(configPath,document.toString({lineWidth:0}));
-  return {status:'configured',config_path:configPath,server:'agent-driver',command,args,tools:HERMES_AGENT_DRIVER_TOOLS.length,sampling:true,elicitation:true,telegram_secret_touched:false,restart_required:true};
+  return {status:'configured',config_path:configPath,server:officeMcpName(),command,args,tools:HERMES_AGENT_DRIVER_TOOLS.length,sampling:true,elicitation:true,telegram_secret_touched:false,restart_required:true};
 }
 
 function envKeys(path:string){
@@ -64,7 +65,7 @@ function envKeys(path:string){
 export function hermesDoctor(home=hermesHome()){
   const root=safeHome(home),configPath=join(root,'config.yaml'),secretPath=join(root,'.env'),keys=envKeys(secretPath);
   let entry:unknown=null;
-  if(existsSync(configPath)){const doc=parse(readFileSync(configPath,'utf8')) as {mcp_servers?:Record<string,unknown>}|null;entry=doc?.mcp_servers?.['agent-driver']??null;}
+  if(existsSync(configPath)){const doc=parse(readFileSync(configPath,'utf8')) as {mcp_servers?:Record<string,unknown>}|null;entry=doc?.mcp_servers?.[officeMcpName()]??null;}
   const valid=entry!==null&&typeof entry==='object'&&!Array.isArray(entry);
   const typed=valid?entry as Partial<HermesMcpEntry>:{};
   const configured=valid&&typed.enabled===true&&typed.sampling?.enabled===true&&typed.elicitation?.enabled===true&&HERMES_AGENT_DRIVER_TOOLS.every(tool=>typed.tools?.include?.includes(tool));

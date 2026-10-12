@@ -1,3 +1,4 @@
+import {officeProfile} from '../onboarding/profile.js';
 /** Shared Control Center chrome in the agent-driver storyboard language: dark ground, mono-first labels, amber cursor accent,
  * one color per decision path (jev amber, llm lilac, code blue, human rose, verified green). No framework or image previews; one locally bundled variable font. */
 const baseUiCss=`@font-face{font-family:"Pretendard Variable";font-style:normal;font-weight:100 900;font-display:swap;src:url("fonts/pretendard-1.3.9.woff2") format("woff2")}\n:root{color-scheme:dark;--bg:#101317;--side:#101317;--panel:#171b21;--raise:#1d222a;--line:#262c35;--line2:#343b46;--text:#e6e8eb;--dim:#8b93a0;--faint:#4a515c;--accent:#F5A524;--accent-ink:#16120a;--ok:#6CC08B;--warn:#E0708A;--err:#ef5b5b;--run:#F5A524;--idle:#7c8491;--llm:#A99BE0;--code:#6FA8DC;--human:#E0708A;--acc-a:rgba(245,165,36,.12);--human-a:rgba(224,112,138,.12);--ok-a:rgba(108,192,139,.12);--r:10px;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,"DejaVu Sans Mono",Menlo,Consolas,"Pretendard Variable",monospace;--sans:"Pretendard Variable","IBM Plex Sans","IBM Plex Sans KR",system-ui,-apple-system,"Segoe UI","Noto Sans KR",sans-serif;font:14px/1.5 var(--sans);color:var(--text);background:var(--bg)}
@@ -18,7 +19,7 @@ label{display:block;margin:12px 0 4px;color:var(--dim);font-size:13px}h1,h2,h3,h
 .lbl{font:500 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
 .app{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:100vh;background:linear-gradient(to right,var(--side) 223px,var(--line) 223px 224px,var(--bg) 224px)}
 .side{background:var(--side);padding:22px 14px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow:auto}
-.brand{display:flex;align-items:center;gap:3px;font:600 19px var(--mono);letter-spacing:-.02em;padding:0 6px;color:var(--text);text-decoration:none}.brand i{display:inline-block;width:8px;height:19px;background:var(--accent)}
+.profile-tag{align-self:center;margin-left:6px;padding:1px 7px;border:1px solid var(--accent);border-radius:999px;font:600 11px var(--mono);color:var(--accent)}.brand{display:flex;align-items:center;gap:3px;font:600 19px var(--mono);letter-spacing:-.02em;padding:0 6px;color:var(--text);text-decoration:none}.brand i{display:inline-block;width:8px;height:19px;background:var(--accent)}
 @media(prefers-reduced-motion:no-preference){.brand i,.caret{animation:ao-blink 1.1s steps(1) infinite}}@keyframes ao-blink{50%{opacity:0}}
 .brand-sub{font:11.5px var(--mono);color:var(--dim);padding:4px 6px 12px}
 .side .sec{font:500 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);padding:14px 8px 6px}
@@ -76,10 +77,12 @@ export const workViewsHtml=`<div class="views" id="work-views"><button type="but
 <a class="nav" href="./?view=hidden" data-view="hidden">숨김<span class="n" data-count="hidden"></span></a>
 </nav><button type="button" class="tabs-arrow" data-tabs-step="1" aria-label="다음 보기" tabindex="-1">›</button></div>`;
 /** Sidebar links are plain anchors so every view is one click away and pages stay independent. */
+/** Which Office this is when a profile runs (owner 2026-10-13: a personal and a business Office side by side). */
+const profileBadge=()=>{try{const profile=officeProfile();return profile?`<span class="profile-tag" data-i18n-skip>${profile}</span>`:'';}catch{return '';}};
 export function sidebarHtml(page:ShellPage){
   const current=(value:ShellPage)=>page===value?' aria-current="page"':'';
   // On a phone Feed and Work are two tabs at the top and the tools move behind the menu button at the top right.
-  return `<aside class="side" aria-label="메뉴"><div class="brand-row"><button type="button" class="nav-back" id="nav-back" aria-label="뒤로" hidden>‹</button><a class="brand" href="./" aria-label="피드">agent-office<i aria-hidden="true"></i></a><button type="button" class="menu-toggle" id="menu-toggle" aria-label="메뉴 열기" aria-expanded="false" aria-controls="side-menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div><div class="brand-sub">로컬 연결 · MCP</div>
+  return `<aside class="side" aria-label="메뉴"><div class="brand-row"><button type="button" class="nav-back" id="nav-back" aria-label="뒤로" hidden>‹</button><a class="brand" href="./" aria-label="피드">agent-office<i aria-hidden="true"></i></a>${profileBadge()}<button type="button" class="menu-toggle" id="menu-toggle" aria-label="메뉴 열기" aria-expanded="false" aria-controls="side-menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div><div class="brand-sub">로컬 연결 · MCP</div>
 <nav class="pages" id="page-tabs" aria-label="화면">
 <a class="nav" href="./" data-view="feed">피드<span class="n" data-count="feed"></span></a>
 <a class="nav" href="./?view=all" data-nav="work">업무<span class="n warn" data-count="work"></span></a>

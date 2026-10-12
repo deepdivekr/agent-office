@@ -5,6 +5,7 @@ import {basename,delimiter,dirname,extname,isAbsolute,join,relative} from 'node:
 import {type PackStore} from '../packs/store.js';
 import {type HostConfig} from '../interface/config.js';
 import {hashJson} from '../taskpack/adaptive-spec.js';
+import {isOfficeMcpName} from '../onboarding/profile.js';
 import {classifyClientFailure} from '../integrations/client-failure.js';
 import {nativeProcessRunner,resolveSubscriptionClientExecutable,type SafeProcessRunner} from '../integrations/subscription-auth.js';
 import {sanitizeCodingReply} from '../coding/reply-safety.js';
@@ -107,16 +108,25 @@ export function clientRunEnvironment(base:NodeJS.ProcessEnv=process.env):NodeJS.
 }
 // A Work's run must not start, run or change Works through Office's own MCP server, which the owner's clients have registered.
 const OFFICE_CONTROL_TOOLS=['runtime_work_start','runtime_work_execute','runtime_work_control'];
-const codexHasOffice=()=>{try{return /^\[mcp_servers\.(?:agent-driver|"agent-driver")\]/mu.test(readFileSync(join(process.env.CODEX_HOME??join(homedir(),'.codex'),'config.toml'),'utf8'));}catch{return false;}};
+/** Every Office's server this client has registered, whichever profile (owner 2026-10-13: a personal and a business
+ * Office on one computer share the client's config, so a Work run in one must not drive the other either). */
+export function officeServerNames(client:RunClient):string[]{
+  try{
+    if(client==='codex'){const text=readFileSync(join(process.env.CODEX_HOME??join(homedir(),'.codex'),'config.toml'),'utf8');
+      return [...new Set([...text.matchAll(/^\[mcp_servers\.(?:"([^"]+)"|([A-Za-z0-9_-]+))\]/gmu)].map(match=>match[1]??match[2]!).filter(isOfficeMcpName))];}
+    const servers=(JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR??homedir(),'.claude.json'),'utf8')) as {mcpServers?:Record<string,unknown>}).mcpServers??{};
+    return Object.keys(servers).filter(isOfficeMcpName);
+  }catch{return [];}
+}
 /** Everything allowed, as when the owner uses the client app: no sandbox and no approval prompts. */
-export function clientRunArgs(choice:Pick<WorkClientChoice,'id'|'model'|'effort'>,folder:string,session:{id:string;resume:boolean}|null,officeRegistered=codexHasOffice(),extra:ClientRunMcpServer[]=[]){
-  const {model,effort}=choice;
+export function clientRunArgs(choice:Pick<WorkClientChoice,'id'|'model'|'effort'>,folder:string,session:{id:string;resume:boolean}|null,offices:boolean|string[]=officeServerNames(choice.id),extra:ClientRunMcpServer[]=[]){
+  const {model,effort}=choice,officeNames=offices===true?['agent-driver']:offices===false?[]:offices;
   if(choice.id==='codex')return ['-C',folder,...(model?['-m',model]:[]),'--dangerously-bypass-approvals-and-sandbox',...(effort?['-c',`model_reasoning_effort=${effort}`]:[]),
     ...extra.flatMap(server=>[...(server.command?['-c',`mcp_servers.${server.id}.command=${JSON.stringify(server.command)}`,'-c',`mcp_servers.${server.id}.args=${JSON.stringify(server.args??[])}`]:['-c',`mcp_servers.${server.id}.url=${JSON.stringify(server.url)}`]),
       ...(server.startup_timeout_sec?['-c',`mcp_servers.${server.id}.startup_timeout_sec=${server.startup_timeout_sec}`]:[]),...(server.tool_timeout_sec?['-c',`mcp_servers.${server.id}.tool_timeout_sec=${server.tool_timeout_sec}`]:[])]),
-    ...(officeRegistered?['-c',`mcp_servers.agent-driver.disabled_tools=${JSON.stringify(OFFICE_CONTROL_TOOLS)}`]:[]),'exec',...(session?.resume?['resume','--json','--skip-git-repo-check',session.id,'-']:['--json','--skip-git-repo-check','-'])];
+    ...officeNames.flatMap(name=>['-c',`mcp_servers.${name}.disabled_tools=${JSON.stringify(OFFICE_CONTROL_TOOLS)}`]),'exec',...(session?.resume?['resume','--json','--skip-git-repo-check',session.id,'-']:['--json','--skip-git-repo-check','-'])];
   return ['-p','--output-format','stream-json','--verbose','--dangerously-skip-permissions',...(model?['--model',model]:[]),...(effort?['--effort',effort]:[]),
-    ...(extra.length?['--mcp-config',JSON.stringify({mcpServers:Object.fromEntries(extra.map(server=>[server.id,server.command?{type:'stdio',command:server.command,args:server.args??[]}:{type:'http',url:server.url}]))})]:[]),'--disallowedTools',OFFICE_CONTROL_TOOLS.map(tool=>`mcp__agent-driver__${tool}`).join(','),...(session?[session.resume?'--resume':'--session-id',session.id]:[])];
+    ...(extra.length?['--mcp-config',JSON.stringify({mcpServers:Object.fromEntries(extra.map(server=>[server.id,server.command?{type:'stdio',command:server.command,args:server.args??[]}:{type:'http',url:server.url}]))})]:[]),'--disallowedTools',[...new Set(['agent-driver',...officeNames])].flatMap(name=>OFFICE_CONTROL_TOOLS.map(tool=>`mcp__${name}__${tool}`)).join(','),...(session?[session.resume?'--resume':'--session-id',session.id]:[])];
 }
 /** Every Work runs on the client chosen at intake (owner 2026-10-10: "Office's own executor must not step in"): drafts,
  * record changes and choices on any site, sealed collections, Works with code checks and custom Pack repeats alike; the
@@ -200,7 +210,7 @@ export async function runClient(request:{client:RunClient;model:string|null;effo
     if(pending.length>8_388_608)throw Error('CLIENT_EVENT_TOO_LARGE');
   };
   if(!request.windows)mkdirSync(request.folder,{recursive:true});
-  const result=await runner.run({executable:request.windows?.executable??executable(request.client),args:clientRunArgs({id:request.client,model:request.model,effort:request.effort},request.folder,request.session,request.windows?false:codexHasOffice(),request.servers),cwd:request.windows?.cwd??request.folder,stdin:request.prompt,timeout_ms:request.timeout_ms??7_200_000,signal:request.signal,env:clientRunEnvironment(),keep_stdout:false,output_limit_bytes:8_388_608,onStdout:observe});
+  const result=await runner.run({executable:request.windows?.executable??executable(request.client),args:clientRunArgs({id:request.client,model:request.model,effort:request.effort},request.folder,request.session,request.windows?false:officeServerNames(request.client),request.servers),cwd:request.windows?.cwd??request.folder,stdin:request.prompt,timeout_ms:request.timeout_ms??7_200_000,signal:request.signal,env:clientRunEnvironment(),keep_stdout:false,output_limit_bytes:8_388_608,onStdout:observe});
   observe('\n');
   const completed=result.code===0&&state.done&&!state.turnFailed;
   // The client's own error event names the failure; its stderr is read only when there is none (clean-install check
