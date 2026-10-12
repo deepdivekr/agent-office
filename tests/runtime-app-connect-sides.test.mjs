@@ -31,7 +31,9 @@ test('runtime fixture the AI app step shows WSL and Windows, connects the chosen
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('http://127.0.0.1:'+server.address().port+'/settings?welcome=1');
+  await page.goto('http://127.0.0.1:'+server.address().port+'/settings');
+  // open the AI app step itself; the guide's own jump is covered by runtime-setup-coach
+  await page.waitForFunction(()=>!document.querySelector('[data-step="0"]')?.disabled);await page.locator('[data-step="0"]').click();
   const codex=page.locator('.client[data-client="codex"]'),claude=page.locator('.client[data-client="claude"]');
   await codex.locator('.side-pick').waitFor();
   assert.deepEqual(await codex.locator('.side-row').allInnerTexts(),['WSL\n연결 안 됨','Windows\n연결 안 됨'].map(s=>s.replace('\n','\t')).map(s=>s.replace('\t','\n')));
