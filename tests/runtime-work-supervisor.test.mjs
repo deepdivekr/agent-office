@@ -305,3 +305,19 @@ test('B6: a run whose checkpoint came from parallel workers continues with the s
   const kept=JSON.parse(db.prepare('SELECT checkpoint FROM office_supervisor WHERE run_id=?').get(runId).checkpoint).observations.map(item=>item.invocation.request_id);
   assert.ok(kept.includes('swarm-runtime_pack_run'));assert.ok(!kept.includes('swarm-unverified_read'),'A worker that was not verified contributes nothing.');
 });
+
+// Clean-install check (2026-10-12): a stopped Work said "Complete authentication in Site login" for an AI app sign-in
+// and had no button to run it again; a new owner could only guess a chat message.
+test('runtime fixture a Work stopped on the AI app sign-in says so and offers Run again',async t=>{
+ const x=await setup(t),server=await startControlCenter(x.config,{workModel:x.model}),browser=await chromium.launch({headless:true});x.cleanup.push(async()=>{await browser.close();await server.close();});
+ const at=new Date().toISOString(),runId=randomUUID(),checkpoint={format:1,work_id:x.work.work_id,run_id:runId,binding:'a'.repeat(64),turn:0,pending:null,observations:[]};
+ x.store.hermesState.prepare('INSERT INTO office_supervisor(run_id,project_id,work_id,work_revision,state,checkpoint,config_hash,model_revision,created_at,updated_at,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(runId,x.config.project.id,x.work.work_id,x.work.revision,'waiting_auth',JSON.stringify(checkpoint),x.config.fingerprint,0,at,at,'CLIENT_AUTH_EXPIRED');
+ const page=await browser.newPage({viewport:{width:1280,height:900}});await page.addInitScript(()=>localStorage.setItem('office-lang','en'));const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+ const posted=[];await page.route('**/work/control',async route=>{posted.push(JSON.parse(route.request().postData()));await route.fulfill({status:200,contentType:'application/json',body:'{}'});});
+ await page.goto(server.url+'?work='+x.work.work_id);
+ const panel=page.locator('.supervisor-control');await panel.waitFor();
+ assert.match(await panel.innerText(),/Sign in to the Work’s AI app again, then resume\./u);assert.match(await panel.innerText(),/Sign in again in Settings › AI apps/u);
+ assert.doesNotMatch(await panel.innerText(),/Site login/u);
+ await panel.getByRole('button',{name:'Run again'}).click();await delay(500);
+ assert.equal(posted.length,1);assert.equal(posted[0].action,'resume');assert.equal(posted[0].work_id,x.work.work_id);assert.deepEqual(errors,[]);
+});

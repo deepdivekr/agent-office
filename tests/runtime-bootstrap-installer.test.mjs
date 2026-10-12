@@ -17,12 +17,14 @@ async function fixtureSource(base,{browser=false}={}){
     await writeFile(join(fake,'package.json'),JSON.stringify({name:'playwright',version:'1.0.0',type:'module',main:'index.js',bin:{playwright:'cli.js'}})+'\n');
     await writeFile(join(fake,'cli.js'),`#!/usr/bin/env node
 import {appendFileSync} from 'node:fs';
-if(process.argv.slice(2).join(' ')!=='install chromium')process.exit(71);
+const args=process.argv.slice(2).join(' ');
+if(args==='install-deps chromium'){appendFileSync(process.env.AGENT_DRIVER_FAKE_BROWSER_MARKER,'deps\\n');appendFileSync(process.env.AGENT_DRIVER_FAKE_BROWSER_MARKER+'.deps','done');process.exit(0);}
+if(args!=='install chromium')process.exit(71);
 appendFileSync(process.env.AGENT_DRIVER_FAKE_BROWSER_MARKER,'install\\n');
 `);await chmod(join(fake,'cli.js'),0o755);
-    await writeFile(join(fake,'index.js'),`import {appendFileSync} from 'node:fs';
+    await writeFile(join(fake,'index.js'),`import {appendFileSync,existsSync} from 'node:fs';
 const record=value=>appendFileSync(process.env.AGENT_DRIVER_FAKE_BROWSER_MARKER,value+'\\n');
-export const chromium={async launch(){record('launch');if(process.env.AGENT_DRIVER_FAKE_BROWSER_FAIL==='1')throw Error('fixture missing host library');return {async newPage(){return {async goto(url){if(!url.startsWith('data:text/html,'))throw Error('unexpected URL');record('goto');},async title(){return 'agent-driver-browser-check';}};},async close(){record('close');}};}};
+export const chromium={async launch(){record('launch');if(process.env.AGENT_DRIVER_FAKE_BROWSER_FAIL==='1'&&!existsSync(process.env.AGENT_DRIVER_FAKE_BROWSER_MARKER+'.deps'))throw Error('fixture missing host library');return {async newPage(){return {async goto(url){if(!url.startsWith('data:text/html,'))throw Error('unexpected URL');record('goto');},async title(){return 'agent-driver-browser-check';}};},async close(){record('close');}};}};
 `);
     must(run('npm',['install','--package-lock-only','--ignore-scripts','--offline','--no-audit','--no-fund'],{cwd:source}));
   }else await writeFile(join(source,'package-lock.json'),JSON.stringify({name:'fixture-agent-driver',version:'1.0.0',lockfileVersion:3,requires:true,packages:{'':{name:'fixture-agent-driver',version:'1.0.0'}}})+'\n');
@@ -32,7 +34,9 @@ export const chromium={async launch(){record('launch');if(process.env.AGENT_DRIV
 }
 async function installEnvironment(base,source){
   const home=join(base,'home'),node=await realpath(process.execPath);await mkdir(home);
-  return {...process.env,HOME:home,AGENT_DRIVER_REPOSITORY_URL:`file://${source}`,AGENT_DRIVER_VERSION:'main',AGENT_DRIVER_ALLOW_LOCAL_FIXTURE:'1',AGENT_DRIVER_INSTALL_DIR:join(home,'.local','share','agent-driver'),AGENT_DRIVER_BIN_DIR:join(home,'.local','bin'),AGENT_DRIVER_RUNTIME_DIR:join(home,'.local','share','agent-driver-runtime'),AGENT_DRIVER_NODE_BIN:node,AGENT_DRIVER_SKIP_BROWSER_INSTALL:'1',AGENT_DRIVER_SKIP_CONNECT:'1'};
+  // The installer speaks Korean for a Korean system and English otherwise; these tests read the Korean lines.
+  const {LC_ALL:_all,LC_MESSAGES:_messages,...inherited}=process.env;
+  return {...inherited,LANG:'ko_KR.UTF-8',HOME:home,AGENT_DRIVER_REPOSITORY_URL:`file://${source}`,AGENT_DRIVER_VERSION:'main',AGENT_DRIVER_ALLOW_LOCAL_FIXTURE:'1',AGENT_DRIVER_INSTALL_DIR:join(home,'.local','share','agent-driver'),AGENT_DRIVER_BIN_DIR:join(home,'.local','bin'),AGENT_DRIVER_RUNTIME_DIR:join(home,'.local','share','agent-driver-runtime'),AGENT_DRIVER_NODE_BIN:node,AGENT_DRIVER_SKIP_BROWSER_INSTALL:'1',AGENT_DRIVER_SKIP_CONNECT:'1'};
 }
 
 test('runtime native bootstrap installs, builds, exposes an absolute wrapper and reruns without user-home or network effects',async t=>{
@@ -89,6 +93,22 @@ test('runtime native bootstrap verifies Chromium launch and keeps system package
   assert.deepEqual((await readFile(marker,'utf8')).trim().split('\n'),['install','launch','install','launch','goto','close']);
 });
 
+// Clean-install check (2026-10-12): a fresh Ubuntu stopped here and asked a new user to run a long command with sudo.
+// At a terminal the installer now asks once and runs it; the answer and the password come from the terminal.
+test('runtime native bootstrap asks at a terminal before installing Chromium system libraries with sudo',async t=>{
+  const base=await mkdtemp(join(tmpdir(),'agent-office-bootstrap-sudo-'));t.after(()=>rm(base,{recursive:true,force:true}));
+  const source=await fixtureSource(base,{browser:true}),environment=await installEnvironment(base,source),marker=join(base,'browser-probe.txt'),sudoLog=join(base,'sudo.txt'),sudo=join(base,'fake-sudo');
+  await writeFile(sudo,`#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(sudoLog)}\n[ "$1" = "--" ] && shift\nexec "$@"\n`);await chmod(sudo,0o755);
+  Object.assign(environment,{AGENT_DRIVER_SKIP_BROWSER_INSTALL:'0',AGENT_DRIVER_FAKE_BROWSER_MARKER:marker,AGENT_DRIVER_FAKE_BROWSER_FAIL:'1',AGENT_DRIVER_SUDO_BIN:sudo,LANG:'C.UTF-8'});
+  const declined=run('script',['-qec',`bash ${installer}`,'/dev/null'],{env:environment,input:'n\n'});
+  assert.notEqual(declined.status,0);assert.match(declined.stdout,/Installing runs this one command with sudo, which installs them with apt: playwright install-deps chromium/u);assert.match(declined.stdout,/Agent Office never sees or keeps it\./u);assert.match(declined.stdout,/Install them now\? \[Y\/n\]/u);assert.match(declined.stdout,/Install stopped: Chromium did not start/u);
+  await assert.rejects(readFile(sudoLog,'utf8'),'declining runs nothing privileged');
+  const accepted=run('script',['-qec',`bash ${installer}`,'/dev/null'],{env:environment,input:'\n'});
+  assert.equal(accepted.status,0,accepted.stdout);assert.match(accepted.stdout,/Installing Chromium's system libraries/u);assert.match(accepted.stdout,/Installed: /u);
+  assert.match(await readFile(sudoLog,'utf8'),/^-- env PATH=.+ \S+\/node \S+playwright\/cli\.js install-deps chromium$/mu);
+  assert.deepEqual((await readFile(marker,'utf8')).trim().split('\n'),['install','launch','install','launch','deps','launch','goto','close']);
+});
+
 test('runtime native bootstrap refuses unmanaged directories and symlink install roots',async t=>{
   const base=await mkdtemp(join(tmpdir(),'agent-driver-bootstrap-refuse-'));t.after(()=>rm(base,{recursive:true,force:true}));const source=await fixtureSource(base),environment=await installEnvironment(base,source);
   await mkdir(environment.AGENT_DRIVER_INSTALL_DIR,{recursive:true});await writeFile(join(environment.AGENT_DRIVER_INSTALL_DIR,'keep.txt'),'user data');
@@ -106,8 +126,11 @@ test('runtime native bootstrap rejects paths outside HOME before creating their 
   await assert.rejects(stat(outside),{code:'ENOENT'});
 });
 
-test('runtime contract bootstrap pins official source and toolchain, verifies Node checksum and never requests sudo or evaluates text',async()=>{
+test('runtime contract bootstrap pins official source and toolchain, verifies Node checksum and runs sudo only after asking at a terminal, and never evaluates text',async()=>{
   const text=await readFile(installer,'utf8'),pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
   assert.match(text,/https:\/\/github\.com\/deepdivekr\/agent-office\.git/u);assert.ok(text.includes('AGENT_DRIVER_VERSION:-v'+pkg.version));assert.match(text,/22\.22\.0/u);assert.match(text,/11\.11\.0/u);assert.match(text,/SHASUMS256\.txt/u);assert.match(text,/sha256sum --check/u);assert.match(text,/playwright install chromium/u);
-  assert.doesNotMatch(text,/\bsudo\b/u);assert.doesNotMatch(text,/\beval\b/u);assert.doesNotMatch(text,/curl[^\n]*\|\s*(?:ba)?sh/u);
+  // The one privileged step is Chromium's system libraries: asked at the terminal first, then sudo for that command only.
+  assert.match(text,/read -r answer <\/dev\/tty[\s\S]*deps_runner=\("\$sudo_bin" --\)[\s\S]*"\$\{deps_runner\[@\]\}" env PATH="\$AGENT_DRIVER_TOOL_PATH" "\$node_bin" "\$deps_cli" install-deps chromium/u);
+  assert.deepEqual(text.split('\n').filter(line=>/^\s*sudo\b|[;&|]\s*sudo\b/u.test(line)),[]);assert.equal((text.match(/\("\$sudo_bin"/gu)??[]).length,1,'sudo runs in one place');
+  assert.doesNotMatch(text,/\beval\b/u);assert.doesNotMatch(text,/curl[^\n]*\|\s*(?:ba)?sh/u);
 });

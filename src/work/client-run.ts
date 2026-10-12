@@ -328,6 +328,9 @@ function initialPrompt(input:ClientRunInput){
     `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}`,
     ...(Object.keys(input.context).length?[`What Office already settled with the owner:\n${JSON.stringify(input.context,null,1)}`]:[]),
     ...windowsInstructions(input.client).map(item=>`The owner's standing instructions for ${clientName(input.client)} on the Windows side of this computer (${item.file}); this run does not load them by itself. Follow them where they apply:\n${item.text}`),
+    // Clean-install check (2026-10-12): with no skill or MCP server, Codex installed pip and Playwright into /tmp on its
+    // own and finished; nothing told it to, and each run installed them again.
+    'If a tool, library or browser the Work needs is missing, install it yourself under your user account, not system-wide, in a place outside the Work folder that later runs can reuse, and keep going. Name what you installed in your final reply.',
     'Nobody answers questions during the run. If only the owner can unblock something (a sign-in, a payment, a decision), stop and say exactly what is needed.',
     officeOwns(input),
     `Also write ${COMPLETION_FILE} in the Work folder: {"checks":[{"id":"<condition id>","met":true|false,"note":"<one line: what shows it, or what is missing>"}]}, one entry per completion condition above. Set met only when your files and reply show it. Office decides completion from this file.`,

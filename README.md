@@ -1,6 +1,6 @@
 # Agent Office
 
-**English** · [한국어](README.ko.md) · [v0.7.1 release notes](docs/releases/v0.7.1.md)
+**English** · [한국어](README.ko.md) · [v0.7.2 release notes](docs/releases/v0.7.2.md)
 
 **Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own app and your own accounts. In Agent Office you see their status, hear when one stops, change instructions and run them again. Their results come together in one feed.
 
@@ -83,12 +83,12 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.7.1/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.7.2/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
 It prepares a dedicated Node.js, dependencies, and Chromium, then opens the Control Center.
-Missing system libraries produce setup instructions; the installer does not run privileged commands.
+If Chromium's system libraries are missing, the installer asks once at the terminal and runs Playwright's `install-deps chromium` with sudo, which installs official Ubuntu packages with apt. sudo reads your password; Agent Office never sees it. Nothing else runs with admin rights, and without a terminal the installer prints the command instead.
 
 ### Connect in the Control Center
 

@@ -78,7 +78,7 @@ test('runtime fixture a Work runs on Codex with the owner settings and full perm
   assert.deepEqual(clientRunArgs({id:'codex',model:null,effort:null},folder,null,true).slice(3,5),['-c','mcp_servers.agent-driver.disabled_tools=["runtime_work_start","runtime_work_execute","runtime_work_control"]'],'a run cannot start Works through Office');
   assert.equal(run.executable,'/fake/codex');assert.equal(run.cwd,folder);assert.equal(run.keep_stdout,false);
   assert.equal(run.env.OPENAI_API_KEY,undefined,'an API key would bill a paid API');assert.equal(run.env.HOME,process.env.HOME);
-  assert.match(run.stdin,/시세 차트 사례 이미지와 짧은 해설을 만들어줘/u);assert.match(run.stdin,/images: 사례 이미지 파일과 해설이 있다/u);
+  assert.match(run.stdin,/시세 차트 사례 이미지와 짧은 해설을 만들어줘/u);assert.match(run.stdin,/If a tool, library or browser the Work needs is missing, install it yourself under your user account, not system-wide/u);assert.match(run.stdin,/images: 사례 이미지 파일과 해설이 있다/u);
   const rows=activity(x);
   assert.ok(rows.some(row=>row.kind==='tool.result'&&row.summary==='shell · exit 0 · echo hi > a.txt'&&row.metadata.status==='succeeded'&&row.metadata.model_provider==='codex'));
   assert.ok(rows.some(row=>row.kind==='tool.result'&&row.summary==='file_change · add explanations.md'));

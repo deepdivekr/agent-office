@@ -382,3 +382,16 @@ test('runtime fixture a Work detail shows its record ledger newest first, search
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   assert.deepEqual(errors,[]);
 });
+
+// Clean-install check (2026-10-12): a run that stopped at an overloaded model, and one paused by a direction, each left
+// their opening line ("I'll make the chart…") as a feed card under the real result.
+test('the feed leaves out a run that stopped or paused before making anything; a reply that needs the owner stays',async t=>{
+  const x=await fixture(t,'feed-interrupted-'),{readFeed}=await import('../dist/observability/work-view.js');
+  const id=x.work('feed-chart','월별 매출 보고서');let n=100;
+  const row=(at,status,verified,text)=>x.store.hermesState.prepare('INSERT INTO office_result VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`,x.config.project.id,id,'run-'+n,'client',0,status,verified?'verified':'unverified','client-output',JSON.stringify({binding_revision:0,summary:text,text,delivery_text:text,completion_verified:verified,artifacts:[],sources:[]}),'x'+n,at);
+  row('2026-10-12T09:00:00.000Z','waiting_auth',false,'막대 그래프와 PDF 보고서를 만들겠습니다.');
+  row('2026-10-12T09:05:00.000Z','paused',false,'막대 그래프와 PDF 보고서를 만들겠습니다.');
+  row('2026-10-12T09:06:00.000Z','awaiting_review',false,'3월 자료가 둘입니다. 어느 쪽을 쓸까요?');
+  await x.result(id,'2026-10-12T09:07:00.000Z','1~6월 매출 요약');
+  assert.deepEqual(readFeed(x.store,x.config,x.results).posts.filter(p=>p.work_id===id).map(p=>p.text.split('\n')[0]),['1~6월 매출 요약','3월 자료가 둘입니다. 어느 쪽을 쓸까요?']);
+});
