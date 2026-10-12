@@ -150,6 +150,8 @@ export class SessionMirror {
   // Office's own Work and analysis folders are already Works; the owner's own sessions are the ones to attach.
   // Sessions in a temporary folder are Office's own short model calls or throwaway runs, not the owner's work.
   private skip=(cwd:string|null)=>Boolean(cwd&&(cwd.startsWith(dirname(this.config.dbPath))||!this.listTemporary&&(cwd.startsWith(tmpdir())||cwd.startsWith('/tmp/'))));
+  /** What the suggestions worker needs to list sessions the way this mirror does, without blocking the server. */
+  suggestionInput(){return {roots:this.roots,skipPrefixes:[dirname(this.config.dbPath),...(this.listTemporary?[]:[tmpdir(),'/tmp/'])],attached:this.store.hermesState.prepare('SELECT session_id FROM office_session_work WHERE project_id=?').all(this.config.project.id).map(r=>String(r.session_id))};}
   list(){
     const attached=new Set(this.store.hermesState.prepare('SELECT session_id FROM office_session_work WHERE project_id=?').all(this.config.project.id).map(r=>String(r.session_id)));
     return listSessions(this.roots,this.skip).map(s=>({client:s.client,id:s.id,cwd:s.cwd,title:s.title,updated_at:s.updated_at,bytes:s.bytes,windows:Boolean(s.windows),attached:attached.has(s.id)}));

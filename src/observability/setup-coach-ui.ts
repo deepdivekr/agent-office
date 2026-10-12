@@ -49,7 +49,7 @@ function render(){
   if(!bubble){bubble=document.createElement('div');bubble.className='coach-bubble';bubble.setAttribute('aria-live','polite');document.body.append(bubble)}
   if(found==='done'){
     if(focused)focused.classList.remove('coach-focus');focused=null;
-    bubble.innerHTML='<span class="coach-step">'+L('설정 끝','Set up')+'</span>'+L('결과는 피드에 모여요. 이제 첫 업무를 한 줄로 맡겨 보세요.','Results gather in the feed. Hand over your first Work in one line.')+'<div class="coach-row"><button type="button" data-coach-off>'+L('안내 끄기','Hide guide')+'</button><a class="primary" href="./">'+L('피드로 가기','Open the feed')+'</a></div>';
+    bubble.innerHTML='<span class="coach-step">'+L('설정 끝','Set up')+'</span>'+L('이 컴퓨터에서 이미 돌고 있는 자동화와 대화를 찾아 드릴게요. 아니면 피드에서 첫 업무를 한 줄로 맡겨 보세요.','Find the automations and conversations already on this computer, or hand over your first Work in one line from the feed.')+'<div class="coach-row"><button type="button" data-coach-off>'+L('안내 끄기','Hide guide')+'</button><a href="./?import=1">'+L('가져올 업무 찾기','Find Works to bring in')+'</a><a class="primary" href="./">'+L('피드로 가기','Open the feed')+'</a></div>';
     bubble.style.left='auto';bubble.style.right='20px';bubble.style.top='auto';bubble.style.bottom='20px';return;
   }
   const [el,text]=found;

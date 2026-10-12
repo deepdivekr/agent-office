@@ -53,6 +53,8 @@ import {WorkSupervisor,supervisorActionSchema,supervisorStatus} from '../work/su
 import {WorkResults,type WorkResult} from '../work/results.js';
 import {createDeliveryConnector} from '../work/delivery-connectors.js';
 import {readWorkThread} from '../work/thread.js';
+import {Worker} from 'node:worker_threads';
+import {discoverHermes} from '../work/hermes-source.js';
 import {WorkDeliverySettings,deliverySettingsUpdateSchema} from '../work/delivery-settings.js';
 import {readWorkIntakeOptions} from '../work/intake-options.js';
 import {z} from 'zod';
@@ -154,6 +156,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   // Each destination with the time a result last went out with its current details.
   const deliveryState=()=>deliverySettings.publicState((id,fingerprint)=>((store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result_delivery'").get()?store.hermesState.prepare("SELECT MAX(updated_at) AS at FROM office_result_delivery WHERE project_id=? AND connector_id=? AND target_fingerprint=? AND status='delivered'").get(config.project.id,id,fingerprint):undefined) as {at:string|null}|undefined)?.at??null);
   const push=new WorkPush(store,config),pushWatcher=new FeedPushWatcher(store,config,push,feedApprovals),serverChat=new ServerChat(store,config,options.sessions??defaultSessionRoots());
+  let suggestionCache:{at:number;value:Promise<unknown>}|null=null;
   const sessionMirror=new SessionMirror(store,config,options.sessions,options.sessions?.temporary??false),addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,(id,text)=>serverNotice(id,text));
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
   const deliverySettings=WorkDeliverySettings.fromConfig(config),results=new WorkResults(store,[],deliverySettings,()=>workDelegation(config).notify);
@@ -339,6 +342,26 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       }catch(error){const code=error instanceof Error&&/^WORK_CLIENT_/u.test(error.message)?error.message:'WORK_CLIENT_CHANGE_FAILED';reply(response,409,JSON.stringify({error:code}),'application/json; charset=utf-8');}return;
     }
     // Sessions the owner started in their own Claude Code or Codex app: list, attach as a Work, continue while idle.
+    // What on this computer could become a Work: read-only and rule-based, shown on this screen only (owner 2026-10-12).
+    if(suffix==='work/suggestions'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'){reply(response,403,'forbidden');return;}
+      try{
+        let hermes:{jobs:Array<{title:string}>;attached:number}|null=null;
+        try{const found=await discoverHermes({}),attached=store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='hermes_work'").get()?Number((store.hermesState.prepare('SELECT count(*) AS n FROM hermes_work WHERE project_id=?').get(config.project.id) as {n:number}).n):0;
+          hermes={jobs:found.candidates.filter(c=>c.kind==='job').map(c=>({title:String(c.title)})),attached};}catch{/* no local Hermes */}
+        const linked=new Set(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_remote_work'").get()?(store.hermesState.prepare('SELECT DISTINCT target_id FROM office_remote_work WHERE project_id=?').all(config.project.id) as Array<{target_id:string}>).map(r=>r.target_id):[]);
+        const open=remoteOffice.targets().filter(t=>!linked.has(t.id)).map(t=>String((t as {label?:unknown}).label??'OpenClaw'));
+        const now=Date.now();
+        if(!suggestionCache||now-suggestionCache.at>120_000){
+          suggestionCache={at:now,value:new Promise((resolve,reject)=>{const worker=new Worker(new URL('../work/suggestions-worker.js',import.meta.url),{workerData:{...sessionMirror.suggestionInput(),hermes,openclaw:open.length?{names:open}:null}});
+            const timer=setTimeout(()=>{void worker.terminate();reject(Error('SUGGESTIONS_TIMEOUT'))},120_000);
+            worker.once('message',value=>{clearTimeout(timer);resolve(value);void worker.terminate()});worker.once('error',error=>{clearTimeout(timer);reject(error)});})};
+          suggestionCache.value.catch(()=>{suggestionCache=null});
+        }
+        reply(response,200,JSON.stringify({suggestions:await suggestionCache.value}),'application/json; charset=utf-8');
+      }catch{reply(response,500,JSON.stringify({error:'SUGGESTIONS_UNAVAILABLE'}),'application/json; charset=utf-8')}return;
+    }
     if(['work/session/list','work/session/attach','work/session/send'].includes(suffix)){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
       if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
