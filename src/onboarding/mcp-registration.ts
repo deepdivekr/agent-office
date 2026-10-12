@@ -1,3 +1,4 @@
+import {officeMcpName,profileArgs} from './profile.js';
 import {randomUUID,createHash} from 'node:crypto';
 import {existsSync,lstatSync,readFileSync} from 'node:fs';
 import {chmod,mkdir,rename,writeFile} from 'node:fs/promises';
@@ -20,7 +21,7 @@ export interface McpClientRegistrationView {id:McpRegistrationClient;installed:b
 export interface WindowsMcpBridge {command:'wsl.exe';args:string[];registration:'manual_unverified';}
 /** The same app installed on the Windows side (owner 2026-10-12: Codex and Claude Code can be on both sides; the owner picks one or both). */
 export interface WindowsClientView {id:'codex'|'claude';installed:boolean;registration:'registered'|'not_registered'|'conflict';}
-export interface McpRegistrationView {agent_driver:{installed:true;mcp_command:'agent-office mcp'};clients:McpClientRegistrationView[];registered_count:number;windows_bridge?:WindowsMcpBridge;windows_clients?:WindowsClientView[];credentials_exposed:false;}
+export interface McpRegistrationView {agent_driver:{installed:true;mcp_command:string};clients:McpClientRegistrationView[];registered_count:number;windows_bridge?:WindowsMcpBridge;windows_clients?:WindowsClientView[];credentials_exposed:false;}
 
 function entrypoint(){return resolve(fileURLToPath(new URL('../cli.js',import.meta.url)));}
 /** Windows desktop MCP clients can launch the same WSL stdio server without a shell or credential copy. */
@@ -29,21 +30,21 @@ export function windowsMcpBridge(environment:NodeJS.ProcessEnv=process.env):Wind
   if(!distro||distro.length>128||/[\u0000-\u001f\u007f]/u.test(distro))return undefined;
   const user=userInfo().username;
   if(!user||user.length>128||/[\u0000-\u001f\u007f]/u.test(user))return undefined;
-  return {command:'wsl.exe',args:['--distribution',distro,'--user',user,'--exec',process.execPath,entrypoint(),'mcp'],registration:'manual_unverified'};
+  return {command:'wsl.exe',args:['--distribution',distro,'--user',user,'--exec',process.execPath,entrypoint(),...profileArgs(),'mcp'],registration:'manual_unverified'};
 }
 function fingerprint(command:string,args:readonly string[]){return createHash('sha256').update(JSON.stringify({command,args})).digest('hex');}
 function privatePath(root:string){return join(localConnectionPaths(root).root,'mcp-registrations.json');}
 function readReceipts(root:string):Receipts{const path=privatePath(root);if(!existsSync(path))return {format:1,registrations:{}};return receiptSchema.parse(JSON.parse(readFileSync(path,'utf8')));}
 async function writeReceipts(root:string,value:Receipts){const path=privatePath(root),temporary=path+'.'+randomUUID()+'.tmp';await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(temporary,JSON.stringify(value,null,2)+'\n',{mode:0o600});await chmod(temporary,0o600);await rename(temporary,path);await chmod(path,0o600);}
 function cursorConfigPath(environment:NodeJS.ProcessEnv){const configured=environment.AGENT_DRIVER_CURSOR_MCP_CONFIG;if(configured!==undefined){requireCondition(isAbsolute(configured),'CURSOR_MCP_CONFIG_ABSOLUTE_REQUIRED');return resolve(configured);}return join(environment.HOME??homedir(),'.cursor','mcp.json');}
-function exactCursorEntry(value:unknown,command:string,args:readonly string[]){if(!value||typeof value!=='object'||Array.isArray(value))return false;const entry=(value as {mcpServers?:Record<string,unknown>}).mcpServers?.['agent-driver'];if(!entry||typeof entry!=='object'||Array.isArray(entry))return false;const typed=entry as {command?:unknown;args?:unknown};return typed.command===command&&Array.isArray(typed.args)&&JSON.stringify(typed.args)===JSON.stringify(args);}
-function cursorRegistration(environment:NodeJS.ProcessEnv,command:string,args:readonly string[]){const path=cursorConfigPath(environment);if(!existsSync(path))return 'not_registered' as const;const stat=lstatSync(path);requireCondition(stat.isFile()&&!stat.isSymbolicLink(),'CURSOR_MCP_CONFIG_UNSAFE');const value=JSON.parse(readFileSync(path,'utf8')) as unknown;if(exactCursorEntry(value,command,args))return 'registered' as const;const existing=value&&typeof value==='object'&&!Array.isArray(value)?(value as {mcpServers?:Record<string,unknown>}).mcpServers?.['agent-driver']:undefined;return existing===undefined?'not_registered' as const:'conflict' as const;}
+function exactCursorEntry(value:unknown,command:string,args:readonly string[]){if(!value||typeof value!=='object'||Array.isArray(value))return false;const entry=(value as {mcpServers?:Record<string,unknown>}).mcpServers?.[officeMcpName()];if(!entry||typeof entry!=='object'||Array.isArray(entry))return false;const typed=entry as {command?:unknown;args?:unknown};return typed.command===command&&Array.isArray(typed.args)&&JSON.stringify(typed.args)===JSON.stringify(args);}
+function cursorRegistration(environment:NodeJS.ProcessEnv,command:string,args:readonly string[]){const path=cursorConfigPath(environment);if(!existsSync(path))return 'not_registered' as const;const stat=lstatSync(path);requireCondition(stat.isFile()&&!stat.isSymbolicLink(),'CURSOR_MCP_CONFIG_UNSAFE');const value=JSON.parse(readFileSync(path,'utf8')) as unknown;if(exactCursorEntry(value,command,args))return 'registered' as const;const existing=value&&typeof value==='object'&&!Array.isArray(value)?(value as {mcpServers?:Record<string,unknown>}).mcpServers?.[officeMcpName()]:undefined;return existing===undefined?'not_registered' as const:'conflict' as const;}
 async function writeCursor(environment:NodeJS.ProcessEnv,command:string,args:readonly string[]){
   const path=cursorConfigPath(environment);let value:Record<string,unknown>={};
   if(existsSync(path)){const stat=lstatSync(path);requireCondition(stat.isFile()&&!stat.isSymbolicLink(),'CURSOR_MCP_CONFIG_UNSAFE');value=JSON.parse(readFileSync(path,'utf8')) as Record<string,unknown>;requireCondition(value&&typeof value==='object'&&!Array.isArray(value),'CURSOR_MCP_CONFIG_INVALID');}
   const servers=value.mcpServers===undefined?{}:value.mcpServers;requireCondition(servers&&typeof servers==='object'&&!Array.isArray(servers),'CURSOR_MCP_CONFIG_INVALID');
-  const current=(servers as Record<string,unknown>)['agent-driver'];requireCondition(current===undefined||exactCursorEntry(value,command,args),'MCP_REGISTRATION_CONFLICT');
-  const next={...value,mcpServers:{...(servers as Record<string,unknown>),'agent-driver':{command,args:[...args]}}},temporary=path+'.'+randomUUID()+'.tmp';await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(temporary,JSON.stringify(next,null,2)+'\n',{mode:0o600});await chmod(temporary,0o600);await rename(temporary,path);await chmod(path,0o600);
+  const current=(servers as Record<string,unknown>)[officeMcpName()];requireCondition(current===undefined||exactCursorEntry(value,command,args),'MCP_REGISTRATION_CONFLICT');
+  const next={...value,mcpServers:{...(servers as Record<string,unknown>),[officeMcpName()]:{command,args:[...args]}}},temporary=path+'.'+randomUUID()+'.tmp';await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(temporary,JSON.stringify(next,null,2)+'\n',{mode:0o600});await chmod(temporary,0o600);await rename(temporary,path);await chmod(path,0o600);
 }
 function installed(id:McpRegistrationClient,environment:NodeJS.ProcessEnv){try{resolveSubscriptionClientExecutable(id,environment);return true;}catch{return false;}}
 function opencodeConfigPath(environment:NodeJS.ProcessEnv){
@@ -59,14 +60,14 @@ function readOpencode(environment:NodeJS.ProcessEnv){
 function opencodeRegistration(environment:NodeJS.ProcessEnv,command:string,args:readonly string[]){
   const {value}=readOpencode(environment),servers=value.mcp;
   requireCondition(servers===undefined||servers&&typeof servers==='object'&&!Array.isArray(servers),'OPENCODE_MCP_CONFIG_INVALID');
-  const entry=(servers as Record<string,unknown>|undefined)?.['agent-driver'];if(entry===undefined)return 'not_registered' as const;
+  const entry=(servers as Record<string,unknown>|undefined)?.[officeMcpName()];if(entry===undefined)return 'not_registered' as const;
   const typed=entry as {type?:unknown;command?:unknown;enabled?:unknown;environment?:unknown};
   return typed?.type==='local'&&JSON.stringify(typed.command)===JSON.stringify([command,...args])&&typed.enabled!==false&&typed.environment===undefined?'registered' as const:'conflict' as const;
 }
 async function writeOpencode(environment:NodeJS.ProcessEnv,command:string,args:readonly string[]){
   requireCondition(opencodeRegistration(environment,command,args)!=='conflict','MCP_REGISTRATION_CONFLICT');
   const {path,value}=readOpencode(environment);const before=existsSync(path)?readFileSync(path,'utf8'):null;
-  const output=JSON.stringify({...value,mcp:{...(value.mcp as Record<string,unknown>|undefined),'agent-driver':{type:'local',command:[command,...args]}}},null,2)+'\n',temporary=path+'.'+randomUUID()+'.tmp';
+  const output=JSON.stringify({...value,mcp:{...(value.mcp as Record<string,unknown>|undefined),[officeMcpName()]:{type:'local',command:[command,...args]}}},null,2)+'\n',temporary=path+'.'+randomUUID()+'.tmp';
   await mkdir(dirname(path),{recursive:true,mode:0o700});
   try{await writeFile(temporary,output,{mode:0o600,flag:'wx'});requireCondition((existsSync(path)?readFileSync(path,'utf8'):null)===before,'MCP_REGISTRATION_CONFLICT');await rename(temporary,path);await chmod(path,0o600);}finally{if(existsSync(temporary)){const {unlink}=await import('node:fs/promises');await unlink(temporary);}}
 }
@@ -84,14 +85,14 @@ function windowsClients(environment:NodeJS.ProcessEnv):WindowsClientView[]|undef
   });
 }
 function runnerArgs(id:'codex'|'claude',command:string,args:readonly string[]){
-  if(id==='codex')return ['mcp','add','agent-driver','--',command,...args];
-  if(id==='claude')return ['mcp','add','--scope','user','agent-driver','--',command,...args];
+  if(id==='codex')return ['mcp','add',officeMcpName(),'--',command,...args];
+  if(id==='claude')return ['mcp','add','--scope','user',officeMcpName(),'--',command,...args];
   throw Error('MCP_CLIENT_INVALID');
 }
 
 /** Registers the absolute Node/CLI entrypoint. No shell is used and client auth stores are never read. */
 export class McpRegistrationController{
-  readonly command=process.execPath;readonly args=[entrypoint(),'mcp'] as const;
+  readonly command=process.execPath;readonly args:readonly string[]=[entrypoint(),...profileArgs(),'mcp'];
   constructor(readonly root:string,readonly environment:NodeJS.ProcessEnv=process.env,readonly runner:SafeProcessRunner=nativeProcessRunner){}
   async view():Promise<McpRegistrationView>{
     const receipts=readReceipts(this.root),signature=fingerprint(this.command,this.args),clients:McpClientRegistrationView[]=[];
@@ -111,13 +112,13 @@ export class McpRegistrationController{
     }
     const windows_bridge=windowsMcpBridge(this.environment);
     const windows_clients=windowsClients(this.environment);
-    return {agent_driver:{installed:true,mcp_command:'agent-office mcp'},clients,registered_count:clients.filter(item=>item.registration==='registered').length+(windows_clients??[]).filter(item=>item.registration==='registered').length,...(windows_bridge?{windows_bridge}:{}),...(windows_clients?{windows_clients}:{}),credentials_exposed:false};
+    return {agent_driver:{installed:true,mcp_command:['agent-office',...profileArgs(),'mcp'].join(' ')},clients,registered_count:clients.filter(item=>item.registration==='registered').length+(windows_clients??[]).filter(item=>item.registration==='registered').length,...(windows_bridge?{windows_bridge}:{}),...(windows_clients?{windows_clients}:{}),credentials_exposed:false};
   }
   /** The client's own agent-driver entry: Office's (this entrypoint, or the agent-office launcher), another program's, or none. */
   private existing(id:'codex'|'claude'):'office'|'other'|null{
     const entry=officeServerEntry(id,this.environment);if(!entry)return null;
     const same=(expected:readonly string[])=>JSON.stringify(entry.args)===JSON.stringify(expected);
-    return entry.command===this.command&&same(this.args)||entry.command!==undefined&&basename(entry.command)==='agent-office'&&same(['mcp'])?'office':'other';
+    return entry.command===this.command&&same(this.args)||entry.command!==undefined&&basename(entry.command)==='agent-office'&&same([...profileArgs(),'mcp'])?'office':'other';
   }
   /** Register Office in the Windows-side app through the wsl.exe bridge, with the app's own `mcp add`. */
   async registerWindows(id:'codex'|'claude'){

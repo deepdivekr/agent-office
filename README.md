@@ -1,6 +1,6 @@
 # Agent Office
 
-**English** · [한국어](README.ko.md) · [v0.7.6 release notes](docs/releases/v0.7.6.md)
+**English** · [한국어](README.ko.md) · [v0.8.0 release notes](docs/releases/v0.8.0.md)
 
 **Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own app and your own accounts. In Agent Office you see their status, hear when one stops, change instructions and run them again. Their results come together in one feed.
 
@@ -83,7 +83,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.7.6/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.0/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
@@ -113,6 +113,16 @@ To reopen the Control Center, run this in the same Ubuntu environment:
 
 For manual MCP registration, use `agent-office mcp`. Windows apps use the WSL command shown in the Control Center.
 [First-run guide](docs/first-run.md) · [MCP configuration](docs/agent-interface.md)
+
+#### A second Office on the same computer
+
+Keep personal and business Work apart with a profile. Each profile has its own data (`~/.agent-office-profiles/<name>`), a fixed port of its own (4601–4699) and its own MCP name (`agent-office-<name>`):
+
+```bash
+~/.local/bin/agent-office --profile work connect
+```
+
+The profile's name is shown next to the logo, and a Work in one Office cannot start or change Works in the other. Both run as your account, so a profile separates records and notices, not file access; for business data that other Works must not reach, use a separate Windows account or computer.
 
 ## What can I ask it to do?
 

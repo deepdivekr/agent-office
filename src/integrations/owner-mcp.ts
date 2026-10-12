@@ -1,3 +1,4 @@
+import {officeMcpName,officeProfile} from '../onboarding/profile.js';
 import {homedir} from 'node:os';
 import {existsSync,readFileSync,statSync} from 'node:fs';
 import {join} from 'node:path';
@@ -96,13 +97,13 @@ function jsonEntries(path:string):ServerEntry[]{
 export function officeServerEntry(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env):{command:string|undefined;args:string[]}|null{
   const home=environment.HOME??homedir();
   const entries=client==='codex'?codexEntries(text(join(environment.CODEX_HOME??join(home,'.codex'),'config.toml'))):jsonEntries(join(environment.CLAUDE_CONFIG_DIR??home,'.claude.json'));
-  const entry=entries.find(item=>item.key==='agent-driver');return entry?{command:entry.command,args:entry.args}:null;
+  const entry=entries.find(item=>item.key===officeMcpName());return entry?{command:entry.command,args:entry.args}:null;
 }
 /** The Windows-side app's agent-office entry (named agent-driver or agent-office), from its own config under the Windows profile. */
 export function windowsOfficeEntry(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env):{command:string|undefined;args:string[]}|null{
   const windows=environmentHomes(environment).find(place=>place.side==='windows');if(!windows)return null;
   const entries=client==='codex'?codexEntries(text(join(windows.home,'.codex','config.toml'))):jsonEntries(join(windows.home,'.claude.json'));
-  const entry=entries.find(item=>item.key==='agent-driver'||item.key==='agent-office');return entry?{command:entry.command,args:entry.args}:null;
+  const entry=entries.find(item=>item.key===officeMcpName()||!officeProfile()&&item.key==='agent-office');return entry?{command:entry.command,args:entry.args}:null;
 }
 const definition=(side:EnvironmentHome['side'])=>(entry:ServerEntry):ServerDefinition=>({id:identity(entry.key),side,disabled:entry.disabled,launch:launchOf(side,entry)});
 export function ownerMcpServers(environment:NodeJS.ProcessEnv=process.env,homes:EnvironmentHome[]=environmentHomes(environment)):ServerDefinition[]{

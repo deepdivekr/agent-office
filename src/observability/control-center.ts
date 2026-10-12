@@ -617,7 +617,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   });
   const bind=(port:number)=>new Promise<void>((resolve,reject)=>{const failed=(error:Error)=>reject(error);server.once('error',failed);server.listen(port,'127.0.0.1',()=>{server.off('error',failed);resolve();});});
   // The fixed default keeps the short address stable across restarts; a taken port falls back to any free one.
-  try{await bind(options.port??DEFAULT_CONTROL_PORT);}catch(error){if(options.port!==undefined||(error as NodeJS.ErrnoException).code!=='EADDRINUSE'){store.stopPresence(config.project.id,presence);store.close();throw error;}await bind(0);}
+  try{await bind(options.port??config.observability?.control_port??DEFAULT_CONTROL_PORT);}catch(error){if(options.port!==undefined||(error as NodeJS.ErrnoException).code!=='EADDRINUSE'){store.stopPresence(config.project.id,presence);store.close();throw error;}await bind(0);}
   const address=server.address();if(address===null||typeof address==='string'){store.stopPresence(config.project.id,presence);store.close();throw Error('CONTROL_CENTER_BIND_FAILED');}host=`127.0.0.1:${address.port}`;shortHost=`${CONTROL_SHORT_HOST}:${address.port}`;hosts=controlHosts(address.port);activateReadySupervisor();
   // An approval nobody holds any more (Office or the MCP service restarted, or it expired unseen) leaves its Work stopped.
   // Each such Work prepares again, once per Office run, so a fresh card reaches the owner; preparing never submits.
