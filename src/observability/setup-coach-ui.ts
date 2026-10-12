@@ -40,7 +40,7 @@ function target(){
       if(act)return [act,why];
     }
     const add=document.querySelector('#site-login-add button');
-    if(wanted&&state==='connected'&&!document.querySelector('#site-login-list .client')&&visible(add))return [add,L('일을 시킬 사이트 주소(예: https://x.com)를 넣고 추가해요. 로그인은 전체 관리에서 Aside로 해요.','Add the address of a site Work will use (for example https://x.com). Sign in with Aside under Manage all.')];
+    if(wanted&&state==='connected'&&!document.querySelector('#site-login-list .client')&&visible(add))return [add,L('일을 시킬 사이트 주소를 넣고 추가해요. 로그인은 전체 관리에서 Aside로 해요.','Add the address of a site Work will use. Sign in with Aside under Manage all.')];
     const n=pick(panel,'[data-next]');return n?[n,L('사이트 로그인은 나중에 해도 돼요. 다음으로 가세요.','Site sign-ins can wait. Go on.')]:null;}
   if(step===2){const n=pick(panel,'[data-save-next],#finish,.actions .primary')||document.getElementById('save-model');return visible(n)?[n,L('업무를 맡을 기본 AI와 모델을 고르고 넘어가요. 업무마다 나중에 바꿀 수 있어요.','Pick the default AI and model, then go on. You can change it per Work later.')]:null;}
   if(step===3){const n=pick(panel,'[data-save-next],#finish,[data-next],.actions .primary');return n?[n,L('Jev는 선택이에요. 그냥 넘어가도 담당 AI가 판단까지 맡아요.','Jev is optional. Skip it and the Work’s AI makes those calls too.')]:null;}

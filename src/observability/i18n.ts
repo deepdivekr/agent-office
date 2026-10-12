@@ -48,7 +48,7 @@ const EN:Record<string,string>={
 '브라우저':'Browser',
 '기본 브라우저 (Playwright)':'Default browser (Playwright)',
 '기본 브라우저는 백그라운드에서 돌아요. 내 브라우저(Aside)를 연결해 두면 기본 브라우저 도구가 실패할 경우 자동으로 라우팅돼요.':'The default browser runs in the background. With your own browser (Aside) connected, Work moves there by itself when the default browser tool fails.',
-'내 브라우저 연결 (Aside · BrowserOS Neo) · 권장':'Connect your own browser (Aside · BrowserOS Neo) · recommended','로그인이 필요한 사이트(X 등)에서도 일을 시킬 건가요?':'Will Work also use sites that need a sign-in (X and the like)?','예, Aside 연결':'Yes, connect Aside','아니요':'No','기본 브라우저 도구가 실패할 경우 자동으로 라우팅돼요.':'When the default browser tool fails, Work moves here by itself.',
+'내 브라우저 연결 (Aside · BrowserOS Neo) · 권장':'Connect your own browser (Aside · BrowserOS Neo) · recommended','로그인이 필요한 사이트에서도 일을 시킬 건가요?':'Will Work also use sites that need a sign-in?','예, Aside 연결':'Yes, connect Aside','아니요':'No','기본 브라우저 도구가 실패할 경우 자동으로 라우팅돼요.':'When the default browser tool fails, Work moves here by itself.',
 '로그인이 필요한 사이트를 미리 등록해 두면 업무가 중간에 멈추지 않아요.':'Register sites that need a sign-in ahead of time so work does not stop midway.',
 '사이트 로그인 관리':'Manage site sign-ins',
 '브라우저 상태 다시 확인':'Check browser status again',
