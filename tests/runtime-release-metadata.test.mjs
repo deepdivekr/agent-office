@@ -16,6 +16,9 @@ test('runtime contract release version, installer, docs and gated publication ag
     assert.doesNotMatch(text,/agent-driver\/v0\.1\.0\/install\.sh/u,path);
   }
   assert.ok((await readFile('docs/releases/'+tag+'.md','utf8')).includes(tag));
+  // Owner 2026-10-13: the README's "What's new" and CHANGELOG.md list each release, as popular repositories keep them.
+  assert.ok((await readFile('CHANGELOG.md','utf8')).includes(`[${tag}](docs/releases/${tag}.md)`),'CHANGELOG.md lists the release');
+  for(const path of ['README.md','README.ko.md'])assert.ok((await readFile(path,'utf8')).includes(`**[${tag}](docs/releases/${tag}.md)**`),path+' What\'s new names the release');
   const workflow=YAML.parse(await readFile('.github/workflows/runtime.yml','utf8'));
   assert.equal(workflow.jobs.release.needs,'runtime');
   assert.equal(workflow.jobs.release.if,"github.event_name == 'push' && github.ref == 'refs/heads/main'");

@@ -1,11 +1,21 @@
 # Agent Office
 
-**English** · [한국어](README.ko.md) · [v0.8.0 release notes](docs/releases/v0.8.0.md)
+[![Release](https://img.shields.io/github/v/release/deepdivekr/agent-office)](https://github.com/deepdivekr/agent-office/releases) [![CI](https://github.com/deepdivekr/agent-office/actions/workflows/runtime.yml/badge.svg?branch=main)](https://github.com/deepdivekr/agent-office/actions/workflows/runtime.yml) [![License](https://img.shields.io/github/license/deepdivekr/agent-office)](LICENSE)
+
+**English** · [한국어](README.ko.md) · [Changelog](CHANGELOG.md)
 
 **Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own app and your own accounts. In Agent Office you see their status, hear when one stops, change instructions and run them again. Their results come together in one feed.
 
 <p align="center"><img src="docs/images/en/hero.gif" width="560" alt="Work scattered across Codex, Claude Code and Hermes comes together on one Agent Office board: a stopped run is flagged and resumed, a new Work runs in Claude Code and its result is delivered"></p>
 <p align="center"><a href="docs/images/en/hero.mp4">Full-quality MP4</a> · <a href="docs/motion/hero">how it is made</a></p>
+
+### What's new
+
+- **[v0.8.0](docs/releases/v0.8.0.md)** · Work profiles · separate ports · several Offices' MCP on one PC
+- **[v0.7.6](docs/releases/v0.7.6.md)** · Security fixes
+- **[v0.7.4](docs/releases/v0.7.4.md)** · Aside recommended · one server alert per check
+
+[All releases](CHANGELOG.md)
 
 Nothing stops silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 

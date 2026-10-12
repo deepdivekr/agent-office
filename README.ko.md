@@ -1,13 +1,23 @@
 # Agent Office
 
+[![Release](https://img.shields.io/github/v/release/deepdivekr/agent-office)](https://github.com/deepdivekr/agent-office/releases) [![CI](https://github.com/deepdivekr/agent-office/actions/workflows/runtime.yml/badge.svg?branch=main)](https://github.com/deepdivekr/agent-office/actions/workflows/runtime.yml) [![License](https://img.shields.io/github/license/deepdivekr/agent-office)](LICENSE)
+
 **Codex, Claude Code, 헤르메스, 스크립트… 여러 곳에 흩어진 봇과 자동화를 한 화면에서 관리합니다.** 실행은 각 앱과 내 계정이 그대로 맡고, Agent Office에서는 상태를 보고, 멈추면 알림을 받고, 지침을 고치고, 다시 실행합니다. 결과는 피드 한 곳에 모입니다.
 
 <p align="center"><img src="docs/images/hero.gif" width="560" alt="Codex, Claude Code, 헤르메스에 흩어진 업무가 Agent Office 보드 한 곳에 모이고, 멈춘 업무는 알림 후 같은 세션으로 이어서 실행되며, 새 업무는 Claude Code에서 실행돼 결과가 전달되는 모습"></p>
 <p align="center"><a href="docs/images/hero.mp4">고화질 MP4</a> · <a href="docs/motion/hero">만드는 방법</a></p>
 
+### 새로 나온 기능
+
+- **[v0.8.0](docs/releases/v0.8.0.md)** · 업무용 프로필 · 포트 분리 · 한 PC에서 MCP 여러 개
+- **[v0.7.6](docs/releases/v0.7.6.md)** · 보안 점검 반영
+- **[v0.7.4](docs/releases/v0.7.4.md)** · Aside 권장 · 서버 알림 묶기
+
+[전체 변경 이력](CHANGELOG.md)
+
 멈춘 업무를 그냥 넘기지 않습니다. *확인 필요*에 올라오고, 메신저를 연결했다면 알림이 갑니다. 새 반복 업무는 한 줄로 맡기면 정해진 때에 실행됩니다.
 
-[English](README.md) · **한국어** · [v0.8.0 변경 내역](docs/releases/v0.8.0.md)
+[English](README.md) · **한국어** · [변경 이력](CHANGELOG.md)
 
 로컬 MCP 서버이기도 해서 Codex, Claude Code, Cursor, OpenCode, Hermes 같은 MCP 클라이언트가 업무를 넘길 수 있습니다.
 
