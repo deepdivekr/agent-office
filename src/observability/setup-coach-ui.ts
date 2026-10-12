@@ -46,7 +46,7 @@ function render(){
   if(!welcome&&state&&state.configured){clear();return}
   const found=target();
   if(found===null){clear();return}
-  if(!bubble){bubble=document.createElement('div');bubble.className='coach-bubble';bubble.setAttribute('role','status');document.body.append(bubble)}
+  if(!bubble){bubble=document.createElement('div');bubble.className='coach-bubble';bubble.setAttribute('aria-live','polite');document.body.append(bubble)}
   if(found==='done'){
     if(focused)focused.classList.remove('coach-focus');focused=null;
     bubble.innerHTML='<span class="coach-step">'+L('설정 끝','Set up')+'</span>'+L('결과는 피드에 모여요. 이제 첫 업무를 한 줄로 맡겨 보세요.','Results gather in the feed. Hand over your first Work in one line.')+'<div class="coach-row"><button type="button" data-coach-off>'+L('안내 끄기','Hide guide')+'</button><a class="primary" href="./">'+L('피드로 가기','Open the feed')+'</a></div>';
@@ -67,7 +67,8 @@ let started=false,moved=false;
 // a step the owner picked is kept: the guide does not pull the page back to the first step
 document.addEventListener('click',e=>{if(e.target.closest('[data-step],[data-next],[data-save-next],#finish'))moved=true;},true);
 const appReady=()=>Boolean(mcpState&&mcpState.registered_count)&&Boolean(bootstrapState&&(bootstrapState.connections||[]).some(c=>c.status==='ready'));
-const start=()=>{if(started||off||!initialized)return;started=true;if(moved)return;if(!welcome&&state&&state.configured)return;if(!appReady()&&step!==0)void action(()=>show(0));};
+// only the first-run address (?welcome=1) moves the page; a link to a step (settings#browsers) is kept
+const start=()=>{if(started||off||!initialized)return;started=true;if(moved||!welcome)return;if(!appReady()&&step!==0)void action(()=>show(0));};
 const wait=setInterval(()=>{if(initialized){clearInterval(wait);start();later();}},200);
 window.officeCoach={render};later();
 })();`;
