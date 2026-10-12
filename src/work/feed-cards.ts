@@ -1,6 +1,6 @@
 import {spawn} from 'node:child_process';
-import {readFileSync} from 'node:fs';
-import {dirname} from 'node:path';
+import {readFileSync,readdirSync,readlinkSync,realpathSync,statSync} from 'node:fs';
+import {dirname,join,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {requireCondition} from '../core/contracts.js';
@@ -56,6 +56,29 @@ export interface AppRun {status:'running'|'done'|'failed';button:string;at:strin
 function init(store:PackStore){store.hermesState.exec(`CREATE TABLE IF NOT EXISTS office_app_approval(project_id TEXT NOT NULL,manifest_sha256 TEXT NOT NULL,command TEXT NOT NULL,approved_at TEXT NOT NULL,PRIMARY KEY(project_id,manifest_sha256));
   CREATE TABLE IF NOT EXISTS office_app_run(project_id TEXT NOT NULL,result_id TEXT NOT NULL,artifact_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(project_id,result_id,artifact_id))`);}
 const has=(store:PackStore,table:string)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name=?").get(table));
+const sha=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
+const codeFile=/\.(?:py|js|mjs|cjs|ts|mts|cts|sh|bash|zsh|rb|pl|php|ps1|psm1|bat|cmd|lua|r|jar)$/iu;
+/**
+ * What an approval covers: the manifest, its folder and every code file under it (scripts by extension, and any file
+ * marked executable), so a later run that edits app.py or copies the manifest elsewhere needs a new approval
+ * (security review 2026-10-13: the approval keyed on the manifest bytes only). Data files the app writes do not count.
+ */
+export function appCode(manifestPath:string,manifestSha256:string){
+  const folder=realpathSync(dirname(manifestPath)),files:Array<{path:string;sha256:string}>=[];let bytes=0;
+  const walk=(dir:string,depth:number)=>{
+    requireCondition(depth<=6,'APP_FOLDER_TOO_DEEP');
+    for(const entry of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)){
+      const full=join(dir,entry.name),path=relative(folder,full);
+      if(entry.isSymbolicLink()){files.push({path,sha256:'link:'+readlinkSync(full)});continue;}
+      if(entry.isDirectory()){if(entry.name!=='__pycache__'&&entry.name!=='.git')walk(full,depth+1);continue;}
+      if(!entry.isFile())continue;const stats=statSync(full);if(!codeFile.test(entry.name)&&!(stats.mode&0o111))continue;
+      bytes+=stats.size;requireCondition(files.length<1000&&bytes<=50*1024*1024,'APP_FOLDER_TOO_LARGE');files.push({path,sha256:sha(readFileSync(full))});
+    }
+  };
+  walk(folder,0);
+  return {folder,scripts:files.map(file=>file.path),key:sha(JSON.stringify({manifest:manifestSha256,folder,files}))};
+}
+/** Approved for this manifest, in this folder, with these code files. */
 export function appApproved(store:PackStore,project:string,sha256:string){return has(store,'office_app_approval')&&Boolean(store.hermesState.prepare('SELECT 1 FROM office_app_approval WHERE project_id=? AND manifest_sha256=?').get(project,sha256));}
 export function lastAppRun(store:PackStore,project:string,resultId:string,artifactId:string):AppRun|null{
   if(!has(store,'office_app_run'))return null;const row=store.hermesState.prepare('SELECT body FROM office_app_run WHERE project_id=? AND result_id=? AND artifact_id=?').get(project,resultId,artifactId) as {body:string}|undefined;
@@ -65,9 +88,10 @@ export function lastAppRun(store:PackStore,project:string,resultId:string,artifa
 }
 const running=new Set<string>();
 
-/** The owner approves this exact manifest (its command and its folder) once; a changed file needs a new approval. */
-export function approveApp(store:PackStore,project:string,sha256:string,manifest:AppManifest){
-  init(store);store.hermesState.prepare('INSERT OR IGNORE INTO office_app_approval VALUES(?,?,?,?)').run(project,sha256,JSON.stringify(manifest.command),new Date().toISOString());
+/** The owner approves this manifest with its folder and code (appCode key) once; any change needs a new approval.
+ * The manifest_sha256 column holds that key; approvals of a manifest alone no longer match anything. */
+export function approveApp(store:PackStore,project:string,key:string,manifest:AppManifest){
+  init(store);store.hermesState.prepare('INSERT OR IGNORE INTO office_app_approval VALUES(?,?,?,?)').run(project,key,JSON.stringify(manifest.command),new Date().toISOString());
 }
 /** Values for the declared inputs only, each checked against its kind; a missing one takes its default. */
 export function appValues(manifest:AppManifest,raw:Record<string,unknown>={}){
@@ -88,7 +112,8 @@ export function appValues(manifest:AppManifest,raw:Record<string,unknown>={}){
  * and/or `table`, or plain text.
  */
 export async function runApp(store:PackStore,project:string,file:{path:string;sha256:string;result_id:string;artifact_id:string},manifest:AppManifest,button:string,inputs:Record<string,unknown>,timeoutMs=120_000){
-  init(store);requireCondition(appApproved(store,project,file.sha256),'APP_NOT_APPROVED');requireCondition(manifest.buttons.some(item=>item.id===button),'APP_BUTTON_UNKNOWN');
+  // Checked again at the press: the code may have changed since the card was shown.
+  init(store);requireCondition(appApproved(store,project,appCode(file.path,file.sha256).key),'APP_NOT_APPROVED');requireCondition(manifest.buttons.some(item=>item.id===button),'APP_BUTTON_UNKNOWN');
   const values=appValues(manifest,inputs),key=`${file.result_id}\0${file.artifact_id}`;requireCondition(!running.has(key),'APP_RUNNING');
   const save=(run:AppRun)=>store.hermesState.prepare('INSERT INTO office_app_run VALUES(?,?,?,?) ON CONFLICT(project_id,result_id,artifact_id) DO UPDATE SET body=excluded.body').run(project,file.result_id,file.artifact_id,JSON.stringify(run));
   const at=new Date().toISOString(),started=Date.now();running.add(key);save({status:'running',button,at,output:null,error:null,elapsed_ms:null});

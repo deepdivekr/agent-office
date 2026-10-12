@@ -222,7 +222,7 @@ test('feed cards: AI app posts and CARD.json files carry checked cards; monitors
 });
 
 test('app cards: a declared command runs in its folder only after the owner approves that exact file; values are checked; output comes back as text and a table',async t=>{
-  const x=await fixture(t,'feed-apps-'),{readFeed}=await import('../dist/observability/work-view.js'),{readAppManifest,approveApp,runApp,appValues}=await import('../dist/work/feed-cards.js'),{writeFile}=await import('node:fs/promises'),{join}=await import('node:path'),{createHash}=await import('node:crypto');
+  const x=await fixture(t,'feed-apps-'),{readFeed}=await import('../dist/observability/work-view.js'),{readAppManifest,approveApp,runApp,appValues,appCode}=await import('../dist/work/feed-cards.js'),{writeFile}=await import('node:fs/promises'),{join}=await import('node:path'),{createHash}=await import('node:crypto');
   const manifest={title:'요금 확인',command:['node','tool.mjs'],inputs:[{id:'period',label:'기간',type:'select',options:[{value:'7',label:'최근 7일'},{value:'30',label:'최근 30일'}]},{id:'only',label:'변동만',type:'toggle',default:true}],buttons:[{id:'run',label:'실행'}]};
   const tool="let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const {button,inputs}=JSON.parse(s);console.log(JSON.stringify({text:'ran '+button+' '+process.env.OFFICE_APP_BUTTON,table:{header:['period','only','secret'],rows:[[inputs.period,String(inputs.only),String(process.env.AGENT_OFFICE_SECRET_TEST??'none')]]}}))});";
   const w=x.work('feed-apps-w','요금 감시'),bytes=Buffer.from(JSON.stringify(manifest)),sha=createHash('sha256').update(bytes).digest('hex');
@@ -232,14 +232,20 @@ test('app cards: a declared command runs in its folder only after the owner appr
   let post=readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===r.id);
   assert.deepEqual(post.apps.map(a=>[a.title,a.approved,a.last_run]),[['요금 확인',false,null]]);assert.equal(post.preview,null,'an app result shows its card, not its script');
   await assert.rejects(runApp(x.store,project,file,manifest,'run',{}),/APP_NOT_APPROVED/u);
-  approveApp(x.store,project,sha,manifest);
+  approveApp(x.store,project,sha,manifest);await assert.rejects(runApp(x.store,project,file,manifest,'run',{}),/APP_NOT_APPROVED/u,'an approval of the manifest bytes alone covers nothing');
+  assert.deepEqual(appCode(path,sha).scripts,['tool.mjs']);approveApp(x.store,project,appCode(path,sha).key,manifest);
   assert.throws(()=>appValues(manifest,{period:'90'}),/APP_INPUT_INVALID/u);assert.deepEqual(appValues(manifest,{}),{period:'7',only:true});
   await assert.rejects(runApp(x.store,project,file,manifest,'other',{}),/APP_BUTTON_UNKNOWN/u);
   process.env.AGENT_OFFICE_SECRET_TEST='leak';t.after(()=>{delete process.env.AGENT_OFFICE_SECRET_TEST;});
   const run=await runApp(x.store,project,file,manifest,'run',{period:'30',only:false});
   assert.equal(run.status,'done');assert.equal(run.output.text,'ran run run');assert.deepEqual(run.output.table,{header:['period','only','secret'],rows:[['30','false','none']]},'the command gets the values and no Office environment');
   post=readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===r.id);assert.equal(post.apps[0].approved,true);assert.equal(post.apps[0].last_run.status,'done');
-  await writeFile(join(r.folder,'tool.mjs'),"process.exit(3)");const failed=await runApp(x.store,project,file,manifest,'run',{});assert.equal(failed.status,'failed');assert.match(failed.error,/exit 3/u);
+  // Security review 2026-10-13: a later run that edits the script, or the same manifest in another folder, is not approved.
+  await writeFile(join(r.folder,'tool.mjs'),"process.exit(3)");await assert.rejects(runApp(x.store,project,file,manifest,'run',{}),/APP_NOT_APPROVED/u,'changed code needs a new approval');
+  assert.equal(readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===r.id).apps[0].approved,false);
+  const copy=await x.result(w,'2026-10-09T09:00:00.000Z','앱 사본',[['price.app.json',bytes],['tool.mjs',Buffer.from(tool)]]);
+  assert.equal(readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===copy.id).apps[0].approved,false,'the same manifest elsewhere is not approved');
+  approveApp(x.store,project,appCode(path,sha).key,manifest);const failed=await runApp(x.store,project,file,manifest,'run',{});assert.equal(failed.status,'failed');assert.match(failed.error,/exit 3/u);
 });
 
 test('feed approvals: the holder keeps the capability; another process lists the request and records the press; the holder applies it once',async t=>{

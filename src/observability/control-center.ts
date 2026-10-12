@@ -26,7 +26,7 @@ import {setWorkHidden} from '../work/hidden.js';
 import {WorkPush} from '../work/push.js';
 import {FeedApprovals} from '../work/feed-approvals.js';
 import {countRecords,listRecords,recordsCsv} from '../work/records.js';
-import {appApproveInput,appRunInput,approveApp,readAppManifest,runApp} from '../work/feed-cards.js';
+import {appApproveInput,appCode,appRunInput,approveApp,readAppManifest,runApp} from '../work/feed-cards.js';
 import {ServerChat} from '../work/server-chat.js';
 import {FeedPushWatcher} from './feed-push.js';
 import {readWorkBoard,readWorkDetail,readFeed,readWorkTimeline} from './work-view.js';
@@ -314,7 +314,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         else{const press=suffix==='work/app/run'?appRunInput.parse(raw):null,input=press??appApproveInput.parse(raw);
           const file=await results.artifactFile(config.project.id,input.work_id,input.result_id,input.artifact_id,[dirname(config.dbPath),config.project.worktree]);
           const manifest=readAppManifest(file.path,file.sha256);if(!manifest)throw Error('APP_MANIFEST_INVALID');
-          if(!press){approveApp(store,config.project.id,file.sha256,manifest);value={approved:true};}
+          if(!press){approveApp(store,config.project.id,appCode(file.path,file.sha256).key,manifest);value={approved:true};}
           else value=await runApp(store,config.project.id,{path:file.path,sha256:file.sha256,result_id:press.result_id,artifact_id:press.artifact_id},manifest,press.button,press.inputs??{});}
         reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:requestError(error,'FEED_ACTION_FAILED')}),'application/json; charset=utf-8');}return;

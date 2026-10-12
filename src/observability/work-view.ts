@@ -31,7 +31,7 @@ import {hiddenWorkIds} from '../work/hidden.js';
 import {listFeedPosts} from '../work/feed.js';
 import {type WorkResults} from '../work/results.js';
 import {artifactKind,artifactPreview} from '../work/artifact-kind.js';
-import {appApproved,isAppFile,isCardFile,lastAppRun,readAppManifest,readCardFile} from '../work/feed-cards.js';
+import {appApproved,appCode,isAppFile,isCardFile,lastAppRun,readAppManifest,readCardFile} from '../work/feed-cards.js';
 import {type FeedApprovals} from '../work/feed-approvals.js';
 import {countRecords,isRecordsFile} from '../work/records.js';
 
@@ -98,7 +98,8 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
       // CARD.json shapes the post; an *.app.json is an app card. Neither is shown as a file of its own.
       const cardFile=allFiles.find(a=>isCardFile(a.label)),card=cardFile?readCardFile(intact.get(cardFile.id)!.path,cardFile.sha256):null;
       const apps=allFiles.filter(a=>isAppFile(a.label)).slice(0,2).flatMap(a=>{const manifest=readAppManifest(intact.get(a.id)!.path,a.sha256);
-        return manifest?[{artifact_id:a.id,label:a.label,title:manifest.title,command:manifest.command,inputs:manifest.inputs??[],buttons:manifest.buttons,approved:appApproved(store,project,a.sha256),last_run:lastAppRun(store,project,r.id,a.id)}]:[];});
+        if(!manifest)return [];let code:ReturnType<typeof appCode>|null=null;try{code=appCode(intact.get(a.id)!.path,a.sha256);}catch{/* a folder too large or unreadable cannot be approved */}
+        return [{artifact_id:a.id,label:a.label,title:manifest.title,command:manifest.command,scripts:code?.scripts??[],inputs:manifest.inputs??[],buttons:manifest.buttons,approved:Boolean(code)&&appApproved(store,project,code!.key),last_run:lastAppRun(store,project,r.id,a.id)}];});
       const shownFiles=allFiles.filter(a=>!isCardFile(a.label)&&!isAppFile(a.label)&&!isRecordsFile(a.label));
       const images=shownFiles.filter(a=>a.kind==='image'),media=shownFiles.find(a=>a.kind==='video'||a.kind==='audio'),doc=shownFiles.find(a=>a.kind==='pdf');
       // The first text, code or table file that reads cleanly gives the card its preview.
