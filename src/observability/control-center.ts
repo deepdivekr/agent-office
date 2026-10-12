@@ -44,7 +44,7 @@ import {type StructuredModel} from '../taskpack/adaptive-spec.js';
 import {HermesWorkRuntime,type HermesWorkOptions} from '../work/hermes.js';
 import {HermesMigrationRuntime} from '../work/hermes-migration.js';
 import {RemoteOffice} from '../work/remote.js';
-import {ServerOffice} from '../work/server-office.js';
+import {ServerOffice,noticesByTarget,serverNoticeText,type ServerNoticeChange} from '../work/server-office.js';
 import {type ServerProbe} from '../integrations/server-ssh.js';
 import {AddressImport} from '../work/import-address.js';
 import {SessionMirror,defaultSessionRoots,type SessionRoots} from '../work/session-mirror.js';
@@ -157,7 +157,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   const deliveryState=()=>deliverySettings.publicState((id,fingerprint)=>((store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result_delivery'").get()?store.hermesState.prepare("SELECT MAX(updated_at) AS at FROM office_result_delivery WHERE project_id=? AND connector_id=? AND target_fingerprint=? AND status='delivered'").get(config.project.id,id,fingerprint):undefined) as {at:string|null}|undefined)?.at??null);
   const push=new WorkPush(store,config),pushWatcher=new FeedPushWatcher(store,config,push,feedApprovals),serverChat=new ServerChat(store,config,options.sessions??defaultSessionRoots());
   let suggestionCache:{at:number;value:Promise<unknown>}|null=null;
-  const sessionMirror=new SessionMirror(store,config,options.sessions,options.sessions?.temporary??false),addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,(id,text)=>serverNotice(id,text));
+  const sessionMirror=new SessionMirror(store,config,options.sessions,options.sessions?.temporary??false),addressImport=new AddressImport(config),remoteOffice=new RemoteOffice(store,config,options.remote),serverOffice=new ServerOffice(store,config,options.server,changes=>serverNotice(changes));
   const workModel=options.workModel??new ConfiguredStructuredModel(modelSettingsPath(config),process.env);
   const deliverySettings=WorkDeliverySettings.fromConfig(config),results=new WorkResults(store,[],deliverySettings,()=>workDelegation(config).notify);
   const deliveryJobs=new Map<string,Promise<void>>();
@@ -633,12 +633,16 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   let lastBoard='',lastKeep=Date.now();const lightTick=setInterval(()=>{if(!lightClients.size)return;try{const board=readWorkBoard(store,config),payload=JSON.stringify({works:board.works,auth_attention_count:board.auth_attention_count});if(payload!==lastBoard){lastBoard=payload;for(const client of lightClients)if(!client.destroyed)client.write(`event: board\ndata: ${JSON.stringify(board)}\n\n`);}if(Date.now()-lastKeep>=15_000){lastKeep=Date.now();for(const client of lightClients)if(!client.destroyed)client.write(': keep-alive\n\n');}}catch{for(const client of lightClients)client.end();lightClients.clear();}},Math.max(1000,poll));lightTick.unref();
   const hermesTick=setInterval(()=>{if(runtimeReady())hermesWork.tick();},1000);hermesTick.unref();
   // A server Work's state change goes to the messenger destinations the owner chose for that Work, as one short notice.
-  function serverNotice(id:string,text:string){
-    try{for(const targetId of results.selection(config.project.id,id).target_ids){if(targetId==='app')continue;const target=deliverySettings.target(targetId);if(!target)continue;
-      const notice:WorkResult={notice:text,id:randomUUID(),project_id:config.project.id,work_id:id,run_id:'server',source_kind:'client',work_revision:null,source_status:'notice',verification:'unverified',summary:text,text,artifacts:[],sources:[],content_sha256:'',created_at:new Date().toISOString(),work_completion_verified:false,work_title:'',deliveries:[]};
-      void createDeliveryConnector(target).send({result:notice,target_alias:targetId,idempotency_key:notice.id}).then(r=>workActivity(store,config.project.id,id,r.status==='delivered'?'server.notice_sent':'server.notice_failed',r.status==='delivered'?`${target.label}로 알림을 보냈습니다.`:`${target.label}로 알림을 보내지 못했습니다.`)).catch(()=>{});}
+  /** One notice per messenger destination for the Works of one server that changed in one reading. */
+  function serverNotice(changes:ServerNoticeChange[]){
+    try{
+      for(const [targetId,rows] of noticesByTarget(changes,workId=>results.selection(config.project.id,workId).target_ids)){const target=deliverySettings.target(targetId);if(!target)continue;
+        const text=serverNoticeText(rows),first=rows[0]!;
+        const notice:WorkResult={notice:text,id:randomUUID(),project_id:config.project.id,work_id:first.work_id,run_id:'server',source_kind:'client',work_revision:null,source_status:'notice',verification:'unverified',summary:text,text,artifacts:[],sources:[],content_sha256:'',created_at:new Date().toISOString(),work_completion_verified:false,work_title:'',deliveries:[]};
+        void createDeliveryConnector(target).send({result:notice,target_alias:targetId,idempotency_key:notice.id}).then(r=>{for(const row of rows)workActivity(store,config.project.id,row.work_id,r.status==='delivered'?'server.notice_sent':'server.notice_failed',r.status==='delivered'?`${target.label}로 알림을 보냈습니다.`:`${target.label}로 알림을 보내지 못했습니다.`);}).catch(()=>{});}
     }catch{/* a notice never stops observation */}
   }
+
   // Watched servers are read about every two minutes; a slow or unreachable server never blocks the Control Center.
   const serverTick=setInterval(()=>{if(runtimeReady())void serverOffice.refreshDue().catch(()=>{});},60_000);serverTick.unref();
   // New outputs and Works that start needing the owner go to their subscribed devices.

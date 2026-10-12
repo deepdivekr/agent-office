@@ -98,10 +98,37 @@ export function serverDetail(store:PackStore,project:string,id:string){
     server:{mode:serverMode(view),mode_set:view.work.mode==='recurring'||view.work.mode==='standby',target_id:view.target.id,target_name:view.definition.name,host:view.definition.host,observed_at:view.target.observed_at,snapshot_at:view.snapshot?new Date(view.snapshot.now*1000).toISOString():null,stale,error:view.target.error,counts:health?.counts??null,problems:health?.problems??[],units,checks:view.checks.map(c=>({...c,count:view.snapshot?.checks[c.id]??null})),feed:view.feed.map(f=>({id:f.id,label:f.label,kind:f.kind,path:f.path,query:f.kind==='sqlite'?f.query:null,last_at:f.after||null,error:f.error??null}))}};
 }
 
+export interface ServerNoticeChange {work_id:string;title:string;where:string;status:'service_ok'|'service_unreachable'|string;summary:string;}
+const noticeTag=(status:string)=>status==='service_ok'?'[회복]':status==='service_unreachable'?'[서버 연결 안 됨]':'[서버 확인 필요]';
+/**
+ * One notice for the Works of one server that changed in one reading. Several services recovering together used to send
+ * one "[회복] … 모든 서비스가 정상입니다." each (owner, 2026-10-12); one Work keeps its own three-line notice.
+ */
+export function serverNoticeText(changes:readonly ServerNoticeChange[]){
+  const first=changes[0]!;
+  if(changes.length===1)return `${noticeTag(first.status)} ${first.title}\n${first.where}\n${first.summary}`;
+  const order=['service_unreachable','service_problem','service_ok'],rank=(status:string)=>status==='service_ok'?2:status==='service_unreachable'?0:1;
+  const groups=new Map<string,ServerNoticeChange[]>();
+  for(const change of [...changes].sort((a,b)=>rank(a.status)-rank(b.status))){const key=rank(change.status)===1?'service_problem':change.status;groups.set(key,[...groups.get(key)??[],change]);}
+  if(groups.size===1){
+    const [key,rows]=[...groups][0]!;
+    if(key==='service_problem')return `[서버 확인 필요] ${first.where} · 업무 ${rows.length}개\n${rows.map(row=>`${row.title} · ${row.summary.replace(/^확인 필요: /u,'')}`).join('\n')}`;
+    return `${noticeTag(key)} ${first.where} · 업무 ${rows.length}개\n${rows.map(row=>row.title).join(', ')}\n${key==='service_ok'?'모두 정상입니다.':'서버에 접속하지 못했습니다.'}`;
+  }
+  return [`[서버 알림] ${first.where} · 업무 ${changes.length}개`,...order.filter(key=>groups.has(key)).map(key=>{const rows=groups.get(key)!;
+    return key==='service_problem'?rows.map(row=>`[서버 확인 필요] ${row.title} · ${row.summary.replace(/^확인 필요: /u,'')}`).join('\n'):`${noticeTag(key)} ${rows.map(row=>row.title).join(', ')}`;})].join('\n');
+}
+/** The changes each messenger destination gets: a Work's own destinations, the app (the feed) excepted. */
+export function noticesByTarget(changes:readonly ServerNoticeChange[],targetsOf:(workId:string)=>readonly string[]){
+  const byTarget=new Map<string,ServerNoticeChange[]>();
+  for(const change of changes)for(const targetId of targetsOf(change.work_id))if(targetId!=='app')byTarget.set(targetId,[...byTarget.get(targetId)??[],change]);
+  return byTarget;
+}
 export class ServerOffice {
   private running=new Map<string,Promise<unknown>>();
-  /** notify sends a short notice to the Work's chosen messenger destinations when its state changes. */
-  constructor(readonly store:PackStore,readonly config:HostConfig,readonly probe:ServerProbe=new SshServerProbe(),private readonly notify?:(workId:string,text:string)=>void){init(store);}
+  /** notify gets the Works of one server whose state changed in one reading, to send as one notice per messenger
+   * destination (serverNoticeText) instead of one per Work. */
+  constructor(readonly store:PackStore,readonly config:HostConfig,readonly probe:ServerProbe=new SshServerProbe(),private readonly notify?:(changes:ServerNoticeChange[])=>void){init(store);}
   targets(){return this.store.hermesState.prepare('SELECT id,definition,observed_at,error FROM office_server_target WHERE project_id=? ORDER BY created_at').all(this.config.project.id).map(row=>({id:String(row.id),...JSON.parse(String(row.definition)) as ServerTarget,observed_at:row.observed_at??null,error:row.error??null}));}
   register(raw:unknown){
     const definition=serverTargetSchema.parse(raw);requireCondition(clean(definition.name,80)===definition.name,'SERVER_CREDENTIAL_LIKE_INPUT');
@@ -151,16 +178,16 @@ export class ServerOffice {
   }
   /** One activity entry when a Work turns unhealthy or recovers, not one per check. */
   private recordChanges(targetId:string){
-    const project=this.config.project.id;
+    const project=this.config.project.id,changes:ServerNoticeChange[]=[];
     for(const row of this.store.hermesState.prepare('SELECT work_id FROM office_server_work WHERE project_id=? AND target_id=?').all(project,targetId)){
       const id=String(row.work_id),view=watched(this.store,project,id);if(!view)continue;const {status,health}=judge(view);if(status===view.work.last_status)continue;
       this.store.hermesState.prepare('UPDATE office_server_work SET last_status=? WHERE project_id=? AND work_id=?').run(status,project,id);
       if(view.work.last_status===null&&status==='service_ok')continue;
       const summary=status==='service_ok'?'모든 서비스가 정상입니다.':status==='service_unreachable'?'서버에 접속하지 못했습니다.':`확인 필요: ${health?.problems.map(p=>`${p.id} (${NOTE_KO[p.note??'']??p.note})`).join(', ')}`;
       workActivity(this.store,project,id,status==='service_ok'?'server.recovered':status==='service_unreachable'?'server.unreachable':'server.problem',summary);
-      const title=this.store.officeWorkById(project,id).title,where=view.definition.name;
-      this.notify?.(id,`${status==='service_ok'?'[회복]':status==='service_unreachable'?'[서버 연결 안 됨]':'[서버 확인 필요]'} ${title}\n${where}\n${summary}`);
+      changes.push({work_id:id,title:this.store.officeWorkById(project,id).title,where:view.definition.name,status,summary});
     }
+    if(changes.length)this.notify?.(changes);
   }
   async discover(raw:unknown){
     const {target_id}=serverDiscover.parse(raw),snapshot=await this.refreshTarget(target_id);requireCondition(snapshot,'SERVER_CONNECTION_FAILED');
