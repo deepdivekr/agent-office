@@ -177,6 +177,26 @@ test('runtime fixture checks reach the next read of the server and a change send
 });
 // Owner 2026-10-12: services that recover together each sent "[회복] … 모든 서비스가 정상입니다.". One reading of a server is
 // one notice: one Work keeps its three lines; several are listed in one message, problems first.
+// Owner 2026-10-12: a Work with an always-on service and timers draws the service on a lane of its own.
+test('runtime fixture a server Work with a service and timers has a service lane over its timer runs',async t=>{
+  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js'),{readWorkTimeline}=await import('../dist/observability/work-view.js');
+  const root=await mkdtemp(join(tmpdir(),'office-server-lanes-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
+  const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
+  const at=Math.floor(Date.now()/1000),timer=unit('shop-sync.timer',{SubState:'waiting',Triggers:'shop-sync.service'});
+  const job=unit('shop-sync.service',{UnitFileState:'static',TriggeredBy:'shop-sync.timer',ActiveState:'inactive',SubState:'dead',Result:'success'});
+  let web=unit('shop-web.service');const snap=()=>({...raw({show:[web,timer,job],timers:[{unit:'shop-sync.timer',last:usec(at-600),next:usec(at+600)}]}),now:at});
+  const office=new ServerOffice(store,config,{async snapshot(){return snap();}});
+  const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
+  const {work_ids:[shop]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop',units:['shop-web.service','shop-sync.timer']}]});
+  await office.refreshTarget(target);
+  let line=readWorkTimeline(store,config).works.find(w=>w.id===shop);
+  assert.deepEqual(line.services,{count:1,state:'ok'});assert.deepEqual(line.cycles.map(c=>c.state),['ok']);
+  web=unit('shop-web.service',{ActiveState:'failed',SubState:'failed',Result:'exit-code'});await office.refreshTarget(target);
+  line=readWorkTimeline(store,config).works.find(w=>w.id===shop);assert.equal(line.services.state,'problem');
+});
+
 test('the Works of one server that change in one reading make one notice',async()=>{
   const {serverNoticeText,noticesByTarget}=await import('../dist/work/server-office.js');
   const ok=(title)=>({work_id:title,title,where:'Hetzner VM',status:'service_ok',summary:'모든 서비스가 정상입니다.'});
@@ -314,6 +334,12 @@ test('runtime fixture server Works: timers make a Work recurring, services only 
   assert.deepEqual(line.cycles.map(c=>c.state),['ok','problem','now']);assert.equal(line.cycles[0].unit,'shop-sync.timer');
   assert.deepEqual(line.schedule,{ko:'30분마다',en:'every 30 min'});assert.equal(line.next_at,new Date((at-60+1800)*1000).toISOString());
   assert.equal(readWorkDetail(store,config,sync).server.units[0].schedule.ko,'30분마다');
+  // A run seen running whose next trigger is already seen ended before it: it is closed as not seen, not drawn up to now
+  // (owner 2026-10-12: a 3-minute timer left eight such runs, and the row read as running all day).
+  answer=snap(at-30,{ActiveState:'activating',SubState:'start'});await office.refreshTarget(target);
+  const later=readWorkTimeline(store,config).works.find(w=>w.id===sync);
+  assert.deepEqual(later.cycles.map(c=>c.state),['ok','problem','done','now']);assert.ok(Date.parse(later.cycles[2].end)<=(at-30)*1000,'the closed run ends by the next trigger');
+  assert.equal(later.services,null,'a timer-only Work has one lane');
   // The owner says the always-on service really sends on a schedule of its own.
   office.setMode({work_id:web,mode:'recurring'});assert.equal(board().get(web).status,'service_ok');assert.equal(readWorkDetail(store,config,web).server.mode_set,true);
   office.setMode({work_id:web,mode:'auto'});assert.equal(board().get(web).status,'service_standby');
