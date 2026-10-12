@@ -155,7 +155,10 @@ if [[ "${AGENT_DRIVER_SKIP_BROWSER_INSTALL:-0}" != "1" ]]; then
     sudo_bin="sudo"
     [[ "${AGENT_DRIVER_ALLOW_LOCAL_FIXTURE:-0}" == "1" && -n "${AGENT_DRIVER_SUDO_BIN:-}" ]] && sudo_bin="$AGENT_DRIVER_SUDO_BIN"
     if [[ -t 1 ]] && (: </dev/tty) 2>/dev/null && { [[ "$(id -u)" == 0 ]] || command -v "$sudo_bin" >/dev/null 2>&1; }; then
-      printf '[agent-office] %s ' "$(m 'Chromium 실행에 필요한 시스템 라이브러리가 없습니다. 지금 설치할까요? 관리자(sudo) 비밀번호를 한 번 묻습니다. [Y/n]' 'Chromium needs system libraries that are missing. Install them now? sudo asks for your password once. [Y/n]')"
+      say "Chromium 실행에 필요한 시스템 라이브러리(글꼴·그래픽 등 Ubuntu 공식 패키지)가 없습니다." "Chromium needs system libraries (fonts, graphics and similar official Ubuntu packages) that are missing."
+      say "설치하면 이 명령 하나만 sudo로 실행해 apt로 설치합니다: playwright install-deps chromium" "Installing runs this one command with sudo, which installs them with apt: playwright install-deps chromium"
+      say "비밀번호는 sudo가 터미널에서 직접 받습니다. Agent Office는 보지도 저장하지도 않습니다." "sudo reads the password in this terminal; Agent Office never sees or keeps it."
+      printf '[agent-office] %s ' "$(m '지금 설치할까요? [Y/n]' 'Install them now? [Y/n]')"
       answer=""; read -r answer </dev/tty || answer="n"
       [[ -z "$answer" || "$answer" == [Yy]* ]] || manual_deps
       say "Chromium 시스템 라이브러리 설치" "Installing Chromium's system libraries"

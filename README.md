@@ -88,7 +88,7 @@ bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/age
 
 You can [review the installer](install.sh) first.
 It prepares a dedicated Node.js, dependencies, and Chromium, then opens the Control Center.
-If Chromium's system libraries are missing, the installer asks once at the terminal and installs them with sudo; nothing else runs with admin rights, and without a terminal it prints the command instead.
+If Chromium's system libraries are missing, the installer asks once at the terminal and runs Playwright's `install-deps chromium` with sudo, which installs official Ubuntu packages with apt. sudo reads your password; Agent Office never sees it. Nothing else runs with admin rights, and without a terminal the installer prints the command instead.
 
 ### Connect in the Control Center
 
