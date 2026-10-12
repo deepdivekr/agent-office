@@ -14,7 +14,7 @@ export function classifyClientFailure(value:unknown):ClientFailureReason{
   if(message==='CLIENT_OUTPUT_SCHEMA_UNSUPPORTED'||message==='CLIENT_SCHEMA_INVALID'||/\bInvalid schema for response_format\b/iu.test(message))return 'schema_invalid';
   if(message==='CLIENT_MODEL_UNSUPPORTED'||/(?:\bmodel\b[^\r\n]{0,120}\b(?:not supported|unsupported|not found|does not exist)\b|\b(?:unsupported|unknown)\s+model\b)/iu.test(message))return 'model_unsupported';
   // A passing error ("try again", overloaded, 5xx) is an outage to wait out, even when it names a login or a token.
-  if(/\b(?:try again|temporarily|overloaded)\b|\b(?:500|502|503|504|529)\b/iu.test(message))return 'provider_unavailable';
+  if(/\b(?:try again|temporarily|overloaded|at capacity|try a different model)\b|server_?overloaded|\b(?:500|502|503|504|529)\b/iu.test(message))return 'provider_unavailable';
   if(/(?:auth(?:entication)?|login|session|credential|token).{0,40}(?:expired|invalid|required|failed)|(?:expired|invalid).{0,40}(?:auth|login|session|credential|token)|\b(?:401|403|unauthorized|signed.out)\b/iu.test(message))return 'auth_expired';
   if(/(?:quota|credit|balance|billing|insufficient|usage limit|weekly limit|monthly limit)/iu.test(message)||/\b402\b/u.test(message))return 'quota_exhausted';
   if(/(?:rate.limit|too many requests|retry.after|\b429\b)/iu.test(message))return 'rate_limited';
