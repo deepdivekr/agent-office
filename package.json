@@ -1,6 +1,6 @@
 {
   "name": "agent-office",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "Local MCP runtime for durable agent work",
   "author": "SHIPIT LABS (https://x.com/DeepDive_KR)",

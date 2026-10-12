@@ -17,7 +17,7 @@ need() { command -v "$1" >/dev/null 2>&1 || fail "$1 명령이 필요합니다."
 [[ -n "${HOME:-}" && "$HOME" == /* && "$HOME" != "/" ]] || fail "안전한 HOME 경로를 확인할 수 없습니다." "HOME is not a safe path."
 
 readonly REPOSITORY_URL="${AGENT_OFFICE_REPOSITORY_URL:-${AGENT_DRIVER_REPOSITORY_URL:-$DEFAULT_REPOSITORY}}"
-readonly REPOSITORY_REF="${AGENT_OFFICE_VERSION:-${AGENT_DRIVER_VERSION:-v0.7.2}}"
+readonly REPOSITORY_REF="${AGENT_OFFICE_VERSION:-${AGENT_DRIVER_VERSION:-v0.7.3}}"
 readonly INSTALL_DIR="${AGENT_OFFICE_INSTALL_DIR:-${AGENT_DRIVER_INSTALL_DIR:-$HOME/.local/share/agent-office}}"
 readonly BIN_DIR="${AGENT_OFFICE_BIN_DIR:-${AGENT_DRIVER_BIN_DIR:-$HOME/.local/bin}}"
 readonly RUNTIME_DIR="${AGENT_OFFICE_RUNTIME_DIR:-${AGENT_DRIVER_RUNTIME_DIR:-$HOME/.local/share/agent-office-runtime}}"
@@ -158,6 +158,7 @@ if [[ "${AGENT_DRIVER_SKIP_BROWSER_INSTALL:-0}" != "1" ]]; then
       say "Chromium 실행에 필요한 시스템 라이브러리(글꼴·그래픽 등 Ubuntu 공식 패키지)가 없습니다." "Chromium needs system libraries (fonts, graphics and similar official Ubuntu packages) that are missing."
       say "설치하면 이 명령 하나만 sudo로 실행해 apt로 설치합니다: playwright install-deps chromium" "Installing runs this one command with sudo, which installs them with apt: playwright install-deps chromium"
       say "비밀번호는 sudo가 터미널에서 직접 받습니다. Agent Office는 보지도 저장하지도 않습니다." "sudo reads the password in this terminal; Agent Office never sees or keeps it."
+      say "비밀번호는 Windows 비밀번호가 아니라, WSL Ubuntu를 처음 켰을 때 만든 비밀번호예요. 잊었다면 PowerShell에서 'wsl -u root passwd $(id -un)'로 바꿀 수 있어요." "The password is not your Windows one: it is the one you made when WSL Ubuntu first started. If you forgot it, change it from PowerShell with 'wsl -u root passwd $(id -un)'."
       printf '[agent-office] %s ' "$(m '지금 설치할까요? [Y/n]' 'Install them now? [Y/n]')"
       answer=""; read -r answer </dev/tty || answer="n"
       [[ -z "$answer" || "$answer" == [Yy]* ]] || manual_deps

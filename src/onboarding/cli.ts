@@ -13,13 +13,15 @@ function rootFrom(args:readonly string[]){
   if(args.length===0)return connectionRoot();requireCondition(args.length===2&&args[0]==='--state-root'&&args[1],'INVALID_CONNECTION_OPTIONS');return args[1]!;
 }
 /** What `agent-office connect` tells a person: where to open Office here and, with Tailscale, on the phone (with a QR code). */
-export function connectSummaryText(summary:{address:string;tailnet_urls?:string[];connection:string;mcp_command:string}){
+export function connectSummaryText(summary:{address:string;tailnet_urls?:string[];connection:string;mcp_command:string},env:NodeJS.ProcessEnv=process.env){
+  // The system language decides, as in the installer: Korean for ko*, English otherwise (a fresh Ubuntu is C.UTF-8).
+  const ko=/^ko/iu.test(env.LC_ALL||env.LC_MESSAGES||env.LANG||''),m=(korean:string,english:string)=>ko?korean:english;
   const qr=(url:string)=>{let code='';qrcode.generate(url,{small:true},text=>{code=text;});return code.split('\n').map(line=>'  '+line).join('\n');};
-  const lines=['','Agent Office 관제센터가 열려 있어요.','','이 컴퓨터','  '+summary.address,''];
-  for(const url of summary.tailnet_urls??[])lines.push('휴대폰 (Tailscale) · 카메라로 QR을 찍거나 아래 주소를 여세요',qr(url),'  '+url,'  처음 한 번 이 주소로 열면 그 기기에 로그인돼요. 토큰이 든 주소라 다른 사람에게 보내지 마세요.','');
-  if(!summary.tailnet_urls?.length)lines.push('휴대폰에서 열려면 Tailscale을 설정하세요: docs/control-center.md (다른 기기에서 열기)','');
-  if(summary.connection!=='connected')lines.push('이 컴퓨터 연결을 관제센터 화면에서 승인해 주세요.','');
-  lines.push('AI 앱 연결(MCP): '+summary.mcp_command);
+  const lines=['',m('Agent Office 관제센터가 열려 있어요.','The Agent Office Control Center is open.'),'',m('이 컴퓨터','On this computer'),'  '+summary.address,''];
+  for(const url of summary.tailnet_urls??[])lines.push(m('휴대폰 (Tailscale) · 카메라로 QR을 찍거나 아래 주소를 여세요','Phone (Tailscale) · scan the QR code with the camera or open the address below'),qr(url),'  '+url,m('  처음 한 번 이 주소로 열면 그 기기에 로그인돼요. 토큰이 든 주소라 다른 사람에게 보내지 마세요.','  Opening this address once signs that device in. It carries a token, so do not send it to anyone.'),'');
+  if(!summary.tailnet_urls?.length)lines.push(m('휴대폰에서 열려면 Tailscale을 설정하세요: docs/control-center.md (다른 기기에서 열기)','To open it on a phone, set up Tailscale: docs/control-center.md (open from another device)'),'');
+  if(summary.connection!=='connected')lines.push(m('이 컴퓨터 연결을 관제센터 화면에서 승인해 주세요.','Approve this computer\'s connection in the Control Center.'),'');
+  lines.push(m('AI 앱 연결(MCP): ','AI app connection (MCP): ')+summary.mcp_command);
   return lines.join('\n');
 }
 /**

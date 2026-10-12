@@ -111,8 +111,11 @@ test('connect tells a person where to open Office: the short address here and, w
   assert.ok(lines.includes('  http://office.localhost:4600/'));assert.ok(lines.includes('  '+phone),'the phone address stands alone on its line, easy to select');
   assert.ok(lines.filter(line=>/[▀▄█]/u.test(line)).length>=10,'a QR code to scan with the phone camera');
   assert.doesNotMatch(text,/[{}"]/u,'no JSON for a person');
-  const plain=connectSummaryText({address:'http://office.localhost:4600/',connection:'awaiting_local_approval',mcp_command:'agent-office mcp'});
+  const plain=connectSummaryText({address:'http://office.localhost:4600/',connection:'awaiting_local_approval',mcp_command:'agent-office mcp'},{LANG:'ko_KR.UTF-8'});
   assert.match(plain,/Tailscale을 설정하세요/u);assert.match(plain,/승인해 주세요/u);assert.doesNotMatch(plain,/[▀▄█]/u);
+  // A fresh Ubuntu is C.UTF-8: the summary reads in English there, as the installer does (clean-install check, 2026-10-12).
+  const english=connectSummaryText({address:'http://office.localhost:4600/',connection:'awaiting_local_approval',mcp_command:'agent-office mcp'},{LANG:'C.UTF-8'});
+  assert.match(english,/The Agent Office Control Center is open\./u);assert.match(english,/set up Tailscale/u);assert.match(english,/Approve this computer's connection/u);assert.doesNotMatch(english,/[가-힣]/u);
 });
 
 test('connect opens the Control Center in the browser for the first setup or when asked, not on every update',async()=>{
