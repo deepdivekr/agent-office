@@ -113,6 +113,6 @@ test('runtime fixture the browser step asks about sign-in sites and walks a yes 
   assert.match(await page.locator('.coach-bubble').innerText(),/Settings → Developers에서 CLI를 켠 뒤/u);
   aside={...aside,health:'ready',reason:null,registered:true};await page.locator('#browser-setup-refresh').click();
   await page.waitForFunction(()=>document.querySelector('.coach-focus')?.closest('#site-login-add'));
-  assert.match(await page.locator('.coach-bubble').innerText(),/사이트 주소\(예: https:\/\/x\.com\)/u);
+  assert.match(await page.locator('.coach-bubble').innerText(),/일을 시킬 사이트 주소를 넣고 추가해요/u);
   assert.deepEqual(errors,[]);
 });
