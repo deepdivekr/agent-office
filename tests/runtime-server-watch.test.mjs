@@ -159,11 +159,11 @@ test('a check with no matching line in its window is a problem; one not run yet 
 test('runtime fixture checks reach the next read of the server and a change sends one notice to the Work destinations',async t=>{
   const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
   const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
-  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice,serverNoticeText}=await import('../dist/work/server-office.js');
   const root=await mkdtemp(join(tmpdir(),'office-server-checks-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
   const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
   let count=3;const asked=[],notices=[];
-  const office=new ServerOffice(store,config,{async snapshot(target,checks=[]){asked.push(checks.map(c=>c.unit+'|'+c.pattern+'|'+c.minutes));return {...sample,checks:Object.fromEntries(checks.map(c=>[c.id,count]))};}},(id,text)=>notices.push(text));
+  const office=new ServerOffice(store,config,{async snapshot(target,checks=[]){asked.push(checks.map(c=>c.unit+'|'+c.pattern+'|'+c.minutes));return {...sample,checks:Object.fromEntries(checks.map(c=>[c.id,count]))};}},changes=>notices.push(serverNoticeText(changes)));
   const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
   const {work_ids:[web]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop web',units:['shop-web.service']}]});
   const detail=office.setChecks({work_id:web,checks:[{label:'리포트 작업',unit:'shop-web.service',pattern:'market-close.*executed successfully',minutes:4320}]});
@@ -175,6 +175,23 @@ test('runtime fixture checks reach the next read of the server and a change send
   count=2;await office.refreshTarget(target);assert.match(notices[1],/^\[회복\] Shop web/u);
   assert.throws(()=>office.setChecks({work_id:web,checks:[{label:'x',unit:'a b',pattern:'p',minutes:5}]}));
 });
+// Owner 2026-10-12: services that recover together each sent "[회복] … 모든 서비스가 정상입니다.". One reading of a server is
+// one notice: one Work keeps its three lines; several are listed in one message, problems first.
+test('the Works of one server that change in one reading make one notice',async()=>{
+  const {serverNoticeText,noticesByTarget}=await import('../dist/work/server-office.js');
+  const ok=(title)=>({work_id:title,title,where:'Hetzner VM',status:'service_ok',summary:'모든 서비스가 정상입니다.'});
+  assert.equal(serverNoticeText([ok('가계 비서')]),'[회복] 가계 비서\nHetzner VM\n모든 서비스가 정상입니다.');
+  assert.equal(serverNoticeText([ok('가계 비서'),ok('머니리포트'),ok('KoreanTickers')]),'[회복] Hetzner VM · 업무 3개\n가계 비서, 머니리포트, KoreanTickers\n모두 정상입니다.');
+  const down=(title)=>({work_id:title,title,where:'Hetzner VM',status:'service_unreachable',summary:'서버에 접속하지 못했습니다.'});
+  assert.equal(serverNoticeText([down('가계 비서'),down('머니리포트')]),'[서버 연결 안 됨] Hetzner VM · 업무 2개\n가계 비서, 머니리포트\n서버에 접속하지 못했습니다.');
+  const problem={work_id:'k',title:'KoreanTickers',where:'Hetzner VM',status:'service_problem',summary:'확인 필요: 크롤러 (실행 실패)'};
+  assert.equal(serverNoticeText([ok('가계 비서'),problem,ok('머니리포트')]),'[서버 알림] Hetzner VM · 업무 3개\n[서버 확인 필요] KoreanTickers · 크롤러 (실행 실패)\n[회복] 가계 비서, 머니리포트');
+  // Each destination gets the Works that send to it, in one message; the feed (app) has no message.
+  const targets={'가계 비서':['app','telegram-main'],'머니리포트':['telegram-main','slack-ops'],KoreanTickers:['app']};
+  const grouped=noticesByTarget([ok('가계 비서'),ok('머니리포트'),ok('KoreanTickers')],id=>targets[id]);
+  assert.deepEqual([...grouped].map(([target,rows])=>[target,rows.map(row=>row.title)]),[['telegram-main',['가계 비서','머니리포트']],['slack-ops',['머니리포트']]]);
+});
+
 test('a notice is delivered as written, without the result header and footer',async()=>{
   const {deliveryContent}=await import('../dist/work/delivery-connectors.js');
   assert.equal(deliveryContent({notice:'[회복] Shop web\nMain VM\n모든 서비스가 정상입니다.',summary:'x',text:'x',artifacts:[],work_title:'Shop web',source_status:'notice',id:'n'}),'[회복] Shop web\nMain VM\n모든 서비스가 정상입니다.');
@@ -257,14 +274,14 @@ test('runtime fixture a server Work conversation: the first message starts a ses
 test('runtime fixture a failing timer job that runs again is one notice: no "recovered" while it runs, one when it succeeds',async t=>{
   const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
   const {prepareLocalConnection}=await import('../dist/onboarding/connection.js'),{loadHostConfig}=await import('../dist/interface/config.js');
-  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice}=await import('../dist/work/server-office.js'),{readWorkBoard}=await import('../dist/observability/work-view.js');
+  const {PackStore}=await import('../dist/packs/store.js'),{ServerOffice,serverNoticeText}=await import('../dist/work/server-office.js'),{readWorkBoard}=await import('../dist/observability/work-view.js');
   const root=await mkdtemp(join(tmpdir(),'office-server-run-')),config=loadHostConfig((await prepareLocalConnection(root)).runtimeConfig);
   const store=new PackStore(config.dbPath);store.registerProject(config.project);t.after(async()=>{store.close();await rm(root,{recursive:true,force:true});});
   const timer=unit('shop-sync.timer',{SubState:'waiting',Triggers:'shop-sync.service'}),timers=[{unit:'shop-sync.timer',last:usec(now-600),next:usec(now+1200)}];
   const job=extra=>unit('shop-sync.service',{UnitFileState:'static',TriggeredBy:'shop-sync.timer',...extra});
   const failed=raw({show:[timer,job({ActiveState:'inactive',SubState:'dead',Result:'exit-code'})],timers}),running=raw({show:[timer,job({ActiveState:'activating',SubState:'start',Result:'success'})],timers}),done=raw({show:[timer,job({ActiveState:'inactive',SubState:'dead',Result:'success'})],timers});
   assert.equal(parseServerSnapshot(running).units.find(u=>u.id==='shop-sync.timer').running,true);assert.equal(parseServerSnapshot(failed).units.find(u=>u.id==='shop-sync.timer').running,undefined);
-  let answer=done;const notices=[];const office=new ServerOffice(store,config,{async snapshot(){return answer;}});office.notify=(id,text)=>notices.push(text.split('\n')[0]);
+  let answer=done;const notices=[];const office=new ServerOffice(store,config,{async snapshot(){return answer;}});office.notify=changes=>notices.push(serverNoticeText(changes).split('\n')[0]);
   const {id:target}=office.register({name:'Main VM',host:'203.0.113.7',user:'root',port:22});await office.discover({target_id:target});
   const {work_ids:[sync]}=office.link({target_id:target,acknowledged:true,groups:[{name:'Shop sync',units:['shop-sync.timer']}]});
   const status=()=>readWorkBoard(store,config).works.find(w=>w.id===sync).status;
