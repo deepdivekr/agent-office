@@ -62,3 +62,24 @@ test('the timeline layout draws one row per Work with its bars, marks and state,
   await page.reload();await page.locator('.tl-row[data-work]').waitFor();
   assert.equal(await page.locator('[data-layout="timeline"]').getAttribute('aria-pressed'),'true');
 });
+
+// Owner 2026-10-12: a server Work with an always-on service and many timer runs read as running all day in one row.
+// The service gets the upper lane and the timer runs the lower one; a run whose result was not seen says so.
+test('a server Work with a service draws it on its own lane above the timer runs',async t=>{
+  const now=Date.now(),iso=ms=>new Date(ms).toISOString(),hour=3_600_000,minute=60_000;
+  const work={id:'22222222-2222-4222-8222-222222222222',title:'Ticker server',full_title:'Ticker server',pack:null,status:'service_ok',work_status:'ready',updated_at:iso(now-hour),has_contract:false,run:null,schedule:null,progress:null,server:{target:'Main VM'}};
+  const board={format:1,project_id:'p',generated_at:iso(now),works:[work],auth_attention_count:0};
+  const cycles=[...Array(40)].map((_,i)=>({start:iso(now-20*hour+i*30*minute),end:iso(now-20*hour+i*30*minute+2*minute),state:i===7?'done':'ok',unit:'ticker-sync.timer'}));
+  const timeline={from:iso(now-24*hour),to:iso(now),works:[{id:work.id,cycles,marks:[],services:{count:2,state:'ok'}}]};
+  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
+  const context=await browser.newContext({viewport:{width:1280,height:900}});await context.addInitScript(()=>localStorage.setItem('office-lang','en'));
+  const page=await context.newPage(),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
+  await page.route('**/*',route=>{const path=new URL(route.request().url()).pathname;if(path==='/')return route.fulfill({contentType:'text/html',body:workHtml('n')});if(path==='/work/board')return route.fulfill(json(board));if(path==='/work/timeline')return route.fulfill(json(timeline));if(/events/.test(path))return route.abort();return route.fulfill(json({}));});
+  await page.goto('http://office.test/?view=all');await page.locator('[data-layout="timeline"]').click();
+  await page.locator('.tl-row[data-work] .tl-track.two').waitFor();
+  const lane=page.locator('.tl-row[data-work] .bar.lasting.ok');assert.equal(await lane.getAttribute('title'),'Always-on services: 2 · OK');
+  const [top,run]=await Promise.all([lane.boundingBox(),page.locator('.tl-row[data-work] .bar.ok:not(.lasting)').first().boundingBox()]);
+  assert.ok(top.y+top.height<=run.y,'the service lane sits above the timer runs, not over them');
+  assert.match(await page.locator('.tl-row[data-work] .bar.done').getAttribute('title'),/ · result not seen$/u);
+  if(process.env.TIMELINE_SHOT)await page.locator('.tl-row[data-work]').screenshot({path:process.env.TIMELINE_SHOT});
+});

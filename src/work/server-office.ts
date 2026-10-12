@@ -79,10 +79,14 @@ export function serverTimeline(store:PackStore,project:string,id:string,window:{
   const rows=timers.length&&store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_server_timer_run'").get()
     ?store.hermesState.prepare(`SELECT unit,triggered_at,result,seen_at FROM office_server_timer_run WHERE project_id=? AND target_id=? AND triggered_at>=? AND unit IN (${timers.map(()=>'?').join(',')}) ORDER BY triggered_at`).all(project,view.target.id,new Date(window.from).toISOString(),...timers) as Array<{unit:string;triggered_at:string;result:string;seen_at:string}>:[];
   const cycles=rows.map(r=>{const start=Date.parse(r.triggered_at),seen=Date.parse(r.seen_at);
-    return {start:r.triggered_at,end:new Date(Math.min(window.to,r.result==='running'?window.to:Math.max(start+60_000,Math.min(seen,start+15*60_000)))).toISOString(),state:r.result==='running'?'now' as const:r.result==='failed'?'problem' as const:'ok' as const,unit:r.unit};});
+    return {start:r.triggered_at,end:new Date(Math.min(window.to,r.result==='running'?window.to:r.result==='unknown'?Math.min(seen,start+15*60_000):Math.max(start+60_000,Math.min(seen,start+15*60_000)))).toISOString(),state:r.result==='running'?'now' as const:r.result==='unknown'?'done' as const:r.result==='failed'?'problem' as const:'ok' as const,unit:r.unit};});
   const byId=new Map((view.snapshot?.units??[]).map(u=>[u.id,u])),scheduled=timers.map(t=>byId.get(t)).filter((u):u is NonNullable<typeof u>=>Boolean(u));
   const first=scheduled.find(u=>u.schedule)?.schedule??null,others=scheduled.filter(u=>u.schedule).length-1,next=scheduled.map(u=>u.next_run).filter((n):n is number=>typeof n==='number').sort((a,b)=>a-b)[0];
-  return {cycles,marks:[] as never[],schedule:first?{ko:first.ko+(others>0?` 외 ${others}개`:''),en:first.en+(others>0?` +${others} more`:'')}:null,next_at:next?new Date(next*1000).toISOString():null,
+  // Services and containers that run all the time get a lane of their own above the timer runs (owner 2026-10-12: many
+  // timer runs in one row read as if the Work ran all day). Only the current state is known, so the lane is one bar.
+  const lasting=view.units.filter(unit=>!unit.endsWith('.timer')),states=lasting.map(unit=>byId.get(unit)?.state??'problem');
+  const services=timers.length&&lasting.length?{count:lasting.length,state:states.every(state=>state==='ok')?'ok' as const:'problem' as const}:null;
+  return {cycles,marks:[] as never[],services,schedule:first?{ko:first.ko+(others>0?` 외 ${others}개`:''),en:first.en+(others>0?` +${others} more`:'')}:null,next_at:next?new Date(next*1000).toISOString():null,
     timers:scheduled.map(u=>({id:u.id,schedule:u.schedule??null,next_at:u.next_run?new Date(u.next_run*1000).toISOString():null}))};
 }
 
@@ -154,10 +158,13 @@ export class ServerOffice {
    */
   private recordTimerRuns(targetId:string,snapshot:ServerSnapshot){
     const db=this.store.hermesState,project=this.config.project.id,at=now();
-    const insert=db.prepare('INSERT OR IGNORE INTO office_server_timer_run VALUES(?,?,?,?,?,?)'),settle=db.prepare("UPDATE office_server_timer_run SET result=?,seen_at=? WHERE project_id=? AND target_id=? AND unit=? AND triggered_at=? AND result='running'");
+    const insert=db.prepare('INSERT OR IGNORE INTO office_server_timer_run VALUES(?,?,?,?,?,?)'),superseded=db.prepare("UPDATE office_server_timer_run SET result='unknown',seen_at=? WHERE project_id=? AND target_id=? AND unit=? AND result='running' AND triggered_at<?"),settle=db.prepare("UPDATE office_server_timer_run SET result=?,seen_at=? WHERE project_id=? AND target_id=? AND unit=? AND triggered_at=? AND result='running'");
     for(const unit of snapshot.units){if(unit.kind!=='timer'||!unit.last_run)continue;
       const triggered=new Date(unit.last_run*1000).toISOString(),result=unit.running?'running':unit.note==='last_run_failed'?'failed':'ok';
-      insert.run(project,targetId,unit.id,triggered,result,at);if(result!=='running')settle.run(result,at,project,targetId,unit.id,triggered);}
+      insert.run(project,targetId,unit.id,triggered,result,at);if(result!=='running')settle.run(result,at,project,targetId,unit.id,triggered);
+      // A timer does not start its job again while it runs: an earlier run still marked running ended before this trigger.
+      // Its result was not seen (a 3-minute timer read every 2 minutes left eight such runs drawn up to now, 2026-10-12).
+      superseded.run(triggered,project,targetId,unit.id,triggered);}
     db.prepare('DELETE FROM office_server_timer_run WHERE project_id=? AND target_id=? AND triggered_at<?').run(project,targetId,new Date(Date.now()-8*86_400_000).toISOString());
   }
   /** The owner's choice of how a server Work runs; 'auto' goes back to judging by its units. */
