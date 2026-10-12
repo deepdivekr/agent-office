@@ -7,7 +7,8 @@ import {fileURLToPath} from 'node:url';
 import {z} from 'zod';
 import {requireCondition} from '../core/contracts.js';
 import {configureHermes,hermesDoctor,hermesHome} from '../integrations/hermes.js';
-import {officeServerEntry} from '../integrations/owner-mcp.js';
+import {officeServerEntry,windowsOfficeEntry} from '../integrations/owner-mcp.js';
+import {environmentHomes} from '../integrations/client-environment.js';
 import {nativeProcessRunner,resolveSubscriptionClientExecutable,type SafeProcessRunner,type SubscriptionClientId} from '../integrations/subscription-auth.js';
 import {localConnectionPaths} from './connection.js';
 
@@ -17,7 +18,9 @@ const receiptSchema=z.object({format:z.literal(1),registrations:z.partialRecord(
 type Receipts=z.infer<typeof receiptSchema>;
 export interface McpClientRegistrationView {id:McpRegistrationClient;installed:boolean;registration:'registered'|'not_registered'|'unavailable'|'conflict'|'unknown';automatic:boolean;reason:string;restart_required:boolean;}
 export interface WindowsMcpBridge {command:'wsl.exe';args:string[];registration:'manual_unverified';}
-export interface McpRegistrationView {agent_driver:{installed:true;mcp_command:'agent-office mcp'};clients:McpClientRegistrationView[];registered_count:number;windows_bridge?:WindowsMcpBridge;credentials_exposed:false;}
+/** The same app installed on the Windows side (owner 2026-10-12: Codex and Claude Code can be on both sides; the owner picks one or both). */
+export interface WindowsClientView {id:'codex'|'claude';installed:boolean;registration:'registered'|'not_registered'|'conflict';}
+export interface McpRegistrationView {agent_driver:{installed:true;mcp_command:'agent-office mcp'};clients:McpClientRegistrationView[];registered_count:number;windows_bridge?:WindowsMcpBridge;windows_clients?:WindowsClientView[];credentials_exposed:false;}
 
 function entrypoint(){return resolve(fileURLToPath(new URL('../cli.js',import.meta.url)));}
 /** Windows desktop MCP clients can launch the same WSL stdio server without a shell or credential copy. */
@@ -67,6 +70,19 @@ async function writeOpencode(environment:NodeJS.ProcessEnv,command:string,args:r
   await mkdir(dirname(path),{recursive:true,mode:0o700});
   try{await writeFile(temporary,output,{mode:0o600,flag:'wx'});requireCondition((existsSync(path)?readFileSync(path,'utf8'):null)===before,'MCP_REGISTRATION_CONFLICT');await rename(temporary,path);await chmod(path,0o600);}finally{if(existsSync(temporary)){const {unlink}=await import('node:fs/promises');await unlink(temporary);}}
 }
+/** The Windows app's executable as WSL sees it: Claude Code's native installer, or Codex from npm. */
+export function windowsClientExecutable(id:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env):string|null{
+  const home=environmentHomes(environment).find(place=>place.side==='windows')?.home;if(!home)return null;
+  const candidates=id==='claude'?[join(home,'.local','bin','claude.exe')]:[join(home,'AppData','Roaming','npm','node_modules','@openai','codex','node_modules','@openai','codex-win32-x64','vendor','x86_64-pc-windows-msvc','bin','codex.exe')];
+  return candidates.find(path=>existsSync(path))??null;
+}
+function windowsClients(environment:NodeJS.ProcessEnv):WindowsClientView[]|undefined{
+  if(!environmentHomes(environment).some(place=>place.side==='windows'))return undefined;
+  return (['codex','claude'] as const).map(id=>{
+    const entry=windowsOfficeEntry(id,environment);
+    return {id,installed:windowsClientExecutable(id,environment)!==null,registration:!entry?'not_registered':entry.command&&/wsl(\.exe)?$/iu.test(basename(entry.command.replace(/\\/gu,'/')))?'registered':'conflict'};
+  });
+}
 function runnerArgs(id:'codex'|'claude',command:string,args:readonly string[]){
   if(id==='codex')return ['mcp','add','agent-driver','--',command,...args];
   if(id==='claude')return ['mcp','add','--scope','user','agent-driver','--',command,...args];
@@ -94,13 +110,23 @@ export class McpRegistrationController{
       clients.push({id,installed:present,registration,automatic:present,reason,restart_required:registration==='registered'});
     }
     const windows_bridge=windowsMcpBridge(this.environment);
-    return {agent_driver:{installed:true,mcp_command:'agent-office mcp'},clients,registered_count:clients.filter(item=>item.registration==='registered').length,...(windows_bridge?{windows_bridge}:{}),credentials_exposed:false};
+    const windows_clients=windowsClients(this.environment);
+    return {agent_driver:{installed:true,mcp_command:'agent-office mcp'},clients,registered_count:clients.filter(item=>item.registration==='registered').length+(windows_clients??[]).filter(item=>item.registration==='registered').length,...(windows_bridge?{windows_bridge}:{}),...(windows_clients?{windows_clients}:{}),credentials_exposed:false};
   }
   /** The client's own agent-driver entry: Office's (this entrypoint, or the agent-office launcher), another program's, or none. */
   private existing(id:'codex'|'claude'):'office'|'other'|null{
     const entry=officeServerEntry(id,this.environment);if(!entry)return null;
     const same=(expected:readonly string[])=>JSON.stringify(entry.args)===JSON.stringify(expected);
     return entry.command===this.command&&same(this.args)||entry.command!==undefined&&basename(entry.command)==='agent-office'&&same(['mcp'])?'office':'other';
+  }
+  /** Register Office in the Windows-side app through the wsl.exe bridge, with the app's own `mcp add`. */
+  async registerWindows(id:'codex'|'claude'){
+    const bridge=windowsMcpBridge(this.environment),executable=windowsClientExecutable(id,this.environment);
+    requireCondition(bridge&&executable,'MCP_CLIENT_UNAVAILABLE');
+    const entry=windowsOfficeEntry(id,this.environment);
+    if(!entry){const result=await this.runner.run({executable,args:runnerArgs(id,bridge.command,bridge.args),timeout_ms:30_000});requireCondition(result.code===0,'MCP_REGISTRATION_FAILED');}
+    else requireCondition(Boolean(entry.command&&/wsl(\.exe)?$/iu.test(basename(entry.command.replace(/\\/gu,'/')))),'MCP_REGISTRATION_CONFLICT');
+    return this.view();
   }
   async register(id:McpRegistrationClient){
     requireCondition(clientIds.includes(id),'MCP_CLIENT_INVALID');const present=installed(id,this.environment);requireCondition(present,'MCP_CLIENT_UNAVAILABLE');

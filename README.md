@@ -10,7 +10,6 @@ Nothing stops silently: a stopped run shows up in *Needs you* and, if you connec
 **English** · [한국어](README.ko.md) · [v0.6.0 release notes](docs/releases/v0.6.0.md)
 
 It is also a local MCP server, so Codex, Claude Code, Cursor, OpenCode, Hermes or another MCP client can hand it work.
-Install and run it as `agent-office`. The old `agent-driver` command remains a compatibility alias.
 
 ## The feed: where results come together
 
