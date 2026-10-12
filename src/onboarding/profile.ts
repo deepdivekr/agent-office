@@ -21,9 +21,10 @@ export const officeMcpName=(profile=officeProfile())=>profile?`agent-office-${pr
 export const profileArgs=(profile=officeProfile()):string[]=>profile?['--profile',profile]:[];
 /** Any Office's MCP server name, whichever profile: a Work's run must not drive another Office either. */
 export const isOfficeMcpName=(name:string)=>name==='agent-driver'||name==='agent-office'||/^agent-office-[a-z][a-z0-9-]{0,23}$/u.test(name);
-/** Takes `--profile NAME` out of the arguments (anywhere before the command's own options) into the environment. */
+/** Takes a leading `--profile NAME` (before the command) into the environment. After the command `--profile` belongs to
+ * that command: `decision promote --profile <hash>` had it first. */
 export function takeProfileArgument(args:string[],environment:NodeJS.ProcessEnv=process.env){
-  const at=args.indexOf('--profile');if(at<0)return args;
+  const at=args[0]==='--profile'?0:-1;if(at<0)return args;
   const name=args[at+1]??'';requireCondition(profilePattern.test(name),'PROFILE_NAME_INVALID');
   environment[PROFILE_ENV]=name;return [...args.slice(0,at),...args.slice(at+2)];
 }

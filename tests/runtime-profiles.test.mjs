@@ -16,6 +16,7 @@ test('a profile name selects its own data folder, MCP name and launch arguments'
   const {connectionRoot}=await import('../dist/onboarding/connection.js');
   const env={};assert.deepEqual(takeProfileArgument(['--profile','work','connect','--no-open'],env),['connect','--no-open']);assert.equal(env.AGENT_OFFICE_PROFILE,'work');
   assert.deepEqual(takeProfileArgument(['connect'],{}),['connect']);
+  const left={};assert.deepEqual(takeProfileArgument(['decision','promote','--profile','5e72'],left),['decision','promote','--profile','5e72'],'after the command it is the command\'s own option');assert.equal(left.AGENT_OFFICE_PROFILE,undefined);
   assert.throws(()=>takeProfileArgument(['--profile','../x','mcp'],{}),/PROFILE_NAME_INVALID/u);assert.throws(()=>officeProfile({AGENT_OFFICE_PROFILE:'Work'}),/PROFILE_NAME_INVALID/u);
   assert.equal(connectionRoot({AGENT_OFFICE_PROFILE:'work'},'/home/owner'),'/home/owner/.agent-office-profiles/work');
   assert.equal(connectionRoot({AGENT_OFFICE_PROFILE:'work',AGENT_OFFICE_CONNECTION_ROOT:'/srv/office'},'/home/owner'),'/srv/office','an explicit root still wins');
