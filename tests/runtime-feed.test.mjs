@@ -326,6 +326,8 @@ test('runtime fixture the feed takes presses: answer a question, run an approved
   assert.match(await page.locator('.draft + .press a').getAttribute('href'),/^mailto:buyer%40example\.com\?subject=/u);
   // A reply asks first in a sheet (to whom, what), then goes to the Work's session; one that cannot take it opens the Work.
   await page.locator('[data-card-reply]').click();const sheet=page.locator('#feed-confirm');await sheet.locator('blockquote').waitFor();
+  // The card came from runtime_feed_post: the sheet says who made the button (security review 2026-10-13).
+  assert.match(await sheet.innerText(),/직접 올린 글에 있어요|sent directly/u);
   assert.match(await sheet.locator('blockquote').innerText(),/A 호텔로 진행해/u);await sheet.locator('[data-fc="no"]').click();assert.equal(await sheet.isVisible(),false,'cancel sends nothing');assert.ok(!page.url().includes('work='));
   await page.locator('[data-card-reply]').click();await sheet.locator('[data-fc="yes"]').click();
   await page.locator('.work-head h2').waitFor();assert.ok(page.url().includes(stay),'a Work that takes no instruction now opens with it');
