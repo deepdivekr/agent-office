@@ -53,7 +53,7 @@ function render(){
     bubble.style.left='auto';bubble.style.right='20px';bubble.style.top='auto';bubble.style.bottom='20px';return;
   }
   const [el,text]=found;
-  if(focused!==el){if(focused)focused.classList.remove('coach-focus');focused=el;el.classList.add('coach-focus');el.scrollIntoView({block:'center',behavior:'smooth'});}
+  if(focused!==el){if(focused)focused.classList.remove('coach-focus');focused=el;el.classList.add('coach-focus');const r=el.getBoundingClientRect();if(r.top<0||r.bottom>innerHeight)el.scrollIntoView({block:'center'});}
   bubble.style.right='auto';bubble.style.bottom='auto';
   bubble.innerHTML='<span class="coach-step">'+(step+1)+' / 5 · '+NAMES[step]+'</span>'+text+'<div class="coach-row"><button type="button" data-coach-off>'+L('안내 끄기','Hide guide')+'</button></div>';
   place(el);
@@ -63,9 +63,11 @@ new MutationObserver(m=>{if(m.every(x=>bubble&&bubble.contains(x.target)))return
 addEventListener('resize',later);addEventListener('scroll',()=>{if(focused&&bubble)place(focused)},{passive:true});
 document.addEventListener('click',e=>{if(e.target.closest('[data-coach-off]')){off=true;try{localStorage.setItem(KEY,'1')}catch{}clear()}});
 // The guide starts where setup is not done: with no AI app signed in and connected, that is the first step.
-let started=false;
+let started=false,moved=false;
+// a step the owner picked is kept: the guide does not pull the page back to the first step
+document.addEventListener('click',e=>{if(e.target.closest('[data-step],[data-next],[data-save-next],#finish'))moved=true;},true);
 const appReady=()=>Boolean(mcpState&&mcpState.registered_count)&&Boolean(bootstrapState&&(bootstrapState.connections||[]).some(c=>c.status==='ready'));
-const start=()=>{if(started||off||!initialized)return;started=true;if(!welcome&&state&&state.configured)return;if(!appReady()&&step!==0)void action(()=>show(0));};
+const start=()=>{if(started||off||!initialized)return;started=true;if(moved)return;if(!welcome&&state&&state.configured)return;if(!appReady()&&step!==0)void action(()=>show(0));};
 const wait=setInterval(()=>{if(initialized){clearInterval(wait);start();later();}},200);
 window.officeCoach={render};later();
 })();`;
