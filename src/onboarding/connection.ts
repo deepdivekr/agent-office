@@ -67,6 +67,8 @@ export async function approveNonInterferingConnection(root=connectionRoot(),now=
 /** Prepare only inert host configuration. MCP default still requires separate human connection approval. */
 export async function prepareLocalConnection(root=connectionRoot()){
   const paths=localConnectionPaths(root);await mkdir(paths.root,{recursive:true,mode:0o700});await mkdir(paths.workspace,{recursive:true,mode:0o700});await mkdir(paths.data,{recursive:true,mode:0o700});
+  // An existing folder keeps the mode it had: Office's own folders are made private every time (security review 2026-10-13).
+  for(const folder of [paths.root,paths.workspace,paths.data])await chmod(folder,0o700);
   const runtimeConfig={schema_version:1,project_id:'agent-driver-local',caller_ref:'local-agent',account_ref:'owner',worktree:'workspace',data_dir:'data',environment:'production',recovery_policy:'auto_resume'};
   try{await writeFile(paths.runtimeConfig,JSON.stringify(runtimeConfig,null,2)+'\n',{mode:0o600,flag:'wx'});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
   return paths;

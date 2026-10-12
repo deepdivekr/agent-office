@@ -279,5 +279,7 @@ test('runtime contract a result with RECORDS.json adds its items to the Work led
  assert.deepEqual(addRecords(x.store,x.config.project.id,fixture.work.id,[{...items[0],url:'https://example.com/news/ligado?utm=2'},items[1]]),{added:0,skipped:0});
  assert.equal(countRecords(x.store,x.config.project.id,fixture.work.id),2);
  assert.deepEqual(listRecords(x.store,x.config.project.id,fixture.work.id,{q:'Ligado'}).map(r=>r.author),['Stocktwits']);
- const csv=recordsCsv(rows);assert.match(csv,/^﻿at,subject,source,author,title,summary,url\r\n/u);assert.match(csv,/"Entner: ""Ligado is next"""/u);
+ const csv=recordsCsv(rows);assert.match(csv,/^﻿at,subject,source,author,title,summary,url\r\n/u);
+ // A title from an outside site never runs as a spreadsheet formula (security review 2026-10-13).
+ assert.match(recordsCsv([{at:'2026-10-13T00:00:00Z',subject:'X',source:'site',author:null,title:'=HYPERLINK("https://evil.example","click")',summary:'+1',url:null}]),/,"'=HYPERLINK\(""https:\/\/evil\.example"",""click""\)",'\+1,/u);assert.match(csv,/"Entner: ""Ligado is next"""/u);
 });

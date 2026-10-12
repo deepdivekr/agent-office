@@ -1,6 +1,6 @@
 # Agent Office
 
-**English** · [한국어](README.ko.md) · [v0.7.5 release notes](docs/releases/v0.7.5.md)
+**English** · [한국어](README.ko.md) · [v0.7.6 release notes](docs/releases/v0.7.6.md)
 
 **Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own app and your own accounts. In Agent Office you see their status, hear when one stops, change instructions and run them again. Their results come together in one feed.
 
@@ -83,7 +83,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.7.5/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.7.6/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.

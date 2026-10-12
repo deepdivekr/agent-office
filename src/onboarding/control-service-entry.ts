@@ -3,7 +3,7 @@ import {enableOwnerEnvironment} from '../integrations/client-environment.js';
 import {enableClientRun} from '../work/client-run.js';
 import {dirname} from 'node:path';
 import {appendSetupActivity} from './setup-activity.js';
-import {startManagedControlService,validControlUrl} from './control-service.js';
+import {PREVIOUS_CONTROL_URL,startManagedControlService,validControlUrl} from './control-service.js';
 import {enableConnectionWarmup} from '../observability/control-settings.js';
 // A service process works for the owner of this computer: their standing AI instructions and skills come along.
 enableOwnerEnvironment();
@@ -13,7 +13,8 @@ enableOwnerMcp();
 enableClientRun();
 enableConnectionWarmup();
 try{
-  const path=process.argv[2],previous=process.argv[3];if(!path||previous&&!validControlUrl(previous))throw Error('INVALID_CONNECTION_OPTIONS');
+  // Read and removed at once, so Works started from this process never inherit the capability.
+  const path=process.argv[2],previous=process.env[PREVIOUS_CONTROL_URL]??process.argv[3];delete process.env[PREVIOUS_CONTROL_URL];if(!path||previous&&!validControlUrl(previous))throw Error('INVALID_CONNECTION_OPTIONS');
   const service=await startManagedControlService(path,previous?new URL(previous):undefined,{onReloadState:async state=>{
     const message=state.state==='reloading'?'Applying the saved runtime settings. No Work is being replayed.':state.state==='idle'?'Saved runtime settings applied. No Work was replayed.':state.state==='restored'?'Applying runtime settings failed. The previous runtime was preserved or restored; no Work was replayed.':'Applying runtime settings failed. Recovery needs review; no Work was replayed.';
     await appendSetupActivity(dirname(path),'runtime',state.state==='reloading'?'running':state.state==='idle'?'success':'error',message);

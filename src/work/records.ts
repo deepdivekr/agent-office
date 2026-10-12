@@ -54,6 +54,8 @@ export function listRecords(store:PackStore,project:string,workId:string,options
 }
 /** The ledger as CSV, for a spreadsheet. */
 export function recordsCsv(records:WorkRecord[]){
-  const cell=(value:string|null)=>{const v=String(value??'');return /[",\n\r]/u.test(v)?'"'+v.replace(/"/gu,'""')+'"':v;};
+  // Titles and summaries come from outside sites: a cell a spreadsheet would read as a formula starts with ' (security
+  // review 2026-10-13).
+  const cell=(value:string|null)=>{let v=String(value??'');if(/^[=+\-@\t\r]/u.test(v))v="'"+v;return /[",\n\r]/u.test(v)?'"'+v.replace(/"/gu,'""')+'"':v;};
   return '﻿'+['at,subject,source,author,title,summary,url',...records.map(r=>[r.at,r.subject,r.source,r.author,r.title,r.summary,r.url].map(cell).join(','))].join('\r\n')+'\r\n';
 }

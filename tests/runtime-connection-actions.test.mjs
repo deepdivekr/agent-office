@@ -92,3 +92,14 @@ test('runtime native import entry is visibly linked and import text/actions have
     await page.goto(server.url+'?work='+hermes);await page.locator('#hermes-instruction').waitFor();await assertDisclosures(page,3);await option(page,page.locator('#theme-toggle'));await assertDisclosures(page,3);await page.close();
   }
 });
+
+// Security review 2026-10-13: an existing connection folder kept its mode (for example 0755), leaving the DB and Work
+// folders readable by other accounts. Office's own folders are made private every time.
+test('runtime native preparing the connection makes existing Office folders private',async t=>{
+  const {mkdtemp,mkdir,rm,stat}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+  const {prepareLocalConnection}=await import('../dist/onboarding/connection.js');
+  const root=join(await mkdtemp(join(tmpdir(),'office-modes-')),'office');t.after(()=>rm(root,{recursive:true,force:true}));
+  await mkdir(join(root,'data'),{recursive:true,mode:0o755});
+  const paths=await prepareLocalConnection(root);
+  for(const folder of [paths.root,paths.workspace,paths.data])assert.equal((await stat(folder)).mode&0o777,0o700,folder);
+});

@@ -131,6 +131,9 @@ export class WorkRuntime {
     private readonly resultDelivery?:(workId:string)=>{registered:Array<{id:string;platform:string;label:string}>;selected:string[]}){}
   /** Waits before the definition asks the model again after a passing error (an outage, a rate limit, a login refresh). */
   definitionRetryDelaysMs=[15_000,45_000];
+  /** An API planner may be another provider than the apps the owner's CLAUDE.md and AGENTS.md were written for: those
+   * files go only to the owner's own subscription app (security review 2026-10-13). An unreadable setting counts as API. */
+  private apiPlanner(){try{return readModelSettings(modelSettingsPath(this.config))?.selection.mode==='api';}catch{return true;}}
   planningContext(workId?:string){return {...workPlanningContext(this.store,this.config,this.capabilities()),...(workId?{observed_source_schemas:observedWorkSourceSchemas(this.store,this.config,workId)}:{})};}
   private definitionDiagnostic(workId:string,event:WorkDefinitionDiagnostic){
     if(this.store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_activity'").get())workActivity(this.store,this.config.project.id,workId,`definition.${event.kind}`,`Work definition ${event.kind}: ${event.code}`);
@@ -206,7 +209,7 @@ export class WorkRuntime {
       }
       const candidates=procedureCandidates(this.store,project,work.prompt);
       if(workAutonomy(this.config)==='delegated')await ownerMcpReady(15_000);
-      const instructions=WORK_DEFINITION_INSTRUCTIONS+'\n'+WORK_PLANNING_CONTEXT_INSTRUCTIONS+'\n'+WORK_CONNECTED_SOURCE_INSTRUCTIONS+'\n'+WORK_INTAKE_REQUIREMENTS_INSTRUCTIONS+'\n'+WORK_COLLECTION_CONTRACT_INSTRUCTIONS+(candidates.length?'\n'+WORK_PROCEDURE_SELECTION_INSTRUCTIONS:''),modelInput={...input,...this.planningContext(),...ownerEnvironmentContext(),...(workAutonomy(this.config)==='delegated'&&ownerMcpSnapshot()?.tools.length?{owner_mcp_tools:ownerMcpSnapshot()!.tools.map(tool=>({name:tool.name,description:tool.description.slice(0,200)}))}:{}),host_execution_facts:HOST_EXECUTION_FACTS,...(candidates.length?{verified_procedure_candidates:candidates}:{})};
+      const instructions=WORK_DEFINITION_INSTRUCTIONS+'\n'+WORK_PLANNING_CONTEXT_INSTRUCTIONS+'\n'+WORK_CONNECTED_SOURCE_INSTRUCTIONS+'\n'+WORK_INTAKE_REQUIREMENTS_INSTRUCTIONS+'\n'+WORK_COLLECTION_CONTRACT_INSTRUCTIONS+(candidates.length?'\n'+WORK_PROCEDURE_SELECTION_INSTRUCTIONS:''),modelInput={...input,...this.planningContext(),...(this.apiPlanner()?{}:ownerEnvironmentContext()),...(workAutonomy(this.config)==='delegated'&&ownerMcpSnapshot()?.tools.length?{owner_mcp_tools:ownerMcpSnapshot()!.tools.map(tool=>({name:tool.name,description:tool.description.slice(0,200)}))}:{}),host_execution_facts:HOST_EXECUTION_FACTS,...(candidates.length?{verified_procedure_candidates:candidates}:{})};
       const schema=z.toJSONSchema(workProposalSchema);
       definitionBinding=hashJson({instructions,input:modelInput,schema});
       // The intake planner keeps one conversation per Work (owner direction 2026-10-02): the first round and every
