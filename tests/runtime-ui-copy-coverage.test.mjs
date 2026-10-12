@@ -96,3 +96,10 @@ test('display copy: the existing-setup line of the connection check is shown in 
   assert.equal(en.officeText('Codex: 기존 환경 확인 · 스킬 14개 · MCP 0개 · 플러그인 0개 · 프로젝트 190개'),'Codex: existing setup found · skills 14 · MCP 0 · plugins 0 · projects 190');
   assert.equal(ko.officeText('Codex: 기존 환경 확인 · 스킬 14개 · MCP 0개 · 플러그인 0개 · 프로젝트 190개'),'Codex: 기존 환경 확인 · 스킬 14개 · MCP 0개 · 플러그인 0개 · 프로젝트 190개');
 });
+
+// A served script is a template string: a single-backslash \b becomes a backspace, so /^ko\b/ never matched (Korean
+// browsers opened in English) and a host pattern found nothing (clean-install check, 2026-10-12). Pages carry none.
+test('served pages carry no control characters from a lost backslash',async()=>{
+  const pages={settings:(await import('../dist/observability/settings-ui.js')).settingsHtml('n'),work:(await import('../dist/observability/work-ui.js')).workHtml('n'),office:(await import('../dist/observability/office-ui.js')).officeHtml('n'),connections:(await import('../dist/observability/browser-connections.js')).connectionHtml('n')};
+  for(const [name,html] of Object.entries(pages))assert.deepEqual([...html.matchAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu)].map(match=>JSON.stringify(html.slice(Math.max(0,match.index-40),match.index+10))),[],name);
+});

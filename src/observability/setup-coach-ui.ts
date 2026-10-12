@@ -29,7 +29,19 @@ function target(){
     const next=document.getElementById('mcp-next');if(visible(next))return [next,L('연결됐어요. 다음 단계로 가세요.','Connected. Go on to the next step.')];
     return null;
   }
-  if(step===1){const allow=document.getElementById('connect-computer');if(visible(allow))return [allow,L('업무가 이 컴퓨터에서 돌도록 허용하세요. 화면과 내 파일은 건드리지 않는 기본 모드예요.','Allow Work to run on this computer. The default mode leaves your screen and files alone.')];const n=pick(panel,'[data-next]');return n?[n,L('사이트 로그인은 나중에 해도 돼요. 다음으로 가세요.','Site sign-ins can wait. Go on.')]:null;}
+  if(step===1){const allow=document.getElementById('connect-computer');if(visible(allow))return [allow,L('업무가 이 컴퓨터에서 돌도록 허용하세요. 화면과 내 파일은 건드리지 않는 기본 모드예요.','Allow Work to run on this computer. The default mode leaves your screen and files alone.')];
+    // Aside is recommended (owner 2026-10-12): the guide asks, then walks a yes through download, CLI, connect and a site.
+    const question=document.getElementById('aside-question'),wanted=typeof asideWanted==='function'?asideWanted():null;
+    if(visible(question))return [question,L('로그인이 필요한 사이트에서도 일을 시킬지 골라 주세요. 예를 고르면 Aside 연결을 안내해요.','Choose whether Work will use sites that need a sign-in. Yes walks you through connecting Aside.')];
+    const card=document.querySelector('[data-browser="aside"]'),state=card?.dataset.setupState;
+    if(wanted&&card&&state!=='connected'){
+      const download=pick(card,'a.action-link'),act=download||pick(card,'.cact button.primary')||pick(card,'.cact button');
+      const why={missing_cli:L('Aside를 내려받아 설치하고, Aside의 Settings → Developers에서 CLI를 켠 뒤 다시 확인을 눌러요.','Download and install Aside, turn on its CLI in Settings → Developers, then press Check again.'),disconnected:L('Aside를 실행한 뒤 연결을 눌러요.','Start Aside, then press Connect.'),permission:L('허용하면 기본 브라우저 도구가 실패할 경우 자동으로 Aside로 라우팅돼요.','Once allowed, Work moves to Aside by itself when the default browser tool fails.')}[state]||L('Aside 연결을 확인해요.','Check the Aside connection.');
+      if(act)return [act,why];
+    }
+    const add=document.querySelector('#site-login-add button');
+    if(wanted&&state==='connected'&&!document.querySelector('#site-login-list .client')&&visible(add))return [add,L('일을 시킬 사이트 주소(예: https://x.com)를 넣고 추가해요. 로그인은 전체 관리에서 Aside로 해요.','Add the address of a site Work will use (for example https://x.com). Sign in with Aside under Manage all.')];
+    const n=pick(panel,'[data-next]');return n?[n,L('사이트 로그인은 나중에 해도 돼요. 다음으로 가세요.','Site sign-ins can wait. Go on.')]:null;}
   if(step===2){const n=pick(panel,'[data-save-next],#finish,.actions .primary')||document.getElementById('save-model');return visible(n)?[n,L('업무를 맡을 기본 AI와 모델을 고르고 넘어가요. 업무마다 나중에 바꿀 수 있어요.','Pick the default AI and model, then go on. You can change it per Work later.')]:null;}
   if(step===3){const n=pick(panel,'[data-save-next],#finish,[data-next],.actions .primary');return n?[n,L('Jev는 선택이에요. 그냥 넘어가도 담당 AI가 판단까지 맡아요.','Jev is optional. Skip it and the Work’s AI makes those calls too.')]:null;}
   return 'done';
