@@ -1,5 +1,7 @@
 # Agent Office
 
+**English** · [한국어](README.ko.md) · [v0.7.0 release notes](docs/releases/v0.7.0.md)
+
 **Bots and automations scattered across your AI clients — Codex, Claude Code, Hermes, scripts — managed from one screen.** Each one still runs on its own app and your own accounts. In Agent Office you see their status, hear when one stops, change instructions and run them again. Their results come together in one feed.
 
 <p align="center"><img src="docs/images/en/hero.gif" width="560" alt="Work scattered across Codex, Claude Code and Hermes comes together on one Agent Office board: a stopped run is flagged and resumed, a new Work runs in Claude Code and its result is delivered"></p>
@@ -7,7 +9,6 @@
 
 Nothing stops silently: a stopped run shows up in *Needs you* and, if you connected one, in your messenger. New recurring work takes one line and runs when it is due.
 
-**English** · [한국어](README.ko.md) · [v0.7.0 release notes](docs/releases/v0.7.0.md)
 
 It is also a local MCP server, so Codex, Claude Code, Cursor, OpenCode, Hermes or another MCP client can hand it work.
 
