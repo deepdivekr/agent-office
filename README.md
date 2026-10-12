@@ -11,7 +11,7 @@
 
 ### What's new
 
-- **[v0.8.0](docs/releases/v0.8.0.md)** · Work profiles · separate ports · several Offices' MCP on one PC
+- **[v0.8.0](docs/releases/v0.8.0.md)** · Business profile · separate ports · several Offices' MCP on one PC
 - **[v0.7.6](docs/releases/v0.7.6.md)** · Security fixes
 - **[v0.7.4](docs/releases/v0.7.4.md)** · Aside recommended · one server alert per check
 
@@ -129,7 +129,7 @@ For manual MCP registration, use `agent-office mcp`. Windows apps use the WSL co
 Keep personal and business Work apart with a profile. Each profile has its own data (`~/.agent-office-profiles/<name>`), a fixed port of its own (4601–4699) and its own MCP name (`agent-office-<name>`):
 
 ```bash
-~/.local/bin/agent-office --profile work connect
+~/.local/bin/agent-office --profile business connect
 ```
 
 The profile's name is shown next to the logo, and a Work in one Office cannot start or change Works in the other. Both run as your account, so a profile separates records and notices, not file access; for business data that other Works must not reach, use a separate Windows account or computer.
