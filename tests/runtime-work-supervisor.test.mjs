@@ -321,3 +321,21 @@ test('runtime fixture a Work stopped on the AI app sign-in says so and offers Ru
  await panel.getByRole('button',{name:'Run again'}).click();await delay(500);
  assert.equal(posted.length,1);assert.equal(posted[0].action,'resume');assert.equal(posted[0].work_id,x.work.work_id);assert.deepEqual(errors,[]);
 });
+
+// Owner 2026-10-12: a request naming a site that needs a sign-in, without Aside connected, says so before it starts.
+test('runtime fixture a new Work naming a sign-in site suggests Aside until Aside is connected',async t=>{
+ const x=await setup(t),server=await startControlCenter(x.config,{workModel:x.model}),browser=await chromium.launch({headless:true});x.cleanup.push(async()=>{await browser.close();await server.close();});
+ let asideReady=false;
+ const page=await browser.newPage({viewport:{width:1280,height:900}});await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/settings/browsers',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({rows:[{engine:'aside',registered:asideReady,health:asideReady?'ready':'unavailable'}]})}));
+ await page.route('**/connections/status',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({sites:[{site:'cafe.naver.com'}],targets:[]})}));
+ await page.goto(server.url);await page.locator('#new-work').click();
+ const hint=page.locator('#intake-site-hint');
+ await page.locator('#prompt').fill('오늘 https://x.com/home 타임라인에서 AI 소식만 모아줘');
+ await hint.waitFor();assert.match(await hint.innerText(),/로그인이 필요한 사이트\(x\.com\)가 있어요\. Aside를 연결해 두면 기본 브라우저 도구가 실패할 경우 자동으로 라우팅돼요\./u);
+ assert.equal(await hint.locator('a').getAttribute('href'),'settings#browsers');
+ await page.locator('#prompt').fill('cafe.naver.com 공지 정리');await page.waitForFunction(()=>/cafe\.naver\.com/u.test(document.getElementById('intake-site-hint').textContent));
+ await page.locator('#prompt').fill('월별 매출로 그래프 만들어줘');await hint.waitFor({state:'hidden'});
+ asideReady=true;await page.evaluate(()=>{siteHintFacts=null;});await page.locator('#prompt').fill('https://x.com 타임라인 요약');await delay(900);assert.equal(await hint.isVisible(),false,'with Aside connected nothing is said');
+ assert.deepEqual(errors,[]);
+});
