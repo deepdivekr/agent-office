@@ -66,6 +66,7 @@ export function readWorkBoard(store:PackStore,config:HostConfig,limit=60){
  * along for what the page pins and lists beside the posts: those that need the owner, those running, the next runs and
  * the servers. Built from stored records only; hidden Works stay out.
  */
+const interruptedStatuses=new Set(['waiting_auth','waiting_model','waiting_connection','retry_wait','retryable_failure','paused','failed']);
 export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,options:{before?:string;limit?:number;approvals?:FeedApprovals}={}){
   const project=config.project.id,before=options.before??'9999',limit=Math.min(Math.max(options.limit??30,1),60);
   const board=readWorkBoard(store,config).works.filter(work=>!work.hidden),shown=new Set(board.map(work=>work.id)),titles=new Map(board.map(work=>[work.id,work.title]));
@@ -86,6 +87,9 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
   if(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_result'").get())
     for(const row of store.hermesState.prepare('SELECT id,work_id,body FROM office_result WHERE project_id=? AND created_at<? ORDER BY created_at DESC LIMIT ?').all(project,before,limit*2) as Array<{id:string;work_id:string;body:string}>){
       if(!shown.has(row.work_id))continue;let r;try{r=results.get(project,row.work_id,row.id);}catch{continue;}
+      // A run that stopped or paused before making anything left only its opening line ("I'll make the chart…"): the
+      // detail keeps it, the feed does not (clean-install check, 2026-10-12: two such cards sat under the real result).
+      if(!r.work_completion_verified&&!r.artifacts.length&&interruptedStatuses.has(r.source_status))continue;
       // A later run may have replaced a picture in the Work folder: only files still as they were saved are shown.
       let stored:Array<{id:string;path:string;label:string;sha256:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
       const intact=new Map<string,{path:string;size:number;mtimeMs:number}>();
