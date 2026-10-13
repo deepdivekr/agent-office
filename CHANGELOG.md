@@ -4,6 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v0.8.1](docs/releases/v0.8.1.md) | 2026-10-13 | The phone stays signed in; tapping a notification opens Office |
 | [v0.8.0](docs/releases/v0.8.0.md) | 2026-10-13 | Profiles: a second Office on the same computer with its own data, port and MCP name |
 | [v0.7.6](docs/releases/v0.7.6.md) | 2026-10-13 | Security review fixes: app-card approvals cover their code, the Control Center key stays out of process lists |
 | [v0.7.5](docs/releases/v0.7.5.md) | 2026-10-12 | Setup examples without a particular site |
