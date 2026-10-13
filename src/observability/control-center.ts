@@ -11,7 +11,7 @@ import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {PackStore,type RuntimeActivity} from '../packs/store.js';
 import {workAutonomy,workDelegation,workModelDataApproved,type HostConfig} from '../interface/config.js';
 import {setWorkModelDataApproval} from '../onboarding/connection.js';
-import {DEFAULT_CONTROL_PORT,CAPABILITY_COOKIE,CONTROL_SHORT_HOST,controlHosts,cookieValue} from '../onboarding/control-address.js';
+import {DEFAULT_CONTROL_PORT,CAPABILITY_COOKIE,CONTROL_SHORT_HOST,capabilityCookieName,controlHosts,cookieValue} from '../onboarding/control-address.js';
 import {listProcedures,setProcedureDisabled} from '../work/procedures.js';
 import {applyAutoSources,readAutoSources,forgetAutoSource} from '../packs/auto-sources.js';
 import {readSwarmDashboard} from '../swarm/dashboard.js';
@@ -147,6 +147,7 @@ export function controlCenterReloadBlockedReason(store:PackStore,project:string,
 }
 export async function startControlCenter(config:HostConfig,options:{port?:number;poll_ms?:number;capability_token?:string;workModel?:StructuredModel;coding?:CodingRuntimeOptions;hermes?:HermesWorkOptions;remote?:RemoteTransport;server?:ServerProbe;sessions?:SessionRoots&{temporary?:boolean};onReload?:()=>Promise<void>;reloadStatus?:()=>ControlCenterReloadStatus;clientMaintenance?:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>}={}):Promise<ControlCenterServer>{
   if(options.capability_token!==undefined&&!/^[a-f0-9]{48}$/u.test(options.capability_token))throw Error('CONTROL_CENTER_CAPABILITY_INVALID');
+  const cookieName=capabilityCookieName(config.dbPath);
   const token=options.capability_token??randomBytes(24).toString('hex'),store=new PackStore(config.dbPath);try{store.registerProject(config.project);}catch(error){store.close();throw error;}const presence=store.startPresence(config.project.id,'dashboard',{transport:'loopback-read-only'}),clients=new Set<ServerResponse>(),lightClients=new Set<ServerResponse>(),poll=options.poll_ms??500;let host='',shortHost='',hosts=new Set<string>(),tailnet=new Set(config.observability?.tailnet_hosts??[]),done:()=>void=()=>undefined,stopped=false,reloading=false,inflightMutations=0;const closed=new Promise<void>(resolve=>done=resolve);
   const connections=new BrowserConnections(store,config,{reloadAvailable:Boolean(options.onReload)}),settings=new ControlSettings(config,undefined,undefined,undefined,undefined,undefined,undefined,undefined,options.clientMaintenance);
   const fileRoutes=new FileExplorerRoutes(store.localFileExplorer(config.project.id,dirname(config.dbPath)));
@@ -194,13 +195,14 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     const icon=({'/icon-180.png':'icon-180.png','/icon-512.png':'icon-512.png','/apple-touch-icon.png':'icon-180.png','/apple-touch-icon-precomposed.png':'icon-180.png'} as Record<string,string>)[url.pathname];
     if(icon&&await serveUiAsset(request,response,icon))return;
     // The capability is compared in constant time (security review 2026-10-13).
-    const capabilityCookie=`${CAPABILITY_COOKIE}=${token}; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax${onTailnet?'; Secure':''}`;
+    const capabilityCookie=`${cookieName}=${token}; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax${onTailnet?'; Secure':''}`;
     const sameToken=(value:string|undefined)=>typeof value==='string'&&value.length===token.length&&timingSafeEqual(Buffer.from(value),Buffer.from(token));
     if(sameToken(url.pathname.slice(1,1+token.length))&&url.pathname.charAt(token.length+1)==='/'){suffix=url.pathname.slice(base.length);
       // A page opened through the capability path on the short host or a tailnet name keeps the token in a host-only cookie and continues at the short address.
       if((requestHost===shortHost||onTailnet)&&request.method==='GET'&&!/[/.]/u.test(suffix)&&String(request.headers.accept??'').includes('text/html')){response.writeHead(303,{'set-cookie':capabilityCookie,location:`/${suffix}${url.search}`,'cache-control':'no-store'});response.end();return;}
-    }else if((requestHost===shortHost||onTailnet)&&sameToken(cookieValue(request.headers.cookie,CAPABILITY_COOKIE))){suffix=url.pathname.slice(1);
-      // A page load renews the cookie, so a phone signed in before it lasted keeps its sign-in without a new QR scan.
+    }else if((requestHost===shortHost||onTailnet)&&(sameToken(cookieValue(request.headers.cookie,cookieName))||sameToken(cookieValue(request.headers.cookie,CAPABILITY_COOKIE)))){suffix=url.pathname.slice(1);
+      // A verified legacy cookie also upgrades on a page load. Never write the shared name again:
+      // another Office may still be using it until its owner opens that page.
       if(request.method==='GET'&&String(request.headers.accept??'').includes('text/html'))response.setHeader('set-cookie',capabilityCookie);}
     else{reply(response,404,onTailnet?'Not found. Scan the QR code that `agent-office connect` shows on the computer to sign this phone in again. / 이 휴대폰을 다시 연결하려면 컴퓨터에서 `agent-office connect`가 보여 주는 QR 코드를 찍으세요.':requestHost===shortHost?'not found. Open the Control Center with: agent-office connect':'not found');return;}
     if(settings.maintenanceRunning&&['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix)){reply(response,503,JSON.stringify({error:'CLI_UPDATE_IN_PROGRESS'}),'application/json; charset=utf-8');return;}
