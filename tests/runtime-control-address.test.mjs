@@ -7,14 +7,14 @@ import {createServer,request as httpRequest} from 'node:http';
 import {prepareLocalConnection} from '../dist/onboarding/connection.js';
 import {loadHostConfig} from '../dist/interface/config.js';
 import {startControlCenter} from '../dist/observability/control-center.js';
-import {DEFAULT_CONTROL_PORT,CONTROL_SHORT_HOST,CAPABILITY_COOKIE,shortControlUrl,tailnetControlUrls,cookieValue} from '../dist/onboarding/control-address.js';
+import {DEFAULT_CONTROL_PORT,CONTROL_SHORT_HOST,capabilityCookieName,shortControlUrl,tailnetControlUrls,cookieValue} from '../dist/onboarding/control-address.js';
 
 async function setup(t,options={}){
   const root=await mkdtemp(join(tmpdir(),'office-address-'));
   const paths=await prepareLocalConnection(root),config=loadHostConfig(paths.runtimeConfig);
   const server=await startControlCenter(config,{poll_ms:50,...options});
   t.after(async()=>{await server.close();await rm(root,{recursive:true,force:true});});
-  return {server,token:new URL(server.url).pathname.slice(1,-1),port:new URL(server.url).port};
+  return {server,cookieName:capabilityCookieName(config.dbPath),token:new URL(server.url).pathname.slice(1,-1),port:new URL(server.url).port};
 }
 function send(url,{host,headers={},method='GET',body}={}){
   return new Promise((resolve,reject)=>{const target=new URL(url);const req=httpRequest({hostname:'127.0.0.1',port:target.port,path:target.pathname+target.search,method,headers:{...(host?{host}:{}),...headers}},response=>{let text='';response.setEncoding('utf8');response.on('data',chunk=>text+=chunk);response.on('end',()=>resolve({status:response.statusCode,headers:response.headers,text}));});req.on('error',reject);if(body)req.write(body);req.end();});
@@ -48,14 +48,14 @@ test('runtime native the short host moves the capability into a host-only cookie
   const bootstrap=await send(x.server.url+'settings?view=all',{host:short,headers:{accept:'text/html,*/*'}});
   assert.equal(bootstrap.status,303);assert.equal(bootstrap.headers.location,'/settings?view=all');
   const cookie=bootstrap.headers['set-cookie'][0];
-  assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),x.token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');assert.match(cookie,/; Path=\//u);assert.doesNotMatch(cookie,/Domain=/u);
-  const base=`http://127.0.0.1:${x.port}/`,withCookie={cookie:`${CAPABILITY_COOKIE}=${x.token}`};
+  assert.equal(cookieValue(cookie,x.cookieName),x.token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');assert.match(cookie,/; Path=\//u);assert.doesNotMatch(cookie,/Domain=/u);
+  const base=`http://127.0.0.1:${x.port}/`,withCookie={cookie:`${x.cookieName}=${x.token}`};
   const page=await send(base+'settings',{host:short,headers:{accept:'text/html',...withCookie}});
   assert.equal(page.status,200);assert.match(page.headers['content-type'],/text\/html/u);assert.match(String(page.headers['set-cookie']),/; Max-Age=34560000; HttpOnly; SameSite=Lax$/u,'a page load renews the lasting cookie');
   assert.equal((await send(base+'settings/status',{host:short,headers:withCookie})).status,200);
   assert.equal((await send(base,{host:short,headers:{accept:'text/html',...withCookie}})).status,200,'the board is the root of the short address');
   assert.equal((await send(base+'settings/status',{host:short})).status,404,'no cookie, no capability path: nothing');
-  assert.equal((await send(base+'settings/status',{host:short,headers:{cookie:`${CAPABILITY_COOKIE}=${'0'.repeat(48)}`}})).status,404);
+  assert.equal((await send(base+'settings/status',{host:short,headers:{cookie:`${x.cookieName}=${'0'.repeat(48)}`}})).status,404);
   assert.equal((await send(base+'settings/status',{headers:withCookie})).status,404,'the cookie is honoured on the short host only');
   const api=await send(x.server.url+'settings/status',{host:short,headers:{accept:'application/json'}});
   assert.equal(api.status,200,'API calls on the capability path never redirect');
@@ -71,14 +71,15 @@ test('runtime native a configured tailnet name reaches Office through tailscale 
   const {readFile,writeFile}=await import('node:fs/promises');
   const root=await mkdtemp(join(tmpdir(),'office-address-')),paths=await prepareLocalConnection(root),tailnet='office-pc.tail0000.ts.net:4600';
   const raw=JSON.parse(await readFile(paths.runtimeConfig,'utf8'));await writeFile(paths.runtimeConfig,JSON.stringify({...raw,observability:{tailnet_hosts:[tailnet]}}));
-  const server=await startControlCenter(loadHostConfig(paths.runtimeConfig),{poll_ms:50,port:0});t.after(async()=>{await server.close();await rm(root,{recursive:true,force:true});});
+  const config=loadHostConfig(paths.runtimeConfig),cookieName=capabilityCookieName(config.dbPath);
+  const server=await startControlCenter(config,{poll_ms:50,port:0});t.after(async()=>{await server.close();await rm(root,{recursive:true,force:true});});
   const token=new URL(server.url).pathname.slice(1,-1),base=`http://127.0.0.1:${new URL(server.url).port}/`;
   assert.deepEqual(tailnetControlUrls(server.url,[tailnet]),[`https://${tailnet}/${token}/`],'connect prints this address for the phone');
   // tailscale serve keeps the browser's Host and terminates HTTPS, so the page's origin is https://<tailnet name>.
   const bootstrap=await send(server.url+'?view=all',{host:tailnet,headers:{accept:'text/html'}});
   assert.equal(bootstrap.status,303);assert.equal(bootstrap.headers.location,'/?view=all');
-  const cookie=bootstrap.headers['set-cookie'][0];assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; Secure/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');
-  const withCookie={cookie:`${CAPABILITY_COOKIE}=${token}`},page=await send(base,{host:tailnet,headers:{accept:'text/html',...withCookie}});
+  const cookie=bootstrap.headers['set-cookie'][0];assert.equal(cookieValue(cookie,cookieName),token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; Secure/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');
+  const withCookie={cookie:`${cookieName}=${token}`},page=await send(base,{host:tailnet,headers:{accept:'text/html',...withCookie}});
   assert.match(String(page.headers['set-cookie']),/Max-Age=34560000/u,'a page load renews the sign-in');
   // Without the cookie (a phone that lost it) the page says what to do on the phone (owner 2026-10-13).
   const lost=await send(base,{host:tailnet,headers:{accept:'text/html'}});assert.equal(lost.status,404);assert.match(lost.text,/Scan the QR code that `agent-office connect` shows on the computer/u);
