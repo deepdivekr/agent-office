@@ -58,6 +58,20 @@ test('a picture line in a delivered message stays out of the feed text; the pict
   assert.doesNotMatch(post.text,/!\[/u);assert.match(post.text,/격차가 커진다/u);assert.deepEqual(post.images.map(i=>i.label),['01_karpathy.png']);
 });
 
+// Live 2026-10-13: a run with nothing new must not show in the feed or reach the phone.
+test('a run that left nothing for the owner stays out of the feed and push; the Work keeps it',async t=>{
+  const x=await fixture(t,'feed-quiet-'),{readFeed}=await import('../dist/observability/work-view.js'),{WorkPush}=await import('../dist/work/push.js'),{FeedPushWatcher}=await import('../dist/observability/feed-push.js');
+  const sent=[];const push=new WorkPush(x.store,x.config,async(subscription,payload)=>{sent.push(JSON.parse(payload));return {statusCode:201};});
+  push.subscribe({endpoint:'https://fcm.googleapis.com/fcm/send/abc',keys:{p256dh:'B'.repeat(87),auth:'A'.repeat(22)}});
+  const watcher=new FeedPushWatcher(x.store,x.config,push),news=x.work('feed-quiet','AI 새 글');await watcher.tick();await new Promise(resolve=>setTimeout(resolve,5));
+  const kept=await x.result(news,new Date().toISOString(),'## 새 글 1건'),quiet=await x.result(news,new Date().toISOString(),'새 글 없음');
+  x.store.hermesState.prepare("UPDATE office_result SET body=json_set(body,'$.quiet',json('true')) WHERE id=?").run(quiet.id);
+  const ids=readFeed(x.store,x.config,x.results).posts.map(p=>p.result_id);
+  assert.ok(ids.includes(kept.id));assert.ok(!ids.includes(quiet.id));
+  assert.equal(x.results.get(x.config.project.id,news,quiet.id).quiet,true,'the Work keeps it');
+  await watcher.tick();assert.deepEqual(sent.map(m=>m.body),['새 글 1건'],'only the run that had something reaches the phone');
+});
+
 test('the MCP feed tool is on the default listing: an AI app that sends a result elsewhere posts it here too',async()=>{
   const {COMPACT_MCP_TOOLS}=await import('../dist/interface/mcp-proxy.js'),{tools}=await import('../dist/interface/catalog.js');
   assert.ok(COMPACT_MCP_TOOLS.has('runtime_feed_post'));assert.ok(Object.hasOwn(tools,'runtime_feed_post'));assert.equal(tools.runtime_feed_post.readOnly,false);

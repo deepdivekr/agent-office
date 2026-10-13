@@ -171,6 +171,20 @@ test('telegram sends the result pictures after the text, one sendPhoto each, and
   const photoBlob=calls[1].options.body.get('photo');assert.equal(photoBlob.type,'image/png');assert.equal(photoBlob.size,png.length);
 });
 
+// Live 2026-10-13: an hourly news Work that found nothing new sent "새 글 없음" to Telegram every hour.
+test('a run that left DELIVERY.md empty is kept for the app only: nothing is queued for Telegram',async t=>{
+  const x=await fixture(t);x.settings.save({revision:0,targets:[telegram],default_target_ids:['app']});
+  const calls=[];const results=new WorkResults(x.store,[{id:'updates',channel:'telegram',async send(){calls.push(1);return {status:'delivered',receipt_id:'fixture:updates'};}}],x.settings);
+  results.setSelection(x.project,x.workId,{revision:0,target_ids:['app','updates']});
+  const quiet=results.record(x.project,{work_id:x.workId,run_id:x.runId,source_kind:'client',work_revision:0,summary:'새 글 없음',quiet:true});
+  assert.equal(quiet.quiet,true);assert.deepEqual(quiet.deliveries.map(d=>[d.channel,d.status]),[['app','available']]);
+  await results.dispatchPending(x.project,x.workId);assert.equal(calls.length,0);
+  const {deliveryQuiet}=await import('../dist/work/client-run.js'),{writeFile}=await import('node:fs/promises');
+  assert.equal(deliveryQuiet(x.root),false,'no DELIVERY.md: the final reply is the message');
+  await writeFile(join(x.root,'DELIVERY.md'),' \n\n');assert.equal(deliveryQuiet(x.root),true);
+  await writeFile(join(x.root,'DELIVERY.md'),'새 글 1건');assert.equal(deliveryQuiet(x.root),false);
+});
+
 // Live 2026-10-13: the owner asked for each AI news post as one text and one card picture, not one long message
 // followed by every picture.
 test('a message split into posts that name their pictures is split at the --- lines, each post with its picture',async()=>{

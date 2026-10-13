@@ -90,6 +90,8 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
       // A run that stopped or paused before making anything left only its opening line ("I'll make the chart…"): the
       // detail keeps it, the feed does not (clean-install check, 2026-10-12: two such cards sat under the real result).
       if(!r.work_completion_verified&&!r.artifacts.length&&interruptedStatuses.has(r.source_status))continue;
+      // A run that left nothing for the owner (an empty DELIVERY.md) is in the Work's history only.
+      if(r.quiet)continue;
       // A later run may have replaced a picture in the Work folder: only files still as they were saved are shown.
       let stored:Array<{id:string;path:string;label:string;sha256:string;bytes:number|null}>=[];try{stored=JSON.parse(row.body).artifacts??[];}catch{}
       const intact=new Map<string,{path:string;size:number;mtimeMs:number}>();
