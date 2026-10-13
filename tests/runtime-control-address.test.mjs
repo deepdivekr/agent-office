@@ -51,7 +51,7 @@ test('runtime native the short host moves the capability into a host-only cookie
   assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),x.token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');assert.match(cookie,/; Path=\//u);assert.doesNotMatch(cookie,/Domain=/u);
   const base=`http://127.0.0.1:${x.port}/`,withCookie={cookie:`${CAPABILITY_COOKIE}=${x.token}`};
   const page=await send(base+'settings',{host:short,headers:{accept:'text/html',...withCookie}});
-  assert.equal(page.status,200);assert.match(page.headers['content-type'],/text\/html/u);assert.equal(page.headers['set-cookie'],undefined);
+  assert.equal(page.status,200);assert.match(page.headers['content-type'],/text\/html/u);assert.match(String(page.headers['set-cookie']),/; Max-Age=34560000; HttpOnly; SameSite=Lax$/u,'a page load renews the lasting cookie');
   assert.equal((await send(base+'settings/status',{host:short,headers:withCookie})).status,200);
   assert.equal((await send(base,{host:short,headers:{accept:'text/html',...withCookie}})).status,200,'the board is the root of the short address');
   assert.equal((await send(base+'settings/status',{host:short})).status,404,'no cookie, no capability path: nothing');
@@ -79,6 +79,7 @@ test('runtime native a configured tailnet name reaches Office through tailscale 
   assert.equal(bootstrap.status,303);assert.equal(bootstrap.headers.location,'/?view=all');
   const cookie=bootstrap.headers['set-cookie'][0];assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; Secure/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');
   const withCookie={cookie:`${CAPABILITY_COOKIE}=${token}`},page=await send(base,{host:tailnet,headers:{accept:'text/html',...withCookie}});
+  assert.match(String(page.headers['set-cookie']),/Max-Age=34560000/u,'a page load renews the sign-in');
   // Without the cookie (a phone that lost it) the page says what to do on the phone (owner 2026-10-13).
   const lost=await send(base,{host:tailnet,headers:{accept:'text/html'}});assert.equal(lost.status,404);assert.match(lost.text,/Scan the QR code that `agent-office connect` shows on the computer/u);
   assert.equal(page.status,200);assert.doesNotMatch(page.text,/http:\/\/127\.0\.0\.1/u,'the page links nothing back to loopback');
