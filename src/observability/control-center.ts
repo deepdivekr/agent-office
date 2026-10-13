@@ -368,9 +368,12 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
           hermes={jobs:found.candidates.filter(c=>c.kind==='job').map(c=>({title:String(c.title)})),attached};}catch{/* no local Hermes */}
         const linked=new Set(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name='office_remote_work'").get()?(store.hermesState.prepare('SELECT DISTINCT target_id FROM office_remote_work WHERE project_id=?').all(config.project.id) as Array<{target_id:string}>).map(r=>r.target_id):[]);
         const open=remoteOffice.targets().filter(t=>!linked.has(t.id)).map(t=>String((t as {label?:unknown}).label??'OpenClaw'));
+        const table=(name:string)=>Boolean(store.hermesState.prepare("SELECT 1 FROM sqlite_master WHERE name=?").get(name));
+        const alreadyWork={folders:table('office_import')?(store.hermesState.prepare("SELECT json_extract(body,'$.scan.root') AS root FROM office_import WHERE project_id=? AND kind='project' AND accepted_work_id IS NOT NULL").all(config.project.id) as Array<{root:unknown}>).map(r=>r.root).filter((root):root is string=>typeof root==='string'):[],
+          units:table('office_server_work')?(store.hermesState.prepare('SELECT units FROM office_server_work WHERE project_id=?').all(config.project.id) as Array<{units:string}>).flatMap(r=>{try{const units:unknown=JSON.parse(r.units);return Array.isArray(units)?units.map(String):[];}catch{return [];}}):[]};
         const now=Date.now();
         if(!suggestionCache||now-suggestionCache.at>120_000){
-          suggestionCache={at:now,value:new Promise((resolve,reject)=>{const worker=new Worker(new URL('../work/suggestions-worker.js',import.meta.url),{workerData:{...sessionMirror.suggestionInput(),hermes,openclaw:open.length?{names:open}:null}});
+          suggestionCache={at:now,value:new Promise((resolve,reject)=>{const worker=new Worker(new URL('../work/suggestions-worker.js',import.meta.url),{workerData:{...sessionMirror.suggestionInput(),hermes,openclaw:open.length?{names:open}:null,linked:alreadyWork}});
             const timer=setTimeout(()=>{void worker.terminate();reject(Error('SUGGESTIONS_TIMEOUT'))},120_000);
             worker.once('message',value=>{clearTimeout(timer);resolve(value);void worker.terminate()});worker.once('error',error=>{clearTimeout(timer);reject(error)});})};
           suggestionCache.value.catch(()=>{suggestionCache=null});
