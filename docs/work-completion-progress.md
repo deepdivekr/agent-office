@@ -1,5 +1,35 @@
 # Work 완료 경로 복구 — 진행 기록
 
+## 같은 브라우저의 프로필 관제센터 쿠키 충돌 수정 (2026-10-13)
+
+- 기준 revision: main `d64fb7885a564b502258a59d15a588f258c92dfb` (v0.8.5, PR #166·#168 포함).
+  브랜치: `fix/profile-capability-cookies`. 사용자가 요청한 관제센터 접근 신뢰성 수정이다.
+  기존 Work 실행·승인 정책과 개인 설치는 변경하지 않는다.
+- 임시 상태 디렉터리 두 개와 서로 다른 루프백 포트에서 실제 Chromium 153.0.8010.0으로
+  재현했다. 같은 `office.localhost`에서 두 번째 관제센터 로그인 후 첫 번째를 새로고침하면
+  404가 됐다. 수정 전 브라우저 회귀 테스트가 실패함을 확인했다.
+- 쿠키 이름을 정규화된 DB 경로의 SHA-256 앞 128비트로 분리한다. 프로필 환경변수나
+  포트에 의존하지 않아 명시적 연결 루트도 분리되고 같은 상태의 포트 변경에도 유지된다.
+  기존 공통 이름은 현재 capability와 상수 시간 비교를 통과할 때만 읽는다. HTML 페이지를
+  열면 해당 상태의 새 이름으로 갱신하며 공통 쿠키를 덮어쓰거나 지우지 않는다.
+- HttpOnly, host-only, Path=/, SameSite=Lax, 400일 수명과 tailnet의 Secure는 유지한다.
+  Host 허용 목록과 Origin(포트 포함)·JSON·사용자 헤더·cross-site 쓰기 차단도 유지한다.
+- 빌드 및 관련 51/51 테스트 통과. 실제 브라우저의 동시 로그인·반복 새로고침·쿠키 갱신·
+  기존 단일 프로필 쿠키 승계·서버 포트 변경, 잘못된 토큰·다른 상태 쿠키·다른 Origin 거부,
+  두 tailnet 포트의 Secure 쿠키를 검증했다. ledger 199개 및 공개 경계 921개 PASS.
+- frozen quick suite는 603 PASS / 11 FAIL / 1 NOT_RUN까지 실행 후 `runtime-files`에서
+  진행이 멈춰 중단했다. 전체 통과를 주장하지 않는다. 원본 main의 별도 checkout에서도
+  파일 broker의 `FILE_OWNER_NOT_ALIVE`와 bootstrap의 `sudo.txt` ENOENT를 각각 재현했다.
+  다른 실패 전체가 원본과 같은지는 독립적으로 확인하지 않았다. 새 쿠키 사례 6개는
+  이 suite에서도 모두 PASS였다.
+- 표준 Chromium 다운로드가 유효한 ZIP이 아니어서 동일 메이저의 별도 Chromium
+  바이너리로 실행했다. 격리 글꼴 경로 오류로 중단된 첫 시도는 보존하고 `/etc/fonts`로
+  수정 후 원본 adaptive 브라우저 사례가 통과함을 확인했다. 전체 suite에서 나타난
+  persistent-profile 브라우저 실패도 일반 Chromium 경로를 준비한 뒤 원본의 해당 사례가
+  통과함을 확인했다. 실제 사용자 설치 및 iOS Safari·홈 화면 앱·실제 Tailscale 연결은
+  검증하지 않았다. 이미 덮어쓴 옛 쿠키는 원래 capability 주소로 재접속해야 한다.
+- 다음: 검토용 PR의 표준 CI에서 전체 회귀 확인. 릴리스 발행·개인 설치 교체는 별도 작업이다.
+
 ## 담당 AI 변경의 MCP·스킬 거짓 승계 수정 (2026-10-11)
 
 - 기준 revision: main `de7120d1a7cfaa6d2534fcd1e3d7e19bffae3ad2` (PR #147 포함).
