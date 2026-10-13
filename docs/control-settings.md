@@ -8,7 +8,7 @@ Agent Office는 로컬 MCP 실행 도구이며, 관제센터는 그 상태를 �
 
 한 화면에 한 단계씩: **에이전트(MCP 등록) → 로컬 실행 → AI 연결 → Jev(선택) → 결과 수신(선택)**. 완료 후 관제센터로 돌아간다. 언제든 **연결 및 설정**으로 다시 들어가 변경할 수 있다. 마지막 저장 단계를 기억하며 API 키 입력 중인 미저장 내용은 기억하지 않는다. [결과 수신 설정](work-delivery.md)은 여러 메신저를 지원하며 앱 결과도 항상 유지한다.
 
-에이전트 단계는 현재 실행 환경에서 Agent Office 설치를 확인하고 Codex·Claude Code·OpenCode·Cursor CLI·Hermes를 모두 표시한다. 클라이언트가 없으면 공식 설치, 설치됐으면 공식 로그인, 로그인 여부와 별개로 MCP 등록을 진행할 수 있다. 설치와 등록은 각각 사용자가 버튼을 눌러야 시작한다. 등록에는 shell 없이 절대 경로 command/args를 사용한다. 기존의 다른 MCP server는 유지하고, 같은 `agent-driver` 이름에 다른 명령이 있으면 자동 덮어쓰기를 거부한다. 등록 성공은 클라이언트 설정 저장을 뜻하며, 이미 열린 클라이언트의 실제 재연결은 재시작 또는 MCP 새로고침 뒤 관측한다.
+에이전트 단계는 현재 실행 환경에서 Agent Office 설치를 확인하고 Codex·Claude Code·OpenCode·Cursor CLI·Hermes·Grok Build를 모두 표시한다. Grok Build는 업무를 맡는 앱이 아니라 로그인해 두면 모든 업무의 AI가 쓰는 도구 패키지(X 검색·이미지·영상 생성)다. 클라이언트가 없으면 공식 설치, 설치됐으면 공식 로그인, 로그인 여부와 별개로 MCP 등록을 진행할 수 있다. 설치와 등록은 각각 사용자가 버튼을 눌러야 시작한다. 등록에는 shell 없이 절대 경로 command/args를 사용한다. 기존의 다른 MCP server는 유지하고, 같은 `agent-driver` 이름에 다른 명령이 있으면 자동 덮어쓰기를 거부한다. 등록 성공은 클라이언트 설정 저장을 뜻하며, 이미 열린 클라이언트의 실제 재연결은 재시작 또는 MCP 새로고침 뒤 관측한다.
 
 관리 설치는 Linux/WSL에서만 제공한다. 고정된 공식 HTTPS origin에서 shell script를 최대 2 MiB까지 내려받아 redirect와 비 shell payload를 거부하고 `/bin/bash`에 파일 인자로 전달한다. pipe나 조립한 shell command는 사용하지 않는다. script와 raw stdout/stderr는 응답·setup journal에 남기지 않고 임시 디렉터리를 제거한다. 공급자 설치 스크립트의 checksum이나 서명 검증은 아직 없다. 별도 앱이 필요한 실행기는 공식 다운로드 페이지를 연다.
 

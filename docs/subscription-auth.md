@@ -23,7 +23,7 @@ signed_out / expired
 
 Agent Driver는 로그인 child process의 bounded 상태만 추적한다. device URL은 정확히 `https://auth.openai.com/codex/device`만 표시하고, 계정 이메일·조직·원문 오류·access/refresh token은 UI나 API로 전달하지 않는다. 연결 화면을 닫거나 만료되면 자신이 시작한 미완료 로그인 process를 중단한다.
 
-현재 검증된 시작 명령은 Codex `login` / `login --device-auth`, Claude Code `auth login --claudeai`, Hermes `portal login`이다. OpenCode는 `auth list --format json`으로 준비 상태를 확인하되 공급자 선택이 필요한 interactive login 명령을 Agent Driver가 추측 실행하지 않는다. 관제센터에 로그인 버튼이 없을 때는 OpenCode의 `/connect` 또는 `opencode auth login`으로 공급자를 먼저 연결한다. Cursor도 확인된 로그인 계약이 없어 버튼을 만들지 않는다.
+현재 검증된 시작 명령은 Codex `login` / `login --device-auth`, Claude Code `auth login --claudeai`, Hermes `portal login`, Grok Build `login --device-auth` / `login --oauth`이다. OpenCode는 `auth list --format json`으로 준비 상태를 확인하되 공급자 선택이 필요한 interactive login 명령을 Agent Driver가 추측 실행하지 않는다. 관제센터에 로그인 버튼이 없을 때는 OpenCode의 `/connect` 또는 `opencode auth login`으로 공급자를 먼저 연결한다. Cursor도 확인된 로그인 계약이 없어 버튼을 만들지 않는다.
 
 ## 클라이언트 고정
 
@@ -39,6 +39,7 @@ Agent Driver는 로그인 child process의 bounded 상태만 추적한다. devic
 | OpenCode | `opencode auth list --format json` | `run --format json`, 임시 프로젝트의 모든 permission deny | OpenCode에 연결된 API/OAuth 공급자와 선택 모델 사용 |
 | Cursor Agent | 현재 검증된 명령 없음 | 미지원 | 설치된 공식 status/login 계약을 확인하기 전에는 추측 실행하지 않음 |
 | Hermes | `hermes proxy status` | Agent Driver MCP sampling | proxy OAuth 상태는 진단만 하며 auth store를 읽지 않음 |
+| Grok Build | `grok models` | 미지원 (판단 어댑터 아님) | Grok 구독 로그인. 업무 AI가 쓰는 도구 패키지: X 검색(x_keyword_search 등)·이미지·영상 생성. 로그인은 `grok login --device-auth` / `--oauth` |
 
 native CLI bridge는 Agent Driver가 실제로 실행되는 **같은 OS의 client**만 자동 감지한다.
 

@@ -12,6 +12,7 @@ import {sanitizeCodingReply} from '../coding/reply-safety.js';
 import {ownerMcpEnabled,windowsClientServers,mcpServerAnswers,type ClientRunMcpServer} from '../integrations/owner-mcp.js';
 import {ownerEnvironmentContext} from '../integrations/client-environment.js';
 import {mediaExecutorBrief} from './media-executor.js';
+import {grokToolsBrief} from './grok-tools.js';
 import {executionRecord,workActivity,type WorkActivityMetadata} from './activity.js';
 import {workClientChoiceSchema,type WorkClientChoice} from './contracts.js';
 import {type ModelSettings} from '../onboarding/model-settings.js';
@@ -333,6 +334,7 @@ function initialPrompt(input:ClientRunInput){
     `When the Work watches news, posts, filings or other dated items, also save RECORDS.json: [{"at":ISO time it was published,"source","author","title","summary":2-3 lines,"url","subject":ticker or topic}] for the items this run reported. Office keeps them as the Work's dated history after working files are cleared; an item already kept is not added twice.`,
     `Keep the Work folder lean: do not pack files that are already there into another archive, and keep page captures and raw collections only while the run needs them. Office clears older runs' working files and keeps delivered text, pictures, media, PDF, CARD.json, RECORDS.json and app files; state a later run must read belongs beside the run folders, not inside an old one.`,
     ...(mediaExecutorBrief()?[mediaExecutorBrief()!]:[]),
+    ...(grokToolsBrief()?[grokToolsBrief()!]:[]),
     `Request from the owner:\n${input.prompt}`,
     ...importedPlan(input),
     // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as

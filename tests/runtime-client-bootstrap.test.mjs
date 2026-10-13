@@ -7,7 +7,7 @@ import {ClientBootstrapController,CLIENT_BOOTSTRAP_CATALOG} from '../dist/onboar
 import {resolveSubscriptionClientExecutable} from '../dist/integrations/subscription-auth.js';
 
 test('runtime contract client bootstrap catalog uses exact official HTTPS installers and never exposes credentials',()=>{
-  assert.deepEqual(CLIENT_BOOTSTRAP_CATALOG.map(item=>item.id),['codex','claude','opencode','cursor','hermes']);
+  assert.deepEqual(CLIENT_BOOTSTRAP_CATALOG.map(item=>item.id),['codex','claude','opencode','cursor','hermes','grok']);
   for(const item of CLIENT_BOOTSTRAP_CATALOG){assert.equal(new URL(item.installer_url).protocol,'https:');assert.equal(new URL(item.docs_url).protocol,'https:');assert.match(item.install_command,/^curl /u);}
   let installed=false;const resolver=()=>{if(!installed)throw Error('missing');return '/home/fixture/.local/bin/codex';};
   const view=new ClientBootstrapController({}, {run:async()=>({code:0,stdout:'',stderr:''})},fetch,resolver,'linux').view();

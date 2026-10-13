@@ -2,7 +2,7 @@
  * Installation/authentication is observed separately. A contract grants neither
  * execution authority nor permission to fall back to a paid provider.
  */
-export type DecisionClientId='mcp'|'codex'|'claude'|'opencode'|'cursor'|'hermes'|'api';
+export type DecisionClientId='mcp'|'codex'|'claude'|'opencode'|'cursor'|'hermes'|'grok'|'api';
 export interface DecisionClientCapabilities {
   version:1;
   client:DecisionClientId;
@@ -15,7 +15,8 @@ export interface DecisionClientCapabilities {
 }
 
 export function decisionClientCapabilities(client:DecisionClientId):Readonly<DecisionClientCapabilities>{
-  const unsupported=client==='cursor'||client==='hermes';
+  // Grok Build is a tool package for Works (X search, images, video), not a decision adapter.
+  const unsupported=client==='cursor'||client==='hermes'||client==='grok';
   return Object.freeze({version:1,client,transport:client==='mcp'?'mcp_sampling':client==='api'?'http_api':'official_cli',
     structured_judgment:unsupported?'unsupported':client==='mcp'?'requires_negotiation':'supported',
     session_continuity:'new_bounded_turn',tool_authority:'none',

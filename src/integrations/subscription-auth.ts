@@ -10,7 +10,7 @@ import {classifyClientFailure,cliFailureText,isInvalidClientOutput,isNonRetryabl
 import {decisionClientCapabilities,supportsStructuredJudgment} from './client-capabilities.js';
 import {withDecisionSession,type DecisionSessionScope,type DecisionSessionTurn} from './decision-sessions.js';
 
-export type SubscriptionClientId='codex'|'claude'|'opencode'|'cursor'|'hermes';
+export type SubscriptionClientId='codex'|'claude'|'opencode'|'cursor'|'hermes'|'grok';
 export interface SubscriptionClientStatus {
   id:SubscriptionClientId;status:'ready'|'signed_out'|'expired'|'unavailable'|'unknown';
   auth:'subscription'|'oauth'|'unknown';structured_bridge:boolean;reason:string;
@@ -90,7 +90,7 @@ function nvmBinDirectories(home:string){
 }
 function wslNativeExecutable(names:string[],environment:NodeJS.ProcessEnv){
   const home=environment.HOME,fromPath=(environment.PATH??'').split(delimiter).filter(path=>isAbsolute(path)&&!isWslHostMount(path));
-  const homeBins=home?[join(home,'.local','bin'),join(home,'.npm-global','bin'),join(home,'.opencode','bin'),join(home,'.hermes','bin'),join(home,'.cursor','bin'),...nvmBinDirectories(home)]:[];
+  const homeBins=home?[join(home,'.local','bin'),join(home,'.npm-global','bin'),join(home,'.opencode','bin'),join(home,'.hermes','bin'),join(home,'.cursor','bin'),join(home,'.grok','bin'),...nvmBinDirectories(home)]:[];
   for(const directory of [...new Set([...fromPath,...homeBins])]){
     for(const name of names){const candidate=join(directory,name);if(canExecute(candidate))return candidate;}
   }
@@ -122,6 +122,8 @@ const probeSpec:Record<SubscriptionClientId,{args:string[]|null;parse:(text:stri
     }catch{}return {status:'unknown',auth:'unknown',reason:'unrecognized_status'};
   }},
   hermes:{args:['proxy','status'],parse:text=>/\[[^\]]+\][^\r\n]*logged in/iu.test(text)&&!/not logged in/iu.test(text)?{status:'ready',auth:'oauth',reason:'oauth_proxy_ready'}:/not logged in/iu.test(text)?{status:'signed_out',auth:'unknown',reason:'proxy_upstreams_signed_out'}:{status:'unknown',auth:'unknown',reason:'unrecognized_status'}},
+  // Grok Build (xAI CLI, 2026-10-14): `grok models` says "You are logged in with grok.com." or "You are not authenticated."
+  grok:{args:['models'],parse:text=>/\byou are logged in\b/iu.test(text)?{status:'ready',auth:'subscription',reason:'client_reported_ready'}:/\bnot authenticated\b/iu.test(text)?{status:'signed_out',auth:'unknown',reason:'client_reported_signed_out'}:{status:'unknown',auth:'unknown',reason:'unrecognized_status'}},
 };
 const loginSpec:Record<SubscriptionClientId,Partial<Record<SubscriptionAuthFlowKind,string[]>>>= {
   codex:{browser:['login'],device:['login','--device-auth']},
@@ -129,6 +131,7 @@ const loginSpec:Record<SubscriptionClientId,Partial<Record<SubscriptionAuthFlowK
   opencode:{device:['auth','login','--provider','openai','--method','ChatGPT Pro/Plus (headless)']},
   cursor:{browser:['login']},
   hermes:{browser:['portal','login']},
+  grok:{device:['login','--device-auth'],browser:['login','--oauth']},
 };
 // Only read-only probes are joined. Model turns are deliberately never deduplicated.
 const probePools=new WeakMap<SafeProcessRunner,{pending:Map<string,Promise<SubscriptionClientStatus>>;revisions:Map<SubscriptionClientId,number>}>();
@@ -180,10 +183,11 @@ function safeLoginArtifacts(id:SubscriptionClientId,text:string){
     const url=new URL(match[0]);if(url.username||url.password||url.href.length>4096||[...url.searchParams.keys()].some(key=>/token|secret|password/iu.test(key)))continue;
     if(['codex','opencode'].includes(id)&&url.origin==='https://auth.openai.com'&&url.pathname==='/codex/device'&&!url.search&&!url.hash)device_url=url.href;
     if(id==='cursor'&&url.origin==='https://cursor.com'&&url.pathname==='/loginDeepControl'&&url.searchParams.get('mode')==='login'&&url.searchParams.get('redirectTarget')==='cli')auth_url=url.href;
+    if(id==='grok'&&url.origin==='https://accounts.x.ai'&&url.pathname==='/oauth2/device')device_url=url.href;
     if(id==='claude'&&(url.origin==='https://claude.ai'&&url.pathname==='/oauth/authorize'||url.origin==='https://claude.com'&&url.pathname==='/cai/oauth/authorize'))auth_url=url.href;
   }catch{}
   // Codex 0.162 prints the code on the line after "Enter this one-time code (expires in 15 minutes)".
-  const codeContext=clean.match(/\bcode\b[^\n]*?\n?[^\S\n]*\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/iu);
+  const codeContext=clean.match(/\bcode\b[^\n]*?\n{0,2}[^\S\n]*\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/iu);
   if(codeContext)user_code=codeContext[1]!.toUpperCase();
   return {...(device_url?{device_url}:{}),...(auth_url?{auth_url}:{}),...(device_url&&user_code?{user_code}:{}),...(id==='claude'&&auth_url&&/paste code here/iu.test(clean)?{needs_code:true as const}:{})};
 }
@@ -431,7 +435,7 @@ function cliFailure(result:ProcessResult,session?:DecisionSessionTurn){
   if(session?.session_id&&/(?:no (?:conversation|session|thread) found|(?:session|conversation|thread)[^\r\n]{0,100}(?:not found|does not exist))/iu.test(detail))throw Error('CLIENT_NATIVE_SESSION_MISSING');
   throw Error(`CLIENT_${classifyClientFailure(detail).toUpperCase()}`);
 }
-async function invokeCli(id:Exclude<SubscriptionClientId,'hermes'>,environment:NodeJS.ProcessEnv,runner:SafeProcessRunner,instructions:string,input:unknown,schema:Record<string,unknown>,purpose:ModelCall['purpose'],session?:DecisionSessionTurn,role?:string){
+async function invokeCli(id:Exclude<SubscriptionClientId,'hermes'|'grok'>,environment:NodeJS.ProcessEnv,runner:SafeProcessRunner,instructions:string,input:unknown,schema:Record<string,unknown>,purpose:ModelCall['purpose'],session?:DecisionSessionTurn,role?:string){
   const executable=clientExecutable(id,environment),text=prompt(instructions,input,schema),root=session?.directory??await mkdtemp(join(tmpdir(),'agent-driver-model-'));
   try{
     if(id==='codex'){
@@ -529,7 +533,7 @@ export class SubscriptionAwareStructuredModel implements StructuredModel{
           return value;
         }
         if(['codex','claude','opencode','cursor'].includes(id)){
-          const client=id as Exclude<SubscriptionClientId,'hermes'>,binding=clientBinding(client,environment,runner),state=await this.clientStatus(client,environment);
+          const client=id as Exclude<SubscriptionClientId,'hermes'|'grok'>,binding=clientBinding(client,environment,runner),state=await this.clientStatus(client,environment);
           if(state?.status!=='ready'||!state.structured_bridge||!supportsStructuredJudgment(client))continue;
           // Unclassified Codex or Claude credentials may be API-backed and are not used; OpenCode is only ever chosen explicitly.
           if(state.auth==='unknown'&&client!=='opencode')continue;

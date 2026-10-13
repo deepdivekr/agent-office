@@ -31,7 +31,7 @@ export class ControlSettings{
     this.path=modelSettingsPath(config);
     this.maintenance=maintenance??new ClientMaintenanceController({statePath:join(dirname(this.path),'cli-maintenance.json'),environment,fixture:config.environment==='fixture',isBusy:()=>this.maintenanceBusy()||this.busy&&!this.maintenanceOwnRequest||this.authenticationBusy()});
   }
-  private authenticationBusy(){return (['codex','claude','opencode','cursor','hermes'] as const).some(id=>['starting','waiting'].includes(this.auth.view(id).state));}
+  private authenticationBusy(){return (['codex','claude','opencode','cursor','hermes','grok'] as const).some(id=>['starting','waiting'].includes(this.auth.view(id).state));}
   get maintenanceRunning(){return this.maintenanceOperation;}
   get maintenanceHumanAction(){return this.maintenanceOwnRequest;}
   get reloadBlockedReason(){if(this.maintenanceRunning)return 'CLI_UPDATE_IN_PROGRESS';if(this.busy)return 'SETTINGS_ACTION_IN_PROGRESS';return this.authenticationBusy()?'AUTHENTICATION_IN_PROGRESS':null;}
@@ -50,7 +50,7 @@ export class ControlSettings{
     try{
       await this.activity.record('setup','running','CLI 업데이트를 확인하는 중입니다.');
       const result=await (forced?this.maintenance.runNow():this.maintenance.runDue(trigger));
-      for(const id of result.updated_ids){const name={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes'}[id];await this.activity.record('setup','success',`${name}: CLI 업데이트 확인 완료`);}
+      for(const id of result.updated_ids){const name={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes',grok:'Grok Build'}[id];await this.activity.record('setup','success',`${name}: CLI 업데이트 확인 완료`);}
       const failed=result.skipped.some(item=>item.reason==='update_failed');
       await this.activity.record('setup',result.state==='deferred_busy'||failed?'warning':'success',result.state==='deferred_busy'?'진행 중인 업무나 CLI가 있어 업데이트를 미뤘습니다.':failed?'일부 CLI 업데이트를 완료하지 못했습니다. 나중에 다시 확인합니다.':result.attempted_ids.length?'CLI 업데이트 확인을 마쳤습니다. 모델 목록을 새로고침하세요.':'자동으로 업데이트할 수 있는 설치된 CLI가 없습니다.');
       return result;
@@ -59,7 +59,7 @@ export class ControlSettings{
   }
   private connection(){const root=dirname(this.config.path);return resolve(this.config.path)===localConnectionPaths(root).runtimeConfig?{kind:'local' as const,connected:readLocalConnection(root)!==null}: {kind:'host_configured' as const,connected:true};}
   private async recordClientChecks(clients:SubscriptionClientConnection[],registrations?:Awaited<ReturnType<McpRegistrationController['view']>>['clients']){
-    const names={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes'};
+    const names={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes',grok:'Grok Build'};
     for(const client of clients){
       const registration=registrations?.find(row=>row.id===client.id),missing=registration?.installed===false||client.reason==='wsl_native_client_not_found'||client.reason==='client_not_available';
       const result=missing?'설치 필요':client.status==='signed_out'?'로그인 필요':client.status==='expired'?'다시 로그인 필요':client.status==='ready'?'로그인 확인됨':client.status==='unavailable'?'사용할 수 없음':'확인되지 않음';
@@ -130,7 +130,7 @@ export class ControlSettings{
         else if(suffix==='settings/maintenance/status')send(200,this.maintenance.view());
         else if(suffix==='settings/models')send(200,await this.models());
         else if(suffix==='settings/activity'){this.activity.attach(response);return true;}
-        else if(suffix==='settings/flows')send(200,{flows:['codex','claude','opencode','cursor','hermes'].map(id=>this.auth.view(id as 'codex'|'claude'|'opencode'|'cursor'|'hermes'))});
+        else if(suffix==='settings/flows')send(200,{flows:['codex','claude','opencode','cursor','hermes','grok'].map(id=>this.auth.view(id as 'codex'|'claude'|'opencode'|'cursor'|'hermes'))});
         else send(404,{error:'NOT_FOUND'});return true;
       }
       if(request.method!=='POST'){send(405,{error:'METHOD_NOT_ALLOWED'});return true;}
@@ -229,7 +229,7 @@ export class ControlSettings{
           send(200,{clients:clients.map(client=>found.has(client.id)?{...client,environment:found.get(client.id)}:client),checked:fresh?'now':'remembered',...(ownerMcp?{owner_mcp:{used:ownerMcp.used,left_out:ownerMcp.left_out}}:{})});}
         else if(suffix==='settings/login'){
           const value=body as {client?:unknown;flow?:unknown};
-          if(!value||!['codex','claude','opencode','cursor','hermes'].includes(String(value.client))||!['device','browser'].includes(String(value.flow))){send(400,{error:'INVALID_CLIENT_FLOW'});return true;}
+          if(!value||!['codex','claude','opencode','cursor','hermes','grok'].includes(String(value.client))||!['device','browser'].includes(String(value.flow))){send(400,{error:'INVALID_CLIENT_FLOW'});return true;}
           await this.activity.record('ai','running','공식 AI 로그인 절차를 시작했습니다.');send(202,await this.auth.start(value.client as McpRegistrationClient,value.flow as 'device'|'browser'));
         }else if(suffix==='settings/login/code'){
           const value=body as {client?:unknown;code?:unknown};
@@ -237,8 +237,8 @@ export class ControlSettings{
           try{const view=this.auth.submitCode('claude',value.code.trim());await this.activity.record('ai','running','로그인 코드를 Claude Code에 전달했습니다.');send(202,view);}
           catch(error){send(409,{error:error instanceof Error?error.message:'CLIENT_LOGIN_CODE_NOT_EXPECTED'});}
         }else if(suffix==='settings/client/install'){
-          const value=body as {client?:unknown};if(!value||!['codex','claude','opencode','cursor','hermes'].includes(String(value.client))){send(400,{error:'CLIENT_INSTALL_TARGET_INVALID'});return true;}
-          const client=value.client as McpRegistrationClient,name=({codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor CLI',hermes:'Hermes'} as const)[client];
+          const value=body as {client?:unknown};if(!value||!['codex','claude','opencode','cursor','hermes','grok'].includes(String(value.client))){send(400,{error:'CLIENT_INSTALL_TARGET_INVALID'});return true;}
+          const client=value.client as McpRegistrationClient,name=({codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor CLI',hermes:'Hermes',grok:'Grok Build'} as const)[client];
           const started=Date.now();
           const result=await this.bootstrap.install(client,async(stage,observation)=>{
             const message=stage==='downloading'?`${name} 공식 설치 프로그램 다운로드 시작`
@@ -256,8 +256,8 @@ export class ControlSettings{
           await this.activity.record('ai',login.state==='completed'?'success':login.state==='unavailable'||login.state==='failed'?'warning':'running',`${name} ${login.state==='completed'?'기존 로그인 확인됨':login.state==='unavailable'||login.state==='failed'?'설치됨 · 로그인 재확인 필요':'공식 로그인 시작 · 브라우저에서 승인하세요'}`);
           send(200,{...result,login});
         }else if(suffix==='settings/mcp/register'){
-          const value=body as {client?:unknown};if(!value||!['codex','claude','opencode','cursor','hermes'].includes(String(value.client))){send(400,{error:'MCP_CLIENT_INVALID'});return true;}
-          const name=({codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes'} as const)[value.client as McpRegistrationClient];
+          const value=body as {client?:unknown};if(!value||!['codex','claude','opencode','cursor','hermes','grok'].includes(String(value.client))){send(400,{error:'MCP_CLIENT_INVALID'});return true;}
+          const name=({codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes',grok:'Grok Build'} as const)[value.client as McpRegistrationClient];
           await this.activity.record('mcp','running',`${(body as {side?:unknown}).side==='windows'?'Windows ':''}${name}에 agent-office mcp 등록 요청`);
           const windows=(body as {side?:unknown}).side==='windows';if(windows&&!['codex','claude'].includes(String(value.client))){send(400,{error:'MCP_CLIENT_INVALID'});return true;}
           const started=Date.now(),result=windows?await this.mcp.registerWindows(value.client as 'codex'|'claude'):await this.mcp.register(value.client as McpRegistrationClient);await this.activity.record('mcp','success',`${name} MCP 등록 완료 · ${((Date.now()-started)/1000).toFixed(1)}초`);send(200,result);

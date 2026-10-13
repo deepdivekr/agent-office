@@ -13,7 +13,7 @@ import {loadHostConfig} from '../dist/interface/config.js';
 import {settingsHtml} from '../dist/observability/settings-ui.js';
 
 async function setup(t){const root=await mkdtemp(join(tmpdir(),'driver-mcp-onboarding-'));t.after(()=>rm(root,{recursive:true,force:true}));const paths=await prepareLocalConnection(root);return {root,paths,config:loadHostConfig(paths.runtimeConfig)};}
-function environment(root){return {HOME:root,WSL_DISTRO_NAME:'Ubuntu-24.04',HERMES_HOME:join(root,'.hermes'),AGENT_DRIVER_CODEX_EXECUTABLE:'/fixture/codex',AGENT_DRIVER_CLAUDE_EXECUTABLE:'/fixture/claude',AGENT_DRIVER_OPENCODE_EXECUTABLE:'/fixture/opencode',AGENT_DRIVER_CURSOR_EXECUTABLE:'/fixture/cursor-agent',AGENT_DRIVER_HERMES_EXECUTABLE:'/fixture/hermes',AGENT_DRIVER_CURSOR_MCP_CONFIG:join(root,'.cursor','mcp.json')};}
+function environment(root){return {HOME:root,WSL_DISTRO_NAME:'Ubuntu-24.04',HERMES_HOME:join(root,'.hermes'),AGENT_DRIVER_CODEX_EXECUTABLE:'/fixture/codex',AGENT_DRIVER_CLAUDE_EXECUTABLE:'/fixture/claude',AGENT_DRIVER_OPENCODE_EXECUTABLE:'/fixture/opencode',AGENT_DRIVER_CURSOR_EXECUTABLE:'/fixture/cursor-agent',AGENT_DRIVER_HERMES_EXECUTABLE:'/fixture/hermes',AGENT_DRIVER_GROK_EXECUTABLE:'/fixture/grok',GROK_HOME:join(root,'.grok'),AGENT_DRIVER_CURSOR_MCP_CONFIG:join(root,'.cursor','mcp.json')};}
 
 test('runtime contract Windows host MCP bridge pins distro and user, bypasses shell, and remains unverified',async t=>{
   const x=await setup(t),controller=new McpRegistrationController(x.root,{HOME:x.root,WSL_DISTRO_NAME:'Ubuntu-24.04'});
@@ -28,14 +28,15 @@ test('runtime contract Windows host MCP bridge pins distro and user, bypasses sh
   const html=settingsHtml('fixture-nonce');assert.match(html,/Windows 앱에서 연결하기/u);assert.match(html,/manual_unverified|등록 여부는 이 화면에서 자동 확인되지 않습니다/u);
 });
 
-test('runtime contract onboarding registers five clients without a shell and preserves unrelated config',async t=>{
+test('runtime contract onboarding registers six clients without a shell and preserves unrelated config',async t=>{
   const x=await setup(t),env=environment(x.root),calls=[],runner={async run(request){calls.push(request);return {code:0,stdout:'configured',stderr:''};}};
   await mkdir(join(x.root,'.cursor'),{recursive:true});await writeFile(env.AGENT_DRIVER_CURSOR_MCP_CONFIG,JSON.stringify({theme:'dark',mcpServers:{other:{command:'other'}}}));
   await mkdir(env.HERMES_HOME,{recursive:true});await writeFile(join(env.HERMES_HOME,'config.yaml'),'model: fixture\nmcp_servers:\n  other:\n    command: /other\n');
   const controller=new McpRegistrationController(x.root,env,runner);assert.equal((await controller.view()).registered_count,0);
   for(const id of ['codex','claude','opencode','cursor','hermes'])await controller.register(id);
-  const view=await controller.view();assert.equal(view.registered_count,5);assert.equal(view.credentials_exposed,false);assert.ok(view.clients.every(item=>item.registration==='registered'));
-  assert.equal(calls.length,2);assert.deepEqual(calls.map(item=>item.args.slice(0,4)),[['mcp','add','agent-driver','--'],['mcp','add','--scope','user']]);assert.ok(calls.every(item=>item.executable.startsWith('/fixture/')&&!('shell' in item)));
+  await mkdir(env.GROK_HOME,{recursive:true});await controller.register('grok');await writeFile(join(env.GROK_HOME,'config.toml'),`[mcp_servers.agent-driver]\ncommand = ${JSON.stringify(controller.command)}\nargs = ${JSON.stringify(controller.args)}\n`);
+  const view=await controller.view();assert.equal(view.registered_count,6);assert.equal(view.credentials_exposed,false);assert.ok(view.clients.every(item=>item.registration==='registered'));
+  assert.equal(calls.length,3);assert.deepEqual(calls.map(item=>item.args.slice(0,4)),[['mcp','add','agent-driver','--'],['mcp','add','--scope','user'],['mcp','add','--scope','user']]);assert.deepEqual(calls[2].args.slice(4),['agent-driver',controller.command,'--',...controller.args]);assert.ok(calls.every(item=>item.executable.startsWith('/fixture/')&&!('shell' in item)));
   const opencode=JSON.parse(await readFile(join(x.root,'.config','opencode','opencode.json'),'utf8'));assert.deepEqual(opencode.mcp['agent-driver'],{type:'local',command:[controller.command,...controller.args]});
   const cursor=JSON.parse(await readFile(env.AGENT_DRIVER_CURSOR_MCP_CONFIG,'utf8'));assert.equal(cursor.theme,'dark');assert.equal(cursor.mcpServers.other.command,'other');assert.equal(cursor.mcpServers['agent-driver'].command,process.execPath);assert.equal(cursor.mcpServers['agent-driver'].args.at(-1),'mcp');
   const hermes=parse(await readFile(join(env.HERMES_HOME,'config.yaml'),'utf8'));assert.equal(hermes.model,'fixture');assert.equal(hermes.mcp_servers.other.command,'/other');assert.equal(hermes.mcp_servers['agent-driver'].command,process.execPath);

@@ -4,10 +4,10 @@ import {SubscriptionAuthFlowController,type SubscriptionAuthFlowKind,type Subscr
 
 export interface ModelConnectionScreenOptions {authController?:SubscriptionAuthFlowController;}
 
-const clientIds=new Set<SubscriptionClientId>(['codex','claude','opencode','cursor','hermes']);
+const clientIds=new Set<SubscriptionClientId>(['codex','claude','opencode','cursor','hermes','grok']);
 const flowKinds=new Set<SubscriptionAuthFlowKind>(['browser','device']);
 const statusLabel:Record<SubscriptionClientConnection['status'],string>={ready:'연결됨',signed_out:'연결 필요',expired:'연결 만료',unavailable:'사용할 수 없음',unknown:'확인할 수 없음'};
-const clientLabel:Record<SubscriptionClientId,string>={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes'};
+const clientLabel:Record<SubscriptionClientId,string>={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',cursor:'Cursor',hermes:'Hermes',grok:'Grok Build'};
 
 async function formValues(request:IncomingMessage){
   let length=0;const chunks:Buffer[]=[];

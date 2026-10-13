@@ -17,7 +17,7 @@ const fixtureExecutables={
   AGENT_DRIVER_CODEX_EXECUTABLE:'/fixture/codex',AGENT_DRIVER_CLAUDE_EXECUTABLE:'/fixture/claude',
   AGENT_DRIVER_OPENCODE_EXECUTABLE:'/fixture/opencode',AGENT_DRIVER_CURSOR_EXECUTABLE:'/fixture/agent',
   AGENT_DRIVER_HERMES_EXECUTABLE:'/fixture/hermes'
-};
+,AGENT_DRIVER_GROK_EXECUTABLE:'/fixture/grok'};
 const fixtureEnvironment=(values={})=>({...fixtureExecutables,...values});
 const executableId=request=>request.executable.split('/').at(-1);
 
@@ -27,12 +27,13 @@ test('runtime subscription auth probes client-owned status only and returns no i
     if(executableId(request)==='claude')return {code:0,stdout:JSON.stringify({loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty',subscriptionType:'pro',email:'private@example.test',projectsDirectory:'/secret'}),stderr:''};
     if(executableId(request)==='opencode')return {code:0,stdout:'┌ Credentials\n│ OpenRouter api\n└ 1 credentials',stderr:''};
     if(executableId(request)==='agent')return {code:0,stdout:JSON.stringify({status:'unauthenticated',isAuthenticated:false,hasAccessToken:false}),stderr:''};
+    if(executableId(request)==='grok')return {code:0,stdout:'You are logged in with grok.com.\n\nDefault model: grok-4.7\n',stderr:''};
     return {code:0,stdout:'[nous] Nous Portal — not logged in\n',stderr:''};
   }};
   const result=await probeSubscriptionClients(fixtureEnvironment(),runner);
-  assert.deepEqual(result.map(item=>[item.id,item.status]),[['codex','ready'],['claude','ready'],['opencode','ready'],['cursor','signed_out'],['hermes','signed_out']]);
+  assert.deepEqual(result.map(item=>[item.id,item.status]),[['codex','ready'],['claude','ready'],['opencode','ready'],['cursor','signed_out'],['hermes','signed_out'],['grok','ready']]);
   assert.equal(JSON.stringify(result).includes('private@example.test'),false);assert.equal(JSON.stringify(result).includes('/secret'),false);
-  assert.deepEqual(seen.map(item=>item.args),[['login','status'],['auth','status'],['auth','list'],['status','--format','json'],['proxy','status']]);
+  assert.deepEqual(seen.map(item=>item.args),[['login','status'],['auth','status'],['auth','list'],['status','--format','json'],['proxy','status'],['models']]);
   assert.ok(seen.every(item=>item.stdin===undefined));
 });
 
