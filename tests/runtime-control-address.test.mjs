@@ -48,7 +48,7 @@ test('runtime native the short host moves the capability into a host-only cookie
   const bootstrap=await send(x.server.url+'settings?view=all',{host:short,headers:{accept:'text/html,*/*'}});
   assert.equal(bootstrap.status,303);assert.equal(bootstrap.headers.location,'/settings?view=all');
   const cookie=bootstrap.headers['set-cookie'][0];
-  assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),x.token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; SameSite=Strict/u);assert.match(cookie,/; Path=\//u);assert.doesNotMatch(cookie,/Domain=/u);
+  assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),x.token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');assert.match(cookie,/; Path=\//u);assert.doesNotMatch(cookie,/Domain=/u);
   const base=`http://127.0.0.1:${x.port}/`,withCookie={cookie:`${CAPABILITY_COOKIE}=${x.token}`};
   const page=await send(base+'settings',{host:short,headers:{accept:'text/html',...withCookie}});
   assert.equal(page.status,200);assert.match(page.headers['content-type'],/text\/html/u);assert.equal(page.headers['set-cookie'],undefined);
@@ -77,8 +77,10 @@ test('runtime native a configured tailnet name reaches Office through tailscale 
   // tailscale serve keeps the browser's Host and terminates HTTPS, so the page's origin is https://<tailnet name>.
   const bootstrap=await send(server.url+'?view=all',{host:tailnet,headers:{accept:'text/html'}});
   assert.equal(bootstrap.status,303);assert.equal(bootstrap.headers.location,'/?view=all');
-  const cookie=bootstrap.headers['set-cookie'][0];assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; Secure/u);assert.match(cookie,/; SameSite=Strict/u);
+  const cookie=bootstrap.headers['set-cookie'][0];assert.equal(cookieValue(cookie,CAPABILITY_COOKIE),token);assert.match(cookie,/; HttpOnly/u);assert.match(cookie,/; Secure/u);assert.match(cookie,/; SameSite=Lax/u);assert.match(cookie,/; Max-Age=34560000/u,'the phone stays signed in after the browser closes');
   const withCookie={cookie:`${CAPABILITY_COOKIE}=${token}`},page=await send(base,{host:tailnet,headers:{accept:'text/html',...withCookie}});
+  // Without the cookie (a phone that lost it) the page says what to do on the phone (owner 2026-10-13).
+  const lost=await send(base,{host:tailnet,headers:{accept:'text/html'}});assert.equal(lost.status,404);assert.match(lost.text,/Scan the QR code that `agent-office connect` shows on the computer/u);
   assert.equal(page.status,200);assert.doesNotMatch(page.text,/http:\/\/127\.0\.0\.1/u,'the page links nothing back to loopback');
   assert.equal((await send(base+'work/board',{host:tailnet,headers:withCookie})).status,200);
   const post=origin=>send(base+'work/start',{host:tailnet,method:'POST',headers:{...withCookie,'content-type':'application/json','x-agent-driver':'human-office',origin},body:JSON.stringify({request_id:'tailnet-'+origin.length,prompt:'Summarize a sample file.'})});
