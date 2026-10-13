@@ -171,6 +171,33 @@ test('telegram sends the result pictures after the text, one sendPhoto each, and
   const photoBlob=calls[1].options.body.get('photo');assert.equal(photoBlob.type,'image/png');assert.equal(photoBlob.size,png.length);
 });
 
+// Live 2026-10-13: the owner asked for each AI news post as one text and one card picture, not one long message
+// followed by every picture.
+test('a message split into posts that name their pictures is split at the --- lines, each post with its picture',async()=>{
+  const {deliveryPosts}=await import('../dist/work/delivery-connectors.js');
+  const delivery_text='# AI 새 글\n\n## Andrej Karpathy\n격차가 커진다\n![60억과 5천 명](./01_karpathy.png)\n\n---\n\n## Andrew Ng\n인프라 수요\n![](02_ng.png)\n\n---\n\n## 탐색 결과\n- 23명 확인';
+  const result={id:'r-3',work_title:'매일 AI 새 글 정리',source_status:'succeeded',work_completion_verified:true,summary:'s',text:'t',delivery_text,artifacts:[]};
+  assert.deepEqual(deliveryPosts(result,['01_karpathy.png','02_ng.png']),[
+    {text:'매일 AI 새 글 정리\n[완료] 검증을 통과했습니다.\n\n# AI 새 글\n\n## Andrej Karpathy\n격차가 커진다',pictures:['01_karpathy.png']},
+    {text:'## Andrew Ng\n인프라 수요',pictures:['02_ng.png']},
+    {text:'## 탐색 결과\n- 23명 확인\n\nWork result r-3',pictures:[]}]);
+  assert.equal(deliveryPosts(result,[]),null,'no post names a picture the result made: one message as before');
+  assert.equal(deliveryPosts({...result,delivery_text:'## 하나\n본문\n\n---\n\n## 둘'},['01_karpathy.png']),null);
+  const long=deliveryPosts({...result,delivery_text:'가'.repeat(5000)+'\n![카드](01_karpathy.png)'},['01_karpathy.png']);
+  assert.ok([...long[0].text].length<=4000);assert.match(long[0].text,/전체 내용은 앱에서/u);
+});
+test('telegram sends post by post: its text, then its picture without a caption; a picture no post names comes last',async()=>{
+  const calls=[];let id=50;const transport=async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify({ok:true,result:{message_id:++id,chat:{id:-1001234567890}}}),{status:200});};
+  const png=Buffer.from([0x89,0x50,0x4e,0x47,1,2,3]),picture=name=>({name,media_type:'image/png',bytes:png});
+  const delivery_text='## Andrej Karpathy\n격차\n![카드](01_karpathy.png)\n---\n## Andrew Ng\n인프라\n![카드](02_ng.png)\n---\n## 탐색 결과\n- 23명';
+  const outcome=await createDeliveryConnector(telegram,transport).send({result:{id:'r4',work_title:'매일 AI 새 글 정리',source_status:'succeeded',work_completion_verified:true,summary:'s',text:'t',delivery_text,artifacts:[],sources:[]},target_alias:'updates',idempotency_key:'k4',images:[picture('02_ng.png'),picture('01_karpathy.png'),picture('extra.png')]});
+  assert.deepEqual(outcome,{status:'delivered',receipt_id:'telegram:-1001234567890:51:posts:3/3:photos:3/3'});
+  assert.deepEqual(calls.map(call=>call.url.replace(/^.*\//u,'')+':'+(call.options.body instanceof FormData?call.options.body.get('photo').name+':'+(call.options.body.get('caption')??''):JSON.parse(call.options.body).text.split('\n').find(line=>line.startsWith('## ')))),
+    ['sendMessage:## Andrej Karpathy','sendPhoto:01_karpathy.png:','sendMessage:## Andrew Ng','sendPhoto:02_ng.png:','sendMessage:## 탐색 결과','sendPhoto:extra.png:extra.png']);
+  assert.match(JSON.parse(calls[0].options.body).text,/^매일 AI 새 글 정리\n\[완료\]/u);assert.match(JSON.parse(calls[4].options.body).text,/Work result r4$/u);
+  assert.ok(calls.every(call=>call.options.redirect==='error'));
+});
+
 // Live 2026-10-03: the owner's Telegram got file lists and check notes instead of the five explanations they asked for.
 test('a result that carries the owner message is delivered as that message only',async()=>{
   const {deliveryContent}=await import('../dist/work/delivery-connectors.js');

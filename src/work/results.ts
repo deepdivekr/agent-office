@@ -259,8 +259,9 @@ export class WorkResults {
       try{const file=await this.readArtifact(project,workId,resultId,artifact.id,[dirname(this.store.databasePath)]);images.push({name:artifact.label,media_type:deliverable(artifact)!,bytes:file.bytes});}catch{/* left out */}
     }
     let outcome:Awaited<ReturnType<ResultDeliveryConnector['send']>>;
+    // Each picture may bring its own message (a post's text, then its picture), so each one widens the wait.
     let timer:NodeJS.Timeout|undefined;
-    try{outcome=await Promise.race([connector.send({result,target_alias:row.target_alias,idempotency_key:`office-result:${deliveryId}`,...(images.length?{images}:{})}),new Promise<Awaited<ReturnType<ResultDeliveryConnector['send']>>>(resolve=>{timer=setTimeout(()=>resolve({status:'failed',effect_state:'uncertain',reason:'DELIVERY_RESPONSE_UNOBSERVED'}),30_000);timer.unref();})]);}catch{outcome={status:'failed',effect_state:'uncertain',reason:'DELIVERY_RESPONSE_UNOBSERVED'};}finally{if(timer)clearTimeout(timer);}
+    try{outcome=await Promise.race([connector.send({result,target_alias:row.target_alias,idempotency_key:`office-result:${deliveryId}`,...(images.length?{images}:{})}),new Promise<Awaited<ReturnType<ResultDeliveryConnector['send']>>>(resolve=>{timer=setTimeout(()=>resolve({status:'failed',effect_state:'uncertain',reason:'DELIVERY_RESPONSE_UNOBSERVED'}),30_000*(1+images.length));timer.unref();})]);}catch{outcome={status:'failed',effect_state:'uncertain',reason:'DELIVERY_RESPONSE_UNOBSERVED'};}finally{if(timer)clearTimeout(timer);}
     const delivered=outcome.status==='delivered'&&typeof outcome.receipt_id==='string'&&outcome.receipt_id.length>0&&outcome.receipt_id.length<=500;
     const status=delivered?'delivered':outcome.status==='failed'&&outcome.effect_state==='not_dispatched'?'failed':'reconciliation_required';
     db.prepare('UPDATE office_result_delivery SET status=?,revision=revision+1,reason=?,receipt_id=?,updated_at=? WHERE id=? AND status=?').run(status,delivered?null:safe(outcome.status==='failed'?outcome.reason:'DELIVERY_RECEIPT_INVALID',300),delivered?safe((outcome as {receipt_id:string}).receipt_id,500):null,at(),deliveryId,'sending');
