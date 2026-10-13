@@ -4,6 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v0.8.5](docs/releases/v0.8.5.md) | 2026-10-13 | A run with nothing new is not sent and not in the feed |
 | [v0.8.4](docs/releases/v0.8.4.md) | 2026-10-13 | Telegram gets a result post by post, each post with its picture |
 | [v0.8.3](docs/releases/v0.8.3.md) | 2026-10-13 | Import suggestions list only running automations, each with what it was judged on |
 | [v0.8.2](docs/releases/v0.8.2.md) | 2026-10-13 | Change a Work's schedule from its detail; a direction with a cadence opens the editor |

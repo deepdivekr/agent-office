@@ -248,6 +248,9 @@ export function deliveryMessage(folder:string,finalMessage:string){
   let text='';try{const path=join(folder,'DELIVERY.md');if(lstatSync(path).isFile())text=readFileSync(path,'utf8');}catch{/* none written */}
   return sanitizeCodingReply((text.trim()||finalMessage).trim()).text.slice(0,12000);
 }
+/** An empty DELIVERY.md is the client saying this run has nothing for the owner (a repeat that found nothing new): the run
+ * stays in the Work's history, is not sent and is not in the feed (live: an hourly news Work sent "새 글 없음" every hour). */
+export function deliveryQuiet(folder:string){try{const path=join(folder,'DELIVERY.md');return lstatSync(path).isFile()&&!readFileSync(path,'utf8').trim();}catch{return false;}}
 /** The saved result, within one readback page (live: a record split over two pages was judged "cut mid-sentence"): the
  * message for the owner first (DELIVERY.md), then the client's final reply, the files it made, and small text files. */
 const RECORD_BYTES=9500;
@@ -325,7 +328,7 @@ const windowsInstructions=(client:RunClient)=>(ownerEnvironmentContext().owner_e
 function initialPrompt(input:ClientRunInput){
   return [`Agent Office hands you this Work. Do it yourself, with your own tools, skills and settings, until the result is finished.`,
     `Work folder: ${input.folder}. It is your working directory for this run. Save every deliverable here as files (images, documents, data). Folders of this Work's earlier runs, if any, are next to it.`,
-    `Also save DELIVERY.md in the Work folder: the message the owner receives (in the app, Telegram or chat), in the language of the request. Put only the content the request asks for, laid out for reading (for example each case's explanation under its heading); no file lists, no notes about conditions, process or checks. Office sends that text together with the pictures you made.`,
+    `Also save DELIVERY.md in the Work folder: the message the owner receives (in the app, Telegram or chat), in the language of the request. Put only the content the request asks for, laid out for reading (for example each case's explanation under its heading); no file lists, no notes about conditions, process or checks. Office sends that text together with the pictures you made. When a repeated run has nothing new for the owner, leave DELIVERY.md empty: Office then sends nothing and keeps the run in the Work's history only.`,
     `When the output is used rather than read, you may also save CARD.json for the Office feed: one card {"type":"compare","items":[{"title","lines":[],"url","recommended"}]} | {"type":"change","before","after","url"} | {"type":"metric","label","value","unit","delta"} | {"type":"draft","to","subject","body"} | {"type":"event","name","start":ISO,"location"} | {"type":"checklist","items":[{"text","done"}]}, with optional "title", "actions":[{"label","url":https}] and "replies":[{"label","text"}]. A script the owner should rerun with other values may come with NAME.app.json: {"title","command":[argv run in this folder],"inputs":[{"id","label","type":"select|toggle|text|number","options":[{"value","label"}],"default"}],"buttons":[{"id","label"}]}; the command reads {button,inputs} as JSON on stdin and prints plain text or {"text","table":{"header","rows"}}. The owner approves its command before the first run.`,
     `When the Work watches news, posts, filings or other dated items, also save RECORDS.json: [{"at":ISO time it was published,"source","author","title","summary":2-3 lines,"url","subject":ticker or topic}] for the items this run reported. Office keeps them as the Work's dated history after working files are cleared; an item already kept is not added twice.`,
     `Keep the Work folder lean: do not pack files that are already there into another archive, and keep page captures and raw collections only while the run needs them. Office clears older runs' working files and keeps delivered text, pictures, media, PDF, CARD.json, RECORDS.json and app files; state a later run must read belongs beside the run folders, not inside an old one.`,
@@ -387,7 +390,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   // The owner's Windows-side servers are looked at only when the client actually runs.
   // A turn that left no completion report (one from before reports existed, or a resume with nothing new) is asked for it once.
   let askedReport=false;
-  let extra:OfferedServer[]|null=null,deliveryText=input.checkpoint?.client_session?deliveryMessage(input.folder,cp.summary):'';
+  let extra:OfferedServer[]|null=null,deliveryText=input.checkpoint?.client_session?deliveryMessage(input.folder,cp.summary):'',quiet=Boolean(input.checkpoint?.client_session)&&deliveryQuiet(input.folder);
   for(;;){
     if(next){
       input.guard();update({finished:false,direction_at:latest});extra??=await servers(client).catch(()=>[]);
@@ -430,7 +433,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       if(session().carried)update({carried:false});
       input.guard();
       const files=producedFiles(input.folder),resultText=clientResultText(outcome.final_message,files),observedAt=new Date().toISOString();
-      deliveryText=deliveryMessage(input.folder,outcome.final_message);
+      deliveryText=deliveryMessage(input.folder,outcome.final_message);quiet=deliveryQuiet(input.folder);
       const runEvidence=`client-run-${hashJson({run_id,turn:cp.turn,session:outcome.session_id,final:outcome.final_message,files}).slice(0,24)}`;
       const runValue=boundWorkToolValue({client,session_id:outcome.session_id,folder:input.folder,final_message:sanitizeCodingReply(outcome.final_message).text.slice(0,4000),files:turnFiles(files,before).filter(file=>file.sha256).slice(0,20).map(({name:_name,...file})=>file),file_count:files.length,observed_by_host:'Files are the ones Office found in the Work folder after the run, with their SHA-256; the counts are the events the client reported. What the client did outside this folder ran under the owner\'s own permissions and is not an Office receipt.',counts:outcome.counts});
       const draftId=`client-output-${hashJson({run_id,turn:cp.turn,text:resultText}).slice(0,24)}`,draft=await input.draft(resultText,input.title.slice(0,120),draftId);
@@ -492,8 +495,8 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
         next=`Your ${COMPLETION_FILE} reports these conditions as not met: ${missing.map(item=>`${item.id}${item.note?` (${item.note})`:''}`).join('; ')}.\n\nDo not stop at a blocked means. If a tool, a browser or a connection failed, switch to the next one you have (the owner's browser, then a headless browser such as Playwright, then a plain HTTPS fetch of the page or feed) and finish the Work in the same folder. Do not repeat a send or submission that already happened. A condition only the owner can unblock (a sign-in, a payment, a decision) stays unmet: say in its note exactly what they need to do. Update DELIVERY.md, write ${COMPLETION_FILE} again and finish with the short reply.\n\n${officeOwns(input)}`;
         continue;
       }
-      return report.met?{status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})}
-        :{status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_REPORTED_INCOMPLETE',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})};
+      return report.met?{status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})}
+        :{status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_REPORTED_INCOMPLETE',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})};
     }
     let verified:Awaited<ReturnType<Verify>>;
     try{verified=await input.verify(input.checks,cp.observations,{action:'complete',stage_id:null,tool_name:null,arguments_json:null,summary:cp.summary,wait_reason:null,completed_checks:input.checks.map(check=>({id:check.id,evidence_ids:latestTurn(cp.observations).map(item=>item.invocation.request_id)}))});}
@@ -503,7 +506,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       // The client's result is saved: a verifier that is briefly unavailable is waited for (with backoff), never a failed run.
       return {status:reason==='CLIENT_AUTH_EXPIRED'?'waiting_auth':['CLIENT_QUOTA_EXHAUSTED','CLIENT_RATE_LIMITED','STRUCTURED_MODEL_UNAVAILABLE','STRUCTURED_MODEL_TIMEOUT','CLIENT_TIMEOUT','MODEL_PROVIDER_UNAVAILABLE'].includes(reason)?'waiting_model':'retryable_failure',summary:cp.summary,reason,completion_verified:false,checkpoint:cp,model_calls:[]};
     }
-    if(verified===true)return {status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})};
+    if(verified===true)return {status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})};
     if(verified&&typeof verified==='object'&&session().repairs<WORK_COMPLETION_REPAIR_BUDGET){
       const check=input.checks.find(item=>item.id===verified.repair.check_id);
       update({repairs:session().repairs+1});
@@ -513,6 +516,6 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       continue;
     }
     // The owner is told about a run that stopped for review too: they get the message the client wrote, not the record.
-    return {status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_COMPLETION_REQUIRES_VERIFICATION',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{})};
+    return {status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_COMPLETION_REQUIRES_VERIFICATION',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})};
   }
 }

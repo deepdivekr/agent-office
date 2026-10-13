@@ -29,7 +29,8 @@ export class FeedPushWatcher {
     const outputs:Array<{id:string;work:string;text:string}>=[];
     const has=(table:string)=>Boolean(this.store.hermesState.prepare('SELECT 1 FROM sqlite_master WHERE name=?').get(table));
     if(has('office_result'))for(const row of this.store.hermesState.prepare('SELECT id,work_id,body FROM office_result WHERE project_id=? AND created_at>? AND created_at<=? ORDER BY created_at').all(project,since,now) as Array<{id:string;work_id:string;body:string}>){
-      if(!titles.has(row.work_id))continue;let body:{delivery_text?:string;text?:string;summary?:string}={};try{body=JSON.parse(row.body);}catch{}
+      if(!titles.has(row.work_id))continue;let body:{delivery_text?:string;text?:string;summary?:string;quiet?:boolean}={};try{body=JSON.parse(row.body);}catch{}
+      if(body.quiet)continue;
       outputs.push({id:'r:'+row.id,work:titles.get(row.work_id)!,text:firstLine(body.delivery_text||body.text||body.summary||'')});
     }
     if(has('office_feed_post'))for(const row of this.store.hermesState.prepare('SELECT id,work_id,source_label,title,text FROM office_feed_post WHERE project_id=? AND received_at>? AND received_at<=? ORDER BY received_at').all(project,since,now) as Array<{id:string;work_id:string|null;source_label:string;title:string|null;text:string}>){
