@@ -192,6 +192,19 @@ export class WorkSchedules {
     if(row.state==='enabled')return this.status(workId);
     const now=this.clock(),next=nextScheduleSlot(definition,now,row.anchor_ms);this.store.hermesState.prepare("UPDATE office_work_schedule SET state='enabled',work_revision=?,next_run_ms=?,updated_at=? WHERE project_id=? AND work_id=?").run(revision,next,stamp(now),this.project,workId);this.event(workId,'schedule.enabled',`Next scheduled run: ${stamp(next)} (${definition.timezone}).`);return this.status(workId);
   }
+  /**
+   * The owner sets or turns off a Work's recurrence from its detail (owner 2026-10-13: a direction asked an AI news Work
+   * to run hourly; its completion condition changed but the schedule stayed daily, and nothing let the owner change it).
+   * A definition replaces the schedule and turns it on; null turns it off. A custom Pack's schedule and an imported
+   * Work's original runtime keep their own authority.
+   */
+  setByOwner(workId:string,revision:number,raw:unknown){
+    const existing=this.find(workId);requireCondition(existing?.execution_kind!=='custom_pack','SCHEDULE_CUSTOM_PACK_AUTHORITY');
+    if(raw===null){if(existing&&existing.state!=='disabled'){this.disable(workId,revision);this.event(workId,'schedule.owner_changed','The owner turned the schedule off.');}return this.status(workId);}
+    const definition=normalizeExplicitWorkSchedule(raw);
+    this.configureExplicit(workId,revision,definition,{acknowledged:true,replace_existing:true});this.enable(workId,revision,{acknowledged:true});
+    this.event(workId,'schedule.owner_changed',`The owner set the schedule: ${JSON.stringify(definition)}.`);return this.status(workId);
+  }
   /** User-selected, already supported recurrence. Does not edit a Work goal or
    * invoke the schedule normalizer. Replacing an owned schedule is explicit. */
   configureExplicit(workId:string,revision:number,raw:unknown,input:{acknowledged:boolean;binding_sha256?:string;replace_existing?:boolean;execution_kind?:'custom_pack'}){

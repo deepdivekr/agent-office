@@ -339,3 +339,21 @@ test('runtime fixture a new Work naming a sign-in site suggests Aside until Asid
  asideReady=true;await page.evaluate(()=>{siteHintFacts=null;});await page.locator('#prompt').fill('https://x.com 타임라인 요약');await delay(900);assert.equal(await hint.isVisible(),false,'with Aside connected nothing is said');
  assert.deepEqual(errors,[]);
 });
+
+// Owner 2026-10-13: the owner changes a Work's recurrence from its detail.
+test('runtime fixture the owner changes a Work schedule from its detail and turns it off',async t=>{
+ const {WorkSchedules}=await import('../dist/work/schedule.js');
+ const x=await setup(t),server=await startControlCenter(x.config,{workModel:x.model}),browser=await chromium.launch({headless:true});x.cleanup.push(async()=>{await browser.close();await server.close();});
+ const schedules=new WorkSchedules(x.store,x.config.project.id);schedules.setByOwner(x.work.work_id,x.work.revision,{kind:'interval',timezone:'Asia/Seoul',seconds:86400});
+ const page=await browser.newPage({viewport:{width:1280,height:1000}});await page.addInitScript(()=>localStorage.setItem('office-lang','ko'));const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(server.url+'?work='+x.work.work_id);
+ const section=page.locator('.work-schedule');await section.waitFor();assert.match(await section.innerText(),/1일마다/u);
+ await section.getByRole('button',{name:'일정 바꾸기'}).click();
+ await section.locator('[data-sd="every"]').fill('1');await section.locator('[data-sd="unit"]').selectOption('3600');
+ await section.getByRole('button',{name:'저장'}).click();
+ await page.waitForFunction(()=>/1시간마다/u.test(document.querySelector('.work-schedule')?.innerText||''));
+ assert.equal(schedules.status(x.work.work_id).definition.seconds,3600);
+ await section.getByRole('button',{name:'일정 바꾸기'}).click();await section.locator('[data-sd="kind"]').selectOption('off');await section.getByRole('button',{name:'저장'}).click();
+ await page.waitForFunction(()=>/예약 꺼짐/u.test(document.querySelector('.work-schedule')?.innerText||''));
+ assert.equal(schedules.status(x.work.work_id).state,'disabled');assert.deepEqual(errors,[]);
+});

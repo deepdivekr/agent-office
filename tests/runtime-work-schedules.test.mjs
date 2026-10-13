@@ -137,3 +137,17 @@ test('runtime contract an owner-set schedule is not normalized again from the Wo
   const again=await x.schedules.prepare(x.work.id,x.work.revision,x.model);
   assert.equal(x.calls(),0,'no normalizer call');assert.equal(again.definition.kind,'daily');assert.equal(again.definition.hour,8);assert.equal(again.enabled,true);
 });
+
+// Owner 2026-10-13: a direction asked an AI news Work to run hourly; only its completion condition changed and nothing let
+// the owner change the schedule. The owner sets or turns it off from the Work.
+test('runtime contract the owner replaces a running schedule, turns it off and on again',async t=>{
+  const x=await setup(t,{kind:'interval',timezone:'Asia/Seoul',seconds:86400});
+  x.schedules.configureExplicit(x.work.id,x.work.revision,{kind:'interval',timezone:'Asia/Seoul',seconds:86400},{acknowledged:true});x.schedules.enable(x.work.id,x.work.revision,{acknowledged:true});
+  let status=x.schedules.setByOwner(x.work.id,x.work.revision,{kind:'interval',timezone:'Asia/Seoul',seconds:3600});
+  assert.deepEqual([status.definition.seconds,status.state,status.enabled],[3600,'enabled',true]);
+  status=x.schedules.setByOwner(x.work.id,x.work.revision,null);assert.equal(status.state,'disabled');assert.equal(status.next_run_at,null);
+  status=x.schedules.setByOwner(x.work.id,x.work.revision,{kind:'weekly',timezone:'Asia/Seoul',hour:9,minute:0,weekdays:[1,3,5],also_at:[{hour:18,minute:0}]});
+  assert.deepEqual([status.definition.kind,status.definition.weekdays,status.enabled],['weekly',[1,3,5],true]);
+  assert.throws(()=>x.schedules.setByOwner(x.work.id,x.work.revision,{kind:'interval',timezone:'Asia/Seoul',seconds:10}));
+  assert.throws(()=>x.schedules.setByOwner(x.work.id,x.work.revision+1,{kind:'interval',timezone:'Asia/Seoul',seconds:3600}),/WORK_REVISION_CONFLICT/u);
+});

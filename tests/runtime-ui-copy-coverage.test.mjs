@@ -103,3 +103,12 @@ test('served pages carry no control characters from a lost backslash',async()=>{
   const pages={settings:(await import('../dist/observability/settings-ui.js')).settingsHtml('n'),work:(await import('../dist/observability/work-ui.js')).workHtml('n'),office:(await import('../dist/observability/office-ui.js')).officeHtml('n'),connections:(await import('../dist/observability/browser-connections.js')).connectionHtml('n')};
   for(const [name,html] of Object.entries(pages))assert.deepEqual([...html.matchAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu)].map(match=>JSON.stringify(html.slice(Math.max(0,match.index-40),match.index+10))),[],name);
 });
+
+// The cadence a direction names opens the schedule editor (owner 2026-10-13). Read from the served page, so a regex that
+// lost its backslashes in the template string (\d became d) fails here.
+test('a direction that names a cadence is read on the served page',async()=>{
+  const html=(await import('../dist/observability/work-ui.js')).workHtml('n'),start=html.indexOf('function directionCadence'),source=html.slice(start,html.indexOf('async function sendChat',start));
+  const cadence=new Function(source+';return directionCadence;')();
+  assert.deepEqual(cadence('1시간마다 돌려줘'),{every:1,unit:3600});assert.deepEqual(cadence('30분마다 확인'),{every:30,unit:60});assert.deepEqual(cadence('every 2 hours'),{every:2,unit:3600});
+  assert.deepEqual(cadence('매일 정리해줘'),{every:1,unit:86400});assert.equal(cadence('매일 9시에 보내줘'),null,'a clock time is for the editor, not a guess');assert.equal(cadence('제목을 고쳐줘'),null);
+});

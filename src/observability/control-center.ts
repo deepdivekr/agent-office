@@ -58,6 +58,7 @@ import {discoverHermes} from '../work/hermes-source.js';
 import {WorkDeliverySettings,deliverySettingsUpdateSchema} from '../work/delivery-settings.js';
 import {readWorkIntakeOptions} from '../work/intake-options.js';
 import {z} from 'zod';
+import {WorkSchedules} from '../work/schedule.js';
 import {WorkAdoptionRuntime} from '../work/adoption.js';
 import {workActivity} from '../work/activity.js';
 import {changeWorkLifecycle,lifecycleActionSchema} from '../work/lifecycle.js';
@@ -261,6 +262,14 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         const value=changeWorkLifecycle(store,config.project.id,lifecycleActionSchema.parse(JSON.parse(body)));
         reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/u.test(error.message)?error.message:'WORK_LIFECYCLE_REQUEST_INVALID'}),'application/json; charset=utf-8');}return;
+    }
+    if(suffix==='work/schedule'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>8192)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
+        const input=z.object({work_id:z.string().uuid(),revision:z.number().int().min(0),definition:z.unknown()}).strict().parse(JSON.parse(body));
+        reply(response,200,JSON.stringify(new WorkSchedules(store,config.project.id).setByOwner(input.work_id,input.revision,input.definition??null)),'application/json; charset=utf-8');
+      }catch(error){reply(response,409,JSON.stringify({error:requestError(error,'WORK_SCHEDULE_FAILED')}),'application/json; charset=utf-8');}return;
     }
     if(['work/control','work/adoption/targets','work/adoption/bind','work/adoption/action','work/result/retry'].includes(suffix)){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
