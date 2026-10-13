@@ -307,4 +307,5 @@ export const extraSourceCopy: Record<string, string> = {
   'Jev 없이 기존 AI와 코드로 진행합니다.': 'Continues with the existing AI and code, without Jev.',
   'Codex 세션 연결': 'Connect Codex session',
   'Codex 대화': 'Codex chat',
+  '업무를 맡는 앱이 아니라 도구 패키지예요. 로그인해 두면 모든 업무의 AI가 X 검색, 이미지 생성, 영상 생성에 씁니다.': 'Not an app that takes Works: a tool package. Signed in, every Work’s AI uses it for X search, image generation and video.',
 };
