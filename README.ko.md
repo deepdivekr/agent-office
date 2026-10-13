@@ -9,9 +9,9 @@
 
 ### 새로 나온 기능
 
+- **[v0.8.2](docs/releases/v0.8.2.md)** · 일정 편집 · 지시 속 반복 주기 인식
 - **[v0.8.1](docs/releases/v0.8.1.md)** · 휴대폰 로그인 유지 · 알림 누르면 바로 열림
 - **[v0.8.0](docs/releases/v0.8.0.md)** · 비즈니스 프로필 · 포트 분리 · 한 PC에서 MCP 여러 개
-- **[v0.7.6](docs/releases/v0.7.6.md)** · 보안 점검 반영
 
 [전체 변경 이력](CHANGELOG.md)
 
@@ -92,7 +92,7 @@ AI 앱에 일을 맡길수록 결과는 흩어집니다. 아침 브리핑은 텔
 직접 설치하려면 **Ubuntu 또는 WSL Ubuntu 터미널**에서 실행합니다. 어느 폴더에서 실행해도 됩니다.
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.1/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.2/install.sh | bash'
 ```
 
 설치 전에 [스크립트](install.sh)를 확인할 수 있습니다.
