@@ -8,13 +8,13 @@ import {fileURLToPath} from 'node:url';
 import {z} from 'zod';
 import {requireCondition} from '../core/contracts.js';
 import {configureHermes,hermesDoctor,hermesHome} from '../integrations/hermes.js';
-import {officeServerEntry,windowsOfficeEntry} from '../integrations/owner-mcp.js';
+import {grokOfficeEntry,officeServerEntry,windowsOfficeEntry} from '../integrations/owner-mcp.js';
 import {environmentHomes} from '../integrations/client-environment.js';
 import {nativeProcessRunner,resolveSubscriptionClientExecutable,type SafeProcessRunner,type SubscriptionClientId} from '../integrations/subscription-auth.js';
 import {localConnectionPaths} from './connection.js';
 
 export type McpRegistrationClient=SubscriptionClientId;
-const clientIds=['codex','claude','opencode','cursor','hermes'] as const;
+const clientIds=['codex','claude','opencode','cursor','hermes','grok'] as const;
 const receiptSchema=z.object({format:z.literal(1),registrations:z.partialRecord(z.enum(clientIds),z.object({registered_at:z.string().datetime(),command_fingerprint:z.string().regex(/^[a-f0-9]{64}$/u)}).strict()).default({})}).strict();
 type Receipts=z.infer<typeof receiptSchema>;
 export interface McpClientRegistrationView {id:McpRegistrationClient;installed:boolean;registration:'registered'|'not_registered'|'unavailable'|'conflict'|'unknown';automatic:boolean;reason:string;restart_required:boolean;}
@@ -101,6 +101,7 @@ export class McpRegistrationController{
       try{
         if(id==='cursor'){registration=cursorRegistration(this.environment,this.command,this.args);reason=registration;}
         else if(id==='opencode'){registration=opencodeRegistration(this.environment,this.command,this.args);reason=registration;}
+        else if(id==='grok'){const entry=grokOfficeEntry(this.environment);registration=!entry?'not_registered':entry.command===this.command&&JSON.stringify(entry.args)===JSON.stringify(this.args)?'registered':'conflict';reason=registration==='registered'?'existing_office_registration':registration==='conflict'?'existing_configuration_requires_review':'not_registered';}
         else if(id==='hermes'){const doctor=hermesDoctor(hermesHome(this.environment));registration=doctor.agent_driver_mcp==='ready'?'registered':receipts.registrations[id]?.command_fingerprint===signature?'unknown':'not_registered';reason=doctor.agent_driver_mcp;}
         else if(receipts.registrations[id]?.command_fingerprint===signature){registration='registered';reason='registered_by_agent_driver';}
         // Live 2026-10-06: the owner's Claude Code already listed agent-office (the launcher form); without a receipt Office showed
@@ -134,6 +135,10 @@ export class McpRegistrationController{
     const receipts=readReceipts(this.root),signature=fingerprint(this.command,this.args);
     if(id==='cursor')await writeCursor(this.environment,this.command,this.args);
     else if(id==='opencode')await writeOpencode(this.environment,this.command,this.args);
+    else if(id==='grok'){
+      const entry=grokOfficeEntry(this.environment);requireCondition(!entry||entry.command===this.command&&JSON.stringify(entry.args)===JSON.stringify(this.args),'MCP_REGISTRATION_CONFLICT');
+      if(!entry){const executable=resolveSubscriptionClientExecutable(id,this.environment),result=await this.runner.run({executable,args:['mcp','add','--scope','user',officeMcpName(),this.command,'--',...this.args],timeout_ms:15_000});requireCondition(result.code===0,'MCP_REGISTRATION_FAILED');}
+    }
     else if(id==='hermes'){
       const doctor=hermesDoctor(hermesHome(this.environment));
       if(doctor.agent_driver_mcp==='misconfigured'&&receipts.registrations[id]?.command_fingerprint!==signature)throw Error('MCP_REGISTRATION_CONFLICT');

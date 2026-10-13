@@ -19,6 +19,7 @@ export const CLIENT_BOOTSTRAP_CATALOG:readonly ClientBootstrapSpec[]=[
   {id:'opencode',label:'OpenCode',docs_url:'https://opencode.ai/docs/',installer_url:'https://opencode.ai/install',install_command:'curl -fsSL https://opencode.ai/install | bash',auth_guide_url:'https://opencode.ai/docs/providers/'},
   {id:'cursor',label:'Cursor CLI',docs_url:'https://cursor.com/docs/cli/installation',installer_url:'https://cursor.com/install',install_command:'curl https://cursor.com/install -fsS | bash',auth_guide_url:'https://cursor.com/docs/cli/overview'},
   {id:'hermes',label:'Hermes',docs_url:'https://github.com/NousResearch/hermes-agent',installer_url:'https://hermes-agent.nousresearch.com/install.sh',install_command:'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',auth_guide_url:'https://github.com/NousResearch/hermes-agent'},
+  {id:'grok',label:'Grok Build',docs_url:'https://docs.x.ai/build/settings',installer_url:'https://x.ai/cli/install.sh',install_command:'curl -fsSL https://x.ai/cli/install.sh | bash',auth_guide_url:'https://docs.x.ai/build/settings'},
 ] as const;
 
 const catalog=(id:SubscriptionClientId)=>{const item=CLIENT_BOOTSTRAP_CATALOG.find(value=>value.id===id);requireCondition(item,'CLIENT_INSTALL_TARGET_INVALID');return item;};

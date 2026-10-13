@@ -99,6 +99,11 @@ export function officeServerEntry(client:'codex'|'claude',environment:NodeJS.Pro
   const entries=client==='codex'?codexEntries(text(join(environment.CODEX_HOME??join(home,'.codex'),'config.toml'))):jsonEntries(join(environment.CLAUDE_CONFIG_DIR??home,'.claude.json'));
   const entry=entries.find(item=>item.key===officeMcpName());return entry?{command:entry.command,args:entry.args}:null;
 }
+/** Grok Build's agent-office entry from ~/.grok/config.toml (`[mcp_servers.<name>]`, the same TOML shape as Codex). */
+export function grokOfficeEntry(environment:NodeJS.ProcessEnv=process.env):{command:string|undefined;args:string[]}|null{
+  const entry=codexEntries(text(join(environment.GROK_HOME??join(environment.HOME??homedir(),'.grok'),'config.toml'))).find(item=>item.key===officeMcpName());
+  return entry?{command:entry.command,args:entry.args}:null;
+}
 /** The Windows-side app's agent-office entry (named agent-driver or agent-office), from its own config under the Windows profile. */
 export function windowsOfficeEntry(client:'codex'|'claude',environment:NodeJS.ProcessEnv=process.env):{command:string|undefined;args:string[]}|null{
   const windows=environmentHomes(environment).find(place=>place.side==='windows');if(!windows)return null;

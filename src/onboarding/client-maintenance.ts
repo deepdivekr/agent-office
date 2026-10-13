@@ -43,7 +43,7 @@ function parseState(value:unknown):StoredState{
   return {version:1,revision:Number(item.revision),enabled:item.enabled,next_due_at:item.next_due_at as string|null,last_state:allowedStates.has(item.last_state as MaintenanceState)?item.last_state as MaintenanceState:'idle',clients};
 }
 const safeReasons=new Set<SafeReason>(['eligible','not_installed','unmanaged_install','unsupported_platform','unsupported_update_method','busy','locked','disabled','not_due','fixture_environment','update_failed','updated','deferred_busy','cooldown']);
-const clientProcessNames=new Set(['codex','claude','opencode','cursor-agent','agent','hermes']);
+const clientProcessNames=new Set(['codex','claude','opencode','cursor-agent','agent','hermes','grok']);
 export function isClientCliProcess(comm:string,argv:string[]){
   const first=argv[0]?basename(argv[0]).toLowerCase():'',second=argv[1]?basename(argv[1]).toLowerCase():'';
   const processName=comm.trim().toLowerCase();
