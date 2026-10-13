@@ -8,18 +8,16 @@ import {basename,join} from 'node:path';
  * automation, manage it in Office?"). Read-only and rule-based, no model call: the owner's Claude Code and Codex
  * conversations are grouped by their working folder, and each folder is checked for signs that something runs on its
  * own (a GitHub Actions schedule, a crontab or systemd line, a scheduler or messenger library, an always-on container).
- * Local Hermes jobs and registered OpenClaw servers that are not attached yet are suggested too. Nothing leaves the
+ * Each reason comes with what was found, so the owner sees why. Local Hermes jobs and registered OpenClaw servers that are not attached yet are suggested too. Nothing leaves the
  * computer: the result is shown on the owner's own screen only.
  */
 export type Suggestion =
-  | {kind:'automation';folder:string;name:string;repo:string|null;signals:string[];topics:string[];session:SessionRef|null}
-  | {kind:'conversation';folder:string|null;name:string;topics:string[];session:SessionRef}
+  | {kind:'automation';folder:string;name:string;repo:string|null;signals:Evidence[];topics:string[];session:SessionRef|null}
   | {kind:'hermes';jobs:number;names:string[]}
   | {kind:'openclaw';targets:number;names:string[]};
 export type SessionRef={client:'claude'|'codex';id:string;title:string;updated_at:string;windows:boolean};
 export type SessionRow=SessionRef&{cwd:string|null;attached:boolean};
 
-const DAY=86_400_000;
 const read=(path:string,max=200_000)=>{try{const s=statSync(path);return s.isFile()&&s.size<=max?readFileSync(path,'utf8'):'';}catch{return '';}};
 const list=(path:string)=>{try{return readdirSync(path);}catch{return [];}};
 /** A Windows folder as WSL sees it (C:\Users\me\bot → /mnt/c/Users/me/bot). */
@@ -36,51 +34,82 @@ function githubRepo(folder:string){
   const m=/url\s*=\s*(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+\/[\w.-]+?)(?:\.git)?\s*$/mu.exec(read(join(folder,'.git','config')));
   return m?m[1]!:null;
 }
-/** Signs that something in this folder runs by itself. `crontab` and `units` are the owner's own schedule lines. */
-export function automationSignals(folder:string,crontab:string,units:string[]):string[]{
-  const out=new Set<string>();
-  for(const f of list(join(folder,'.github','workflows')))if(/\.ya?ml$/u.test(f)&&/^\s*schedule\s*:/mu.test(read(join(folder,'.github','workflows',f))))out.add('GitHub Actions 예약 실행');
-  if(crontab.split('\n').some(line=>!line.trim().startsWith('#')&&line.includes(folder)))out.add('crontab에 등록됨');
-  if(units.some(text=>text.includes(folder)))out.add('systemd에 등록됨');
+/** One reason a folder looks like it runs by itself, with what was found (a file, a schedule, a command line). */
+export type Evidence={key:'actions'|'crontab'|'systemd'|'schedule_file'|'scheduler'|'messenger'|'container';detail:string};
+/** A user systemd unit; `live` is false when it is neither running nor enabled (it or its timer), unknown without systemd. */
+export type Unit={name:string;text:string;live?:boolean};
+/** A command or schedule line as shown on the owner's screen: secret-looking values and long tokens are hidden. */
+export const redact=(line:string)=>line.trim().replace(/\b([A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASS(?:WORD)?)[A-Z0-9_]*)=\S+/giu,'$1=***').replace(/[A-Za-z0-9_+-]{32,}={0,2}/gu,'…').slice(0,160);
+const field=(text:string,name:string)=>new RegExp(`^\\s*${name}\\s*=\\s*(.+)$`,'mu').exec(text)?.[1]?.trim()??null;
+/** Signs that something in this folder runs by itself, and what each one is. `crontab` and `units` are the owner's own. */
+export function automationSignals(folder:string,crontab:string,units:Unit[]):Evidence[]{
+  const out:Evidence[]=[],add=(key:Evidence['key'],detail:string)=>{if(!out.some(e=>e.key===key&&e.detail===detail))out.push({key,detail});};
+  for(const f of list(join(folder,'.github','workflows'))){const text=read(join(folder,'.github','workflows',f));
+    if(/\.ya?ml$/u.test(f)&&/^\s*schedule\s*:/mu.test(text)){const cron=/cron\s*:\s*['"]?([^'"\n]+)/u.exec(text)?.[1]?.trim();add('actions',`.github/workflows/${f}`+(cron?` · cron ${cron}`:''));}}
+  for(const line of crontab.split('\n'))if(!line.trim().startsWith('#')&&line.includes(folder))add('crontab',redact(line));
+  for(const unit of units)if(unit.live!==false&&unit.text.includes(folder)){
+    const timer=units.find(u=>u.name===unit.name.replace(/\.service$/u,'.timer')&&u!==unit),when=timer&&field(timer.text,'OnCalendar');
+    add('systemd',[unit.name,field(unit.text,'Description'),field(unit.text,'ExecStart')&&redact(field(unit.text,'ExecStart')!),field(unit.text,'OnCalendar')??(when?`${timer!.name} OnCalendar=${when}`:null)].filter(Boolean).join(' · '));}
   // schedule files a few levels down (ops/systemd/*.timer, deploy/crontab), skipping dependencies and VCS
-  const walk=(dir:string,depth:number,seen={n:0}):boolean=>{
-    for(const f of list(dir)){if(++seen.n>3000)return false;
-      if(/\.(timer|cron)$/u.test(f)||f==='crontab')return true;
-      if(depth<3&&!/^(node_modules|\.git|\.venv|venv|dist|build|\.next|target|__pycache__)$/u.test(f)){try{if(statSync(join(dir,f)).isDirectory()&&walk(join(dir,f),depth+1,seen))return true;}catch{/* unreadable */}}}
-    return false;};
-  if(walk(folder,0))out.add('타이머·크론 정의 파일');
-  const pkg=read(join(folder,'package.json'));
-  if(/"(node-cron|cron|bree|agenda|node-schedule|croner)"\s*:/u.test(pkg))out.add('예약 실행 라이브러리');
-  if(/"(telegraf|node-telegram-bot-api|grammy|@slack\/[\w-]+|discord\.js)"\s*:/u.test(pkg))out.add('메신저로 보냄');
-  const py=read(join(folder,'requirements.txt'))+read(join(folder,'pyproject.toml'));
-  if(/\b(apscheduler|schedule|celery|rq-scheduler)\b/iu.test(py))out.add('예약 실행 라이브러리');
-  if(/\b(python-telegram-bot|aiogram|telebot|slack[-_]sdk|discord\.py)\b/iu.test(py))out.add('메신저로 보냄');
+  const walk=(dir:string,depth:number,seen={n:0}):string|null=>{
+    for(const f of list(dir)){if(++seen.n>3000)return null;
+      if(/\.(timer|cron)$/u.test(f)||f==='crontab')return join(dir,f);
+      if(depth<3&&!/^(node_modules|\.git|\.venv|venv|dist|build|\.next|target|__pycache__)$/u.test(f)){try{if(statSync(join(dir,f)).isDirectory()){const found=walk(join(dir,f),depth+1,seen);if(found)return found;}}catch{/* unreadable */}}}
+    return null;};
+  const file=walk(folder,0);
+  if(file){const text=read(file,50_000),when=field(text,'OnCalendar')??text.split('\n').find(l=>l.trim()&&!l.trim().startsWith('#')&&!l.trim().startsWith('['));
+    add('schedule_file',file.slice(folder.length+1)+(when?` · ${redact(when)}`:''));}
+  const pkg=read(join(folder,'package.json')),py=read(join(folder,'requirements.txt'))+read(join(folder,'pyproject.toml'));
+  for(const m of pkg.matchAll(/"(node-cron|cron|bree|agenda|node-schedule|croner)"\s*:/gu))add('scheduler',`package.json · ${m[1]}`);
+  for(const m of pkg.matchAll(/"(telegraf|node-telegram-bot-api|grammy|@slack\/[\w-]+|discord\.js)"\s*:/gu))add('messenger',`package.json · ${m[1]}`);
+  for(const m of py.matchAll(/\b(apscheduler|schedule|celery|rq-scheduler)\b/giu))add('scheduler',`Python · ${m[1]!.toLowerCase()}`);
+  for(const m of py.matchAll(/\b(python-telegram-bot|aiogram|telebot|slack[-_]sdk|discord\.py)\b/giu))add('messenger',`Python · ${m[1]!.toLowerCase()}`);
   // variable names only, from the example file; the real .env is never read
-  if(/^(TELEGRAM|SLACK|DISCORD)_[A-Z_]*\s*=/mu.test(read(join(folder,'.env.example'))))out.add('메신저로 보냄');
-  if(/^\s*restart\s*:\s*(always|unless-stopped)/mu.test(read(join(folder,'docker-compose.yml'))+read(join(folder,'compose.yaml'))))out.add('상시 실행 컨테이너');
-  return [...out];
+  for(const m of read(join(folder,'.env.example')).matchAll(/^((?:TELEGRAM|SLACK|DISCORD)_[A-Z_]*)\s*=/gmu))add('messenger',`.env.example · ${m[1]}`);
+  for(const name of ['docker-compose.yml','compose.yaml']){const m=/^\s*restart\s*:\s*(always|unless-stopped)/mu.exec(read(join(folder,name)));if(m)add('container',`${name} · restart: ${m[1]}`);}
+  // paths inside the folder read shorter as ./ops/run.mjs
+  return out.map(e=>({key:e.key,detail:e.detail.split(folder+'/').join('./')}));
 }
 function ownerSchedules(home:string){
   let crontab='';try{crontab=execFileSync('crontab',['-l'],{encoding:'utf8',timeout:3000,stdio:['ignore','pipe','ignore']});}catch{/* no crontab */}
-  const dir=join(home,'.config','systemd','user'),units=list(dir).filter(f=>/\.(service|timer)$/u.test(f)).map(f=>read(join(dir,f),50_000));
+  const dir=join(home,'.config','systemd','user'),names=list(dir).filter(f=>/\.(service|timer)$/u.test(f));
+  // installed but stopped units are not evidence (owner 2026-10-13: a stopped local copy was offered next to the live server)
+  let on:Set<string>|null=null;
+  try{const out=(...args:string[])=>execFileSync('systemctl',['--user',...args,'--no-legend','--plain'],{encoding:'utf8',timeout:3000,stdio:['ignore','pipe','ignore']}).split('\n').map(line=>line.trim().split(/\s+/u));
+    on=new Set([...out('list-unit-files').filter(c=>c[1]==='enabled'),...out('list-units','--state=active')].map(c=>c[0]!));}catch{/* no systemd */}
+  const units=names.map(name=>({name,text:read(join(dir,name),50_000),...(on?{live:on.has(name)||on.has(name.replace(/\.service$/u,'.timer'))}:{})}));
   return {crontab,units};
 }
 
-export function suggestWork(input:{sessions:SessionRow[];hermes?:{jobs:Array<{title:string}>;attached:number}|null;openclaw?:{names:string[]}|null;home?:string;now?:number;schedules?:{crontab:string;units:string[]}}):Suggestion[]{
-  const home=input.home??homedir(),now=input.now??Date.now(),schedules=input.schedules??ownerSchedules(home);
+/**
+ * Only something that clearly runs by itself is suggested (owner 2026-10-13): a schedule or service the system already
+ * runs, a schedule defined in the folder next to code that uses it, or a bot that both schedules and sends. A messenger
+ * library or an .env.example name alone says nothing runs. Conversations are not suggested here: AI conversations has
+ * them, and attaching a chat as a Work out of nowhere read oddly.
+ */
+export function clearAutomation(signals:readonly Evidence[]){
+  const has=(key:Evidence['key'])=>signals.some(signal=>signal.key===key);
+  if(has('actions')||has('crontab')||has('systemd')||has('container'))return true;
+  const defined=has('schedule_file'),scheduler=has('scheduler'),sends=has('messenger');
+  return defined&&(scheduler||sends)||scheduler&&sends;
+}
+export function suggestWork(input:{sessions:SessionRow[];hermes?:{jobs:Array<{title:string}>;attached:number}|null;openclaw?:{names:string[]}|null;home?:string;schedules?:{crontab:string;units:Unit[]};linked?:{folders:string[];units:string[]}}):Suggestion[]{
+  const home=input.home??homedir(),all=input.schedules??ownerSchedules(home);
+  // already a Work: an imported project folder, or a unit an Office server Work watches
+  const linkedFolders=new Set((input.linked?.folders??[]).map(folder=>localFolder(folder).replace(/\/+$/u,''))),linkedUnits=new Set(input.linked?.units??[]);
+  const schedules={crontab:all.crontab,units:all.units.filter(unit=>!linkedUnits.has(unit.name))};
   const byFolder=new Map<string,SessionRow[]>();
   for(const s of input.sessions){if(!s.cwd)continue;const folder=localFolder(s.cwd).replace(/\/+$/u,'');if(broad(folder,home)||folder==='/tmp'||folder.startsWith('/tmp/')||/\/\.(agent-office|runtime)\/|\/AppData\/Local\/Temp\//u.test(folder+'/')||folder.startsWith('\\\\'))continue;byFolder.set(folder,[...byFolder.get(folder)??[],s]);}
   const out:Suggestion[]=[];
   for(const [folder,rows] of [...byFolder].sort((a,b)=>b[1][0]!.updated_at.localeCompare(a[1][0]!.updated_at)).slice(0,40)){
-    if(!existsSync(folder))continue;
+    if(linkedFolders.has(folder)||!existsSync(folder))continue;
     const fresh=rows.filter(r=>!r.attached),topics=[...new Set(rows.map(r=>r.title))].slice(0,3),signals=automationSignals(folder,schedules.crontab,schedules.units);
     const ref=(r:SessionRow|undefined):SessionRef|null=>r?{client:r.client,id:r.id,title:r.title,updated_at:r.updated_at,windows:r.windows}:null;
-    if(signals.length)out.push({kind:'automation',folder,name:basename(folder),repo:githubRepo(folder),signals,topics,session:ref(fresh[0])});
-    else if(fresh[0]&&now-Date.parse(fresh[0].updated_at)<3*DAY)out.push({kind:'conversation',folder,name:basename(folder),topics,session:ref(fresh[0])!});
+    if(clearAutomation(signals))out.push({kind:'automation',folder,name:basename(folder),repo:githubRepo(folder),signals,topics,session:ref(fresh[0])});
   }
   if(input.hermes&&input.hermes.jobs.length>input.hermes.attached)out.push({kind:'hermes',jobs:input.hermes.jobs.length,names:input.hermes.jobs.map(j=>j.title).slice(0,3)});
   if(input.openclaw&&input.openclaw.names.length)out.push({kind:'openclaw',targets:input.openclaw.names.length,names:input.openclaw.names.slice(0,3)});
-  // automations first, then conversations, then the other runtimes
-  const rank={automation:0,hermes:1,openclaw:2,conversation:3};
+  // automations first, then the other runtimes
+  const rank={automation:0,hermes:1,openclaw:2};
   return out.sort((a,b)=>rank[a.kind]-rank[b.kind]).slice(0,8);
 }

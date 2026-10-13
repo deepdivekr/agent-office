@@ -11,9 +11,9 @@
 
 ### What's new
 
+- **[v0.8.3](docs/releases/v0.8.3.md)** · Import suggestions show their evidence · running automations only
 - **[v0.8.2](docs/releases/v0.8.2.md)** · Edit schedules · cadence from directions
 - **[v0.8.1](docs/releases/v0.8.1.md)** · Phone stays signed in · notifications open Office
-- **[v0.8.0](docs/releases/v0.8.0.md)** · Business profile · separate ports · several Offices' MCP on one PC
 
 [All releases](CHANGELOG.md)
 
@@ -93,7 +93,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.2/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.3/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
