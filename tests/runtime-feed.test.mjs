@@ -49,6 +49,15 @@ test('the feed is every output newest first: results across Works, server send r
   const next=readFeed(x.store,x.config,x.results,{before:page.next_before,limit:10});assert.ok(next.posts.every(p=>p.at<page.next_before));
 });
 
+// Live 2026-10-13: an AI news post names its card picture for delivery; the feed shows the picture, not that line.
+test('a picture line in a delivered message stays out of the feed text; the picture shows under it',async t=>{
+  const x=await fixture(t,'feed-pairs-'),{readFeed}=await import('../dist/observability/work-view.js');
+  const news=x.work('feed-pairs','AI 새 글');
+  const made=await x.result(news,'2026-10-13T01:00:00.000Z','## Andrej Karpathy\n격차가 커진다\n![60억과 5천 명](01_karpathy.png)\n\n---\n\n## 탐색 결과\n- 23명 확인',[['01_karpathy.png',png]]);
+  const post=readFeed(x.store,x.config,x.results).posts.find(p=>p.result_id===made.id);
+  assert.doesNotMatch(post.text,/!\[/u);assert.match(post.text,/격차가 커진다/u);assert.deepEqual(post.images.map(i=>i.label),['01_karpathy.png']);
+});
+
 test('the MCP feed tool is on the default listing: an AI app that sends a result elsewhere posts it here too',async()=>{
   const {COMPACT_MCP_TOOLS}=await import('../dist/interface/mcp-proxy.js'),{tools}=await import('../dist/interface/catalog.js');
   assert.ok(COMPACT_MCP_TOOLS.has('runtime_feed_post'));assert.ok(Object.hasOwn(tools,'runtime_feed_post'));assert.equal(tools.runtime_feed_post.readOnly,false);

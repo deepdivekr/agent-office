@@ -6,11 +6,12 @@ import {type DeliveryTarget,validateDeliveryTarget} from './delivery-settings.js
 const receipt=(value:string)=>value.slice(0,500);
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex').slice(0,24);
 const ownerNeeded:Record<string,string>={waiting_auth:'로그인이 필요합니다.',waiting_approval:'승인이 필요합니다.',awaiting_review:'결과를 검증하지 못했습니다. 확인이 필요합니다.',reconciliation_required:'이전 작업이 반영됐는지 확인이 필요합니다.',failed:'실패했습니다.',waiting_connection:'연결 설정을 확인해야 합니다.',needs_review:'검토가 필요합니다.',paused:'업무가 멈춰 있습니다. 필요한 연결이나 설정을 확인해 주세요.'};
+const headline=(result:WorkResult)=>result.work_completion_verified?'[완료] 검증을 통과했습니다.':ownerNeeded[result.source_status]?`[확인 필요] ${ownerNeeded[result.source_status]}`:`[진행 상황] ${result.source_status}`;
 /** The message says which Work this is and whether it is done or needs the owner, then carries the result itself.
  * A result longer than the platform allows is cut at a line end with a note; the complete file stays in the app. */
 export function deliveryContent(result:WorkResult,limit=4000){
   if(result.notice)return [...result.notice].slice(0,limit).join('');
-  const head=result.work_completion_verified?'[완료] 검증을 통과했습니다.':ownerNeeded[result.source_status]?`[확인 필요] ${ownerNeeded[result.source_status]}`:`[진행 상황] ${result.source_status}`;
+  const head=headline(result);
   const tail=`\n\nWork result ${result.id}`;
   // A result that carries the owner's message (a client run's DELIVERY.md) is sent as that message, nothing else
   // (live: the owner got file lists and check notes instead of the five explanations they asked for).
@@ -26,6 +27,22 @@ export function deliveryContent(result:WorkResult,limit=4000){
 }
 const content=deliveryContent;
 const length=(value:string)=>[...value].length;
+// A picture the message names: ![설명](01_card.png). Matched by file name, wherever the client wrote it.
+const pictureRef=/!\[[^\]\n]*\]\(([^)\n]+)\)/gu,fileName=(name:string)=>name.trim().replace(/^.*[\\/]/u,'');
+/** A message split by `---` lines into posts that name their pictures goes out post by post: the post's text, then its
+ * pictures (live: the owner asked for each AI news post as one text and one card picture). Null when no post names a
+ * picture the result made; the message then goes as one. */
+export function deliveryPosts(result:WorkResult,pictures:string[],limit=4000):Array<{text:string;pictures:string[]}>|null{
+  if(result.notice||!result.delivery_text?.trim())return null;
+  const made=new Set(pictures.map(fileName));
+  const posts=result.delivery_text.trim().split(/^[ \t]*---[ \t]*\r?$/mu).map(part=>({text:part.replace(pictureRef,'').replace(/\n{3,}/gu,'\n\n').trim(),pictures:[...part.matchAll(pictureRef)].map(match=>fileName(match[1]!)).filter(name=>made.has(name))})).filter(post=>post.text||post.pictures.length);
+  if(!posts.some(post=>post.pictures.length))return null;
+  const title=`${result.work_title||'Agent Office 업무'}\n${headline(result)}\n\n`,tail=`\n\nWork result ${result.id}`,last=posts.map(post=>Boolean(post.text)).lastIndexOf(true);
+  return posts.map((post,index)=>{
+    const head=index===0?title:'',end=index===last?tail:'',room=limit-length(head)-length(end)-60,chars=[...post.text];
+    return {text:post.text||head?`${head}${chars.slice(0,Math.max(0,room)).join('')}${chars.length>room?'\n… (전체 내용은 앱에서 볼 수 있습니다.)':''}${end}`.trim():'',pictures:post.pictures};
+  });
+}
 // Telegram echoes the sent message with non-ASCII characters escaped (six bytes each), so the acknowledgement of a
 // 4,000-character Korean message is about 25 KB (live: it was sent, and recorded as unobserved at 8 KB).
 async function boundedBody(response:Response,limit=96_000){
@@ -39,7 +56,8 @@ function failed(status:number){return {status:'failed' as const,effect_state:[40
 export function createDeliveryConnector(target:DeliveryTarget,transport:typeof fetch=fetch):ResultDeliveryConnector{
   const validated=validateDeliveryTarget(target);
   return {id:validated.id,channel:validated.platform,async send({result,idempotency_key,images=[]}){
-    const full=content(result,validated.platform==='telegram'?4000:validated.platform==='discord'?1850:12000);let url:string,body:BodyInit,headers:HeadersInit|undefined;
+    const posts=validated.platform==='telegram'?deliveryPosts(result,images.slice(0,10).map(image=>image.name)):null;
+    const full=posts?posts[0]!.text:content(result,validated.platform==='telegram'?4000:validated.platform==='discord'?1850:12000);let url:string,body:BodyInit,headers:HeadersInit|undefined;
     if(validated.platform==='telegram'){
       const base=`https://api.telegram.org/bot${validated.telegram_bot_token}/`;
       if(length(full)<=4096){url=base+'sendMessage';body=JSON.stringify({chat_id:validated.telegram_chat_id,text:full,disable_web_page_preview:true});headers={'content-type':'application/json'};}
@@ -66,12 +84,19 @@ export function createDeliveryConnector(target:DeliveryTarget,transport:typeof f
       if(!(object.ok===true&&Number.isInteger(message.message_id)&&Number.isSafeInteger(chat.id)&&(validated.telegram_chat_id?.startsWith('@')||String(chat.id)===validated.telegram_chat_id)))return {status:'failed',effect_state:'uncertain',reason:'DELIVERY_RECEIPT_INVALID'};
       // The pictures the result made follow the text, one message each (live: an owner asked for image teaching material in Telegram).
       // The text is the delivery; a picture that fails to send is noted in the receipt, never a retry of the whole result.
-      let sent=0;const api=`https://api.telegram.org/bot${validated.telegram_bot_token}/`;
-      for(const image of images.slice(0,10)){
-        const form=new FormData();form.append('chat_id',validated.telegram_chat_id!);form.append('photo',new Blob([new Uint8Array(image.bytes)],{type:image.media_type}),image.name);form.append('caption',image.name.slice(0,1000));
-        try{const photo=await transport(api+'sendPhoto',{method:'POST',body:form,redirect:'error',signal:AbortSignal.timeout(30_000)});if(photo.ok)sent++;}catch{/* counted below */}
+      let sent=0,texts=1;const api=`https://api.telegram.org/bot${validated.telegram_bot_token}/`;
+      const photo=async(image:(typeof images)[number],caption:string|null)=>{
+        const form=new FormData();form.append('chat_id',validated.telegram_chat_id!);form.append('photo',new Blob([new Uint8Array(image.bytes)],{type:image.media_type}),image.name);if(caption)form.append('caption',caption.slice(0,1000));
+        try{const response=await transport(api+'sendPhoto',{method:'POST',body:form,redirect:'error',signal:AbortSignal.timeout(30_000)});if(response.ok)sent++;}catch{/* counted below */}
+      };
+      // A post's picture follows its text without a caption; a picture no post names follows them all, under its file name.
+      const unnamed=new Map(images.slice(0,10).map(image=>[fileName(image.name),image]));
+      for(const [index,post] of (posts??[]).entries()){
+        if(index>0&&post.text){try{const response=await transport(api+'sendMessage',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:validated.telegram_chat_id,text:post.text,disable_web_page_preview:true}),redirect:'error',signal:AbortSignal.timeout(15_000)});if(response.ok)texts++;}catch{/* counted below */}}
+        for(const name of post.pictures){const image=unnamed.get(name);if(image){unnamed.delete(name);await photo(image,null);}}
       }
-      return {status:'delivered',receipt_id:receipt(`telegram:${chat.id}:${message.message_id}${images.length?`:photos:${sent}/${Math.min(images.length,10)}`:''}`)};
+      for(const image of unnamed.values())await photo(image,image.name);
+      return {status:'delivered',receipt_id:receipt(`telegram:${chat.id}:${message.message_id}${posts?`:posts:${texts}/${posts.filter(post=>post.text).length}`:''}${images.length?`:photos:${sent}/${Math.min(images.length,10)}`:''}`)};
     }
     return typeof object.id==='string'&&/^\d{10,25}$/u.test(object.id)?{status:'delivered',receipt_id:receipt(`discord:${object.id}`)}:{status:'failed',effect_state:'uncertain',reason:'DELIVERY_RECEIPT_INVALID'};
   }};
