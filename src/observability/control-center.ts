@@ -193,12 +193,15 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     const icon=({'/icon-180.png':'icon-180.png','/icon-512.png':'icon-512.png','/apple-touch-icon.png':'icon-180.png','/apple-touch-icon-precomposed.png':'icon-180.png'} as Record<string,string>)[url.pathname];
     if(icon&&await serveUiAsset(request,response,icon))return;
     // The capability is compared in constant time (security review 2026-10-13).
+    const capabilityCookie=`${CAPABILITY_COOKIE}=${token}; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax${onTailnet?'; Secure':''}`;
     const sameToken=(value:string|undefined)=>typeof value==='string'&&value.length===token.length&&timingSafeEqual(Buffer.from(value),Buffer.from(token));
     if(sameToken(url.pathname.slice(1,1+token.length))&&url.pathname.charAt(token.length+1)==='/'){suffix=url.pathname.slice(base.length);
       // A page opened through the capability path on the short host or a tailnet name keeps the token in a host-only cookie and continues at the short address.
-      if((requestHost===shortHost||onTailnet)&&request.method==='GET'&&!/[/.]/u.test(suffix)&&String(request.headers.accept??'').includes('text/html')){response.writeHead(303,{'set-cookie':`${CAPABILITY_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict${onTailnet?'; Secure':''}`,location:`/${suffix}${url.search}`,'cache-control':'no-store'});response.end();return;}
-    }else if((requestHost===shortHost||onTailnet)&&sameToken(cookieValue(request.headers.cookie,CAPABILITY_COOKIE)))suffix=url.pathname.slice(1);
-    else{reply(response,404,requestHost===shortHost||onTailnet?'not found. Open the Control Center with: agent-office connect':'not found');return;}
+      if((requestHost===shortHost||onTailnet)&&request.method==='GET'&&!/[/.]/u.test(suffix)&&String(request.headers.accept??'').includes('text/html')){response.writeHead(303,{'set-cookie':capabilityCookie,location:`/${suffix}${url.search}`,'cache-control':'no-store'});response.end();return;}
+    }else if((requestHost===shortHost||onTailnet)&&sameToken(cookieValue(request.headers.cookie,CAPABILITY_COOKIE))){suffix=url.pathname.slice(1);
+      // A page load renews the cookie, so a phone signed in before it lasted keeps its sign-in without a new QR scan.
+      if(request.method==='GET'&&String(request.headers.accept??'').includes('text/html'))response.setHeader('set-cookie',capabilityCookie);}
+    else{reply(response,404,onTailnet?'Not found. Scan the QR code that `agent-office connect` shows on the computer to sign this phone in again. / 이 휴대폰을 다시 연결하려면 컴퓨터에서 `agent-office connect`가 보여 주는 QR 코드를 찍으세요.':requestHost===shortHost?'not found. Open the Control Center with: agent-office connect':'not found');return;}
     if(settings.maintenanceRunning&&['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix)){reply(response,503,JSON.stringify({error:'CLI_UPDATE_IN_PROGRESS'}),'application/json; charset=utf-8');return;}
     const managementAction=request.method==='POST'||request.method==='GET'&&(['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix));
     if(managementAction)inflightMutations++;
