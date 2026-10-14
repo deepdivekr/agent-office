@@ -4,6 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v0.8.11](docs/releases/v0.8.11.md) | 2026-10-14 | Continued runs get a short prompt while nothing changed; a conversation past half its window starts over |
 | [v0.8.10](docs/releases/v0.8.10.md) | 2026-10-14 | Memory stays small in a run's context: about 1,500 characters, once per conversation |
 | [v0.8.9](docs/releases/v0.8.9.md) | 2026-10-14 | Schedule proposals in the feed, Memory for every AI app over MCP, notes the owner can edit or delete, no exclusive completion checks |
 | [v0.8.8](docs/releases/v0.8.8.md) | 2026-10-14 | Memory: knowledge every AI app shares across Works, proposed by runs and approved by the owner |
