@@ -1,0 +1,8 @@
+// The short address in a browser that has not signed in yet (owner 2026-10-14: typing it in a second browser kept showing
+// a bare "not found"). The sign-in cookie is per browser; the page says so and how to get it, without any token.
+export const signInPage=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent Office</title><style>body{font:15px/1.7 system-ui,sans-serif;max-width:620px;margin:12vh auto;padding:0 20px;color:#222;background:#fafafa}@media(prefers-color-scheme:dark){body{color:#e8e8e8;background:#111}code{background:#222}}h1{font-size:19px}code{background:#eee;padding:2px 6px;border-radius:5px}p{margin:10px 0}.en{margin-top:28px;opacity:.8;font-size:14px}</style></head><body>
+<h1>이 브라우저는 아직 Office에 로그인하지 않았어요</h1>
+<p>로그인은 브라우저마다 처음 한 번만 필요해요. 이 컴퓨터의 터미널에서 <code>agent-office connect</code>를 실행하고, 출력된 <b>로그인 주소</b>(<code>http://office.localhost:…/긴 토큰/</code>)를 이 브라우저 주소창에 붙여넣으세요.</p>
+<p>이 브라우저가 기본 브라우저라면 <code>agent-office connect --open</code>으로 바로 열려요. 한 번 로그인하면 다음부터는 이 짧은 주소로 바로 열려요. Office를 다시 설치하거나 재시작해도 로그인은 유지되고, 이 브라우저의 쿠키를 지웠을 때만 다시 로그인하면 돼요.</p>
+<div class="en"><p><b>This browser has not signed in to Office yet.</b> Each browser signs in once: run <code>agent-office connect</code> on this computer and open the sign-in address it prints (<code>http://office.localhost:…/long-token/</code>) in this browser. In the default browser, <code>agent-office connect --open</code> does it for you. After that this short address opens directly. Reinstalling or restarting Office keeps the sign-in; sign in again only after this browser's cookies were cleared.</p></div>
+</body></html>`;

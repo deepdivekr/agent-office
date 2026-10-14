@@ -81,6 +81,7 @@ export interface ControlCenterReloadStatus {state:'idle'|'reloading'|'restored'|
 const terminalStatuses=new Set(['succeeded','cancelled','failed','session_closed','process_exited']);
 const lane=(status:string):ControlLane=>['queued','pending','starting','input_ready','waiting_orchestrator'].includes(status)?'queued':['running','streaming','leased','verifying'].includes(status)?'running':['succeeded','completed','turn_completed','approved'].includes(status)?'done':'attention';
 import {safeControlText} from './safe-text.js';
+import {signInPage} from './sign-in-page.js';
 // A request the schema rejected names the field and the rule (live: the owner saw a raw issue list as "invalid id").
 const requestError=(error:unknown,fallback:string)=>safeControlText(error instanceof z.ZodError?`${fallback}: ${error.issues.map(issue=>`${issue.path.join('.')||'input'} ${issue.message}`).join('; ')}`:error instanceof Error?error.message:fallback,300);
 export {safeControlText} from './safe-text.js';
@@ -208,7 +209,8 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       // A verified legacy cookie also upgrades on a page load. Never write the shared name again:
       // another Office may still be using it until its owner opens that page.
       if(request.method==='GET'&&String(request.headers.accept??'').includes('text/html'))response.setHeader('set-cookie',capabilityCookie);}
-    else{reply(response,404,onTailnet?'Not found. Scan the QR code that `agent-office connect` shows on the computer to sign this phone in again. / 이 휴대폰을 다시 연결하려면 컴퓨터에서 `agent-office connect`가 보여 주는 QR 코드를 찍으세요.':requestHost===shortHost?'not found. Open the Control Center with: agent-office connect':'not found');return;}
+    else{const notFound=onTailnet?'Not found. Scan the QR code that `agent-office connect` shows on the computer to sign this phone in again. / 이 휴대폰을 다시 연결하려면 컴퓨터에서 `agent-office connect`가 보여 주는 QR 코드를 찍으세요.':requestHost===shortHost?(String(request.headers.accept??'').includes('text/html')?{html:signInPage}:'not found. This browser has not signed in to Office yet: run agent-office connect and open its sign-in address here once.'):'not found';
+      if(typeof notFound==='string')reply(response,404,notFound);else{response.writeHead(404,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer'});response.end(notFound.html);}return;}
     if(settings.maintenanceRunning&&['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix)){reply(response,503,JSON.stringify({error:'CLI_UPDATE_IN_PROGRESS'}),'application/json; charset=utf-8');return;}
     const managementAction=request.method==='POST'||request.method==='GET'&&(['settings/mcp','settings/bootstrap','settings/models','settings/coding/models','connections/status','work/coding/sessions'].includes(suffix));
     if(managementAction)inflightMutations++;

@@ -76,7 +76,7 @@ test('Control Center renders English by default and the flag button switches to 
   await writeFile(path,JSON.stringify({schema_version:1,project_id:'i18n-project',caller_ref:'local-agent',account_ref:'owner',worktree:root,data_dir:join(root,'data'),environment:'production'}));
   const server=await startControlCenter(loadHostConfig(path),{poll_ms:50});
   const browser=await chromium.launch({headless:true});
-  t.after(async()=>{await browser.close();server.close();await rm(root,{recursive:true,force:true});});
+  t.after(async()=>{await browser.close();await server.close();await rm(root,{recursive:true,force:true});});
   const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(server.url);
   await page.getByRole('button',{name:'Start work',exact:true}).waitFor();
