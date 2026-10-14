@@ -57,7 +57,7 @@ test('runtime native the short host moves the capability into a host-only cookie
   assert.equal((await send(base+'settings/status',{host:short})).status,404,'no cookie, no capability path: nothing');
   // Owner 2026-10-14: a browser that has not signed in gets a page that says why and how, without any token.
   const help=await send(base,{host:short,headers:{accept:'text/html'}});assert.equal(help.status,404);
-  assert.match(help.text,/이 브라우저는 아직 Office에 로그인하지 않았어요[\s\S]*agent-office connect[\s\S]*This browser has not signed in to Office yet/u);assert.doesNotMatch(help.text,new RegExp(x.token,'u'));
+  assert.match(help.text,/이 브라우저는 아직 Office에 로그인하지 않았어요[\s\S]*agent-office connect[\s\S]*재시작해도 로그인은 유지[\s\S]*This browser has not signed in to Office yet[\s\S]*keeps the sign-in/u);assert.doesNotMatch(help.text,new RegExp(x.token,'u'));
   assert.match((await send(base,{host:short})).text,/has not signed in to Office yet/u,'a script gets one plain line');
   assert.equal((await send(base+'settings/status',{host:short,headers:{cookie:`${x.cookieName}=${'0'.repeat(48)}`}})).status,404);
   assert.equal((await send(base+'settings/status',{headers:withCookie})).status,404,'the cookie is honoured on the short host only');

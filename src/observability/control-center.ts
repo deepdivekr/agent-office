@@ -81,6 +81,7 @@ export interface ControlCenterReloadStatus {state:'idle'|'reloading'|'restored'|
 const terminalStatuses=new Set(['succeeded','cancelled','failed','session_closed','process_exited']);
 const lane=(status:string):ControlLane=>['queued','pending','starting','input_ready','waiting_orchestrator'].includes(status)?'queued':['running','streaming','leased','verifying'].includes(status)?'running':['succeeded','completed','turn_completed','approved'].includes(status)?'done':'attention';
 import {safeControlText} from './safe-text.js';
+import {signInPage} from './sign-in-page.js';
 // A request the schema rejected names the field and the rule (live: the owner saw a raw issue list as "invalid id").
 const requestError=(error:unknown,fallback:string)=>safeControlText(error instanceof z.ZodError?`${fallback}: ${error.issues.map(issue=>`${issue.path.join('.')||'input'} ${issue.message}`).join('; ')}`:error instanceof Error?error.message:fallback,300);
 export {safeControlText} from './safe-text.js';
@@ -148,14 +149,6 @@ export function controlCenterReloadBlockedReason(store:PackStore,project:string,
   if(db.prepare("SELECT 1 FROM swarm_run r,json_each(r.snapshot,'$.workers') w WHERE r.project_id=? AND json_extract(w.value,'$.status')='leased' AND json_extract(w.value,'$.lease_expires_at_ms')>? LIMIT 1").get(project,at))return 'WORK_EXECUTION_ACTIVE';
   return null;
 }
-// The short address in a browser that has not signed in yet (owner 2026-10-14: typing it in a second browser kept showing
-// a bare "not found"). The sign-in cookie is per browser; the page says so and how to get it, without any token.
-const signInPage=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent Office</title><style>body{font:15px/1.7 system-ui,sans-serif;max-width:620px;margin:12vh auto;padding:0 20px;color:#222;background:#fafafa}@media(prefers-color-scheme:dark){body{color:#e8e8e8;background:#111}code{background:#222}}h1{font-size:19px}code{background:#eee;padding:2px 6px;border-radius:5px}p{margin:10px 0}.en{margin-top:28px;opacity:.8;font-size:14px}</style></head><body>
-<h1>이 브라우저는 아직 Office에 로그인하지 않았어요</h1>
-<p>로그인은 브라우저마다 처음 한 번만 필요해요. 이 컴퓨터의 터미널에서 <code>agent-office connect</code>를 실행하고, 출력된 <b>로그인 주소</b>(<code>http://office.localhost:…/긴 토큰/</code>)를 이 브라우저 주소창에 붙여넣으세요.</p>
-<p>이 브라우저가 기본 브라우저라면 <code>agent-office connect --open</code>으로 바로 열려요. 한 번 로그인하면 다음부터는 이 짧은 주소로 바로 열려요.</p>
-<div class="en"><p><b>This browser has not signed in to Office yet.</b> Each browser signs in once: run <code>agent-office connect</code> on this computer and open the sign-in address it prints (<code>http://office.localhost:…/long-token/</code>) in this browser. In the default browser, <code>agent-office connect --open</code> does it for you. After that this short address opens directly.</p></div>
-</body></html>`;
 export async function startControlCenter(config:HostConfig,options:{port?:number;poll_ms?:number;capability_token?:string;workModel?:StructuredModel;coding?:CodingRuntimeOptions;hermes?:HermesWorkOptions;remote?:RemoteTransport;server?:ServerProbe;sessions?:SessionRoots&{temporary?:boolean};onReload?:()=>Promise<void>;reloadStatus?:()=>ControlCenterReloadStatus;clientMaintenance?:Pick<ClientMaintenanceController,'view'|'save'|'runDue'|'runNow'|'close'>}={}):Promise<ControlCenterServer>{
   if(options.capability_token!==undefined&&!/^[a-f0-9]{48}$/u.test(options.capability_token))throw Error('CONTROL_CENTER_CAPABILITY_INVALID');
   const cookieName=capabilityCookieName(config.dbPath);

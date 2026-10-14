@@ -8,8 +8,9 @@ import {i18nScript} from '../dist/observability/i18n.js';
 // catalog does not know is shown as written: in the old formal tone in Korean, and in Korean in English mode.
 // These tests read the UI sources so that such a text fails here instead of appearing on a screen.
 const dir=new URL('../src/observability/',import.meta.url);
-// office-ui.ts is the earlier page that nothing serves any more.
-const sources=readdirSync(dir).filter(file=>file.endsWith('.ts')&&!/^(?:ui-copy|ui-copy-extra|i18n|office-ui)\.ts$/u.test(file)).map(file=>({file,text:readFileSync(new URL(file,dir),'utf8')}));
+// office-ui.ts is the earlier page that nothing serves any more. sign-in-page.ts is shown without the display script
+// and writes both languages itself.
+const sources=readdirSync(dir).filter(file=>file.endsWith('.ts')&&!/^(?:ui-copy|ui-copy-extra|i18n|office-ui|sign-in-page)\.ts$/u.test(file)).map(file=>({file,text:readFileSync(new URL(file,dir),'utf8')}));
 const display=locale=>{const context={window:{},document:{documentElement:{},readyState:'loading',addEventListener(){}},localStorage:{getItem:()=>locale}};runInNewContext(i18nScript,context);return context.window;};
 const ko=display('ko'),en=display('en');
 const oldWording=/니다(?:[.!?\s)]|$)|클라이언트|실행기|완료 ?조건|관측|작업 ?지침/u,hangul=/[가-힣]/u;
