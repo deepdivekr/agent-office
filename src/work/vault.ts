@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,unlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {z} from 'zod';
 import {requireCondition} from '../core/contracts.js';
@@ -76,6 +76,8 @@ export class Vault {
     requireCondition(decision==='approve'?note!.status==='proposed':decision==='retire'?note!.status!=='retired':note!.status==='retired','VAULT_DECISION_INVALID');
     return this.write({...note!,status:decision==='retire'?'retired':'active',confirmed:today()});
   }
+  /** The owner deletes a note for good. A shipped note comes back on the next seed; retire it instead to keep it off. */
+  remove(noteId:string){const note=this.get(noteId);requireCondition(note,'VAULT_NOTE_NOT_FOUND');unlinkSync(join(this.dir,note!.id+'.md'));return {id:note!.id,deleted:true};}
   /** A run's VAULT.json: up to five proposals, kept as proposed until the owner decides. Returns the new ones. */
   propose(raw:unknown,source:string):VaultNote[]{
     const parsed=vaultFileSchema.safeParse(raw);if(!parsed.success)return [];
@@ -107,6 +109,15 @@ export function vaultBrief(notes:VaultNote[],haystack:string,budget=8000){
   return [`The owner's Office vault: standing knowledge shared by every AI app that works for this owner. Follow it where it applies; this Work's own request and directions win where they differ. If this run teaches something that would hold for other Works too (a tool's limit, a source to avoid, a way of writing the owner corrected), you may save VAULT.json in the Work folder: up to five [{"layer":"boundary|quality|source|operation|tool|owner|environment","scope":"global|tool:<name>|topic:<name>","match":[keywords, optional],"text":"one fact","why":"what happened"}]. The owner approves each one before it applies; never put secrets, tokens or personal details in it.`,...lines].join('\n');
 }
 
+export const vaultListInput=z.object({query:z.string().trim().max(200).optional(),layer:z.enum(VAULT_LAYERS).optional(),include_proposed:z.boolean().optional()}).strict();
+/** runtime_vault_list: the owner's standing knowledge for any AI app connected to Office (owner 2026-10-14), read-only. */
+export function vaultList(vault:Vault,raw:unknown){
+  const input=vaultListInput.parse(raw??{}),words=(input.query??'').toLowerCase().split(/\s+/u).filter(Boolean);
+  const notes=vault.list().filter(note=>(note.status==='active'||input.include_proposed&&note.status==='proposed')&&(!input.layer||note.layer===input.layer)
+    &&words.every(word=>[note.text,note.scope,...note.match].join(' ').toLowerCase().includes(word)));
+  return {notes:notes.map(({id,layer,scope,match,text,source,confirmed,status})=>({id,layer,scope,match,text,source,confirmed,status})),total:notes.length,
+    note:'Standing knowledge the owner keeps for every AI app. A Work\'s own request and directions win where they differ. Only the owner changes it (the Memory page in Agent Office).'};
+}
 /** Notes Office ships with: how a tool behaves, general and the same for every owner. */
 export const DEFAULT_VAULT_NOTES:ReadonlyArray<Omit<VaultNote,'status'|'confirmed'>>=[
   {id:'tool-x-grok-search',layer:'tool',scope:'tool:x',match:['X','x.com','트위터','트윗','엑스','Grok'],source:'Office (measured 2026-10-14)',

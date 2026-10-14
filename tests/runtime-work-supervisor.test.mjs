@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -356,4 +356,25 @@ test('runtime fixture the owner changes a Work schedule from its detail and turn
  await section.getByRole('button',{name:'일정 바꾸기'}).click();await section.locator('[data-sd="kind"]').selectOption('off');await section.getByRole('button',{name:'저장'}).click();
  await page.waitForFunction(()=>/예약 꺼짐/u.test(document.querySelector('.work-schedule')?.innerText||''));
  assert.equal(schedules.status(x.work.work_id).state,'disabled');assert.deepEqual(errors,[]);
+});
+
+// Owner 2026-10-14: a Work's AI may propose a schedule change; it waits in the feed for the owner.
+test('runtime unit a run proposes a schedule with SCHEDULE.json; the feed shows it and the owner applies or keeps it',async t=>{
+ const {WorkSchedules}=await import('../dist/work/schedule.js'),{ingestScheduleProposal,decideScheduleProposal,proposal,scheduleWords}=await import('../dist/work/schedule-proposals.js'),{listFeedPosts}=await import('../dist/work/feed.js');
+ const x=await setup(t),project=x.config.project.id,schedules=new WorkSchedules(x.store,project);
+ schedules.setByOwner(x.work.work_id,x.work.revision,{kind:'daily',timezone:'Asia/Seoul',hour:9,minute:0});
+ const run=join(x.root,'run-a');await mkdir(run,{recursive:true});
+ await writeFile(join(run,'SCHEDULE.json'),JSON.stringify({definition:{kind:'daily',hour:9,minute:0},reason:'같은 일정'}));
+ assert.equal(ingestScheduleProposal(x.store,project,x.work.work_id,'run-a',run),null,'the same schedule is not proposed');
+ await writeFile(join(run,'SCHEDULE.json'),JSON.stringify({definition:{kind:'interval',seconds:3600},reason:'지시에서 매시간을 요청함'}));
+ const first=ingestScheduleProposal(x.store,project,x.work.work_id,'run-a',run);
+ assert.equal(first.status,'pending');assert.deepEqual(first.definition,{kind:'interval',timezone:'Asia/Seoul',seconds:3600},'the Work\'s time zone is kept');
+ const post=listFeedPosts(x.store,project).find(p=>p.source==='office:schedule');assert.equal(post.external_id,first.id);assert.match(post.text,/매일 09:00 → 1시간마다\n이유: 지시에서 매시간을 요청함/u);
+ const run2=join(x.root,'run-b');await mkdir(run2,{recursive:true});await writeFile(join(run2,'SCHEDULE.json'),JSON.stringify({definition:{kind:'interval',seconds:7200},reason:'두 시간이면 충분'}));
+ const second=ingestScheduleProposal(x.store,project,x.work.work_id,'run-b',run2);assert.equal(proposal(x.store,project,first.id).status,'replaced','a newer proposal replaces a pending one');
+ assert.throws(()=>decideScheduleProposal(x.store,project,{id:first.id,decision:'apply'}),/SCHEDULE_PROPOSAL_DECIDED/u);
+ assert.equal(decideScheduleProposal(x.store,project,{id:second.id,decision:'apply'}).status,'applied');
+ assert.deepEqual(schedules.status(x.work.work_id).definition,{kind:'interval',timezone:'Asia/Seoul',seconds:7200});
+ await writeFile(join(run2,'SCHEDULE.json'),'{"definition":{"kind":"interval","seconds":5},"reason":"너무 짧음"}');assert.equal(ingestScheduleProposal(x.store,project,x.work.work_id,'run-c',run2),null,'an invalid schedule is ignored');
+ assert.equal(scheduleWords(null),'반복 끔');assert.equal(scheduleWords({kind:'weekly',timezone:'UTC',weekdays:[1,3],hour:8,minute:30,also_at:[{hour:21,minute:0}]}),'매주 월·수 08:30·21:00');
 });

@@ -1,3 +1,4 @@
+import {vaultListInput} from './vault.js';
 import {z} from 'zod';
 import {referenceSelectionSchema} from './reference-selection.js';
 import {feedPostInput} from './feed.js';
@@ -76,6 +77,7 @@ export const workTools={
   runtime_work_results:{schema:workResultsListSchema,implemented:true,readOnly:true},
   runtime_work_result:{schema:workResultGetSchema,implemented:true,readOnly:true},
   runtime_feed_post:{schema:feedPostInput,implemented:true,readOnly:false},
+  runtime_vault_list:{schema:vaultListInput,implemented:true,readOnly:true},
   runtime_work_context:{schema:workContextSchema,implemented:true,readOnly:true},
   runtime_work_list:{schema:workListSchema,implemented:true,readOnly:true},
   runtime_work_pause:{schema:workPauseSchema,implemented:true,readOnly:false},
