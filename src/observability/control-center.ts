@@ -16,6 +16,7 @@ import {listProcedures,setProcedureDisabled} from '../work/procedures.js';
 import {applyAutoSources,readAutoSources,forgetAutoSource} from '../packs/auto-sources.js';
 import {readSwarmDashboard} from '../swarm/dashboard.js';
 import {BrowserConnections} from './browser-connections.js';
+import {VaultPage} from './vault-ui.js';
 import {ControlSettings} from './control-settings.js';
 import {type ClientMaintenanceController} from '../onboarding/client-maintenance.js';
 import {authSites,blockedAuthSites} from '../swarm/browser-auth.js';
@@ -149,6 +150,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
   if(options.capability_token!==undefined&&!/^[a-f0-9]{48}$/u.test(options.capability_token))throw Error('CONTROL_CENTER_CAPABILITY_INVALID');
   const cookieName=capabilityCookieName(config.dbPath);
   const token=options.capability_token??randomBytes(24).toString('hex'),store=new PackStore(config.dbPath);try{store.registerProject(config.project);}catch(error){store.close();throw error;}const presence=store.startPresence(config.project.id,'dashboard',{transport:'loopback-read-only'}),clients=new Set<ServerResponse>(),lightClients=new Set<ServerResponse>(),poll=options.poll_ms??500;let host='',shortHost='',hosts=new Set<string>(),tailnet=new Set(config.observability?.tailnet_hosts??[]),done:()=>void=()=>undefined,stopped=false,reloading=false,inflightMutations=0;const closed=new Promise<void>(resolve=>done=resolve);
+  const vaultPage=new VaultPage(config);
   const connections=new BrowserConnections(store,config,{reloadAvailable:Boolean(options.onReload)}),settings=new ControlSettings(config,undefined,undefined,undefined,undefined,undefined,undefined,undefined,options.clientMaintenance);
   const fileRoutes=new FileExplorerRoutes(store.localFileExplorer(config.project.id,dirname(config.dbPath)));
   const hermesWork=new HermesWorkRuntime(store,config,options.hermes);
@@ -254,6 +256,7 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
     if(await settings.handle(request,response,suffix,requestHost))return;
     if(rejectStopped())return;
     if(await connections.handle(request,response,suffix,requestHost))return;
+    if(await vaultPage.handle(request,response,suffix,requestHost))return;
     if(rejectStopped())return;
     if(await fileRoutes.handle(request,response,suffix,requestHost))return;
     if(rejectStopped())return;
