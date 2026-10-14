@@ -6,6 +6,7 @@ import {requireCondition} from '../core/contracts.js';
 import {type PackStore} from '../packs/store.js';
 import {addFeedPost} from './feed.js';
 import {supportedWorkScheduleSchema,WorkSchedules,type SupportedSchedule} from './schedule.js';
+import {removeOfficeSettingChecks} from './office-checks.js';
 
 /**
  * A Work's AI may propose a different schedule (owner 2026-10-14: "let the Work's AI change the schedule, for example
@@ -56,7 +57,7 @@ export const scheduleDecisionInput=z.object({id:z.string().regex(/^s-[a-f0-9]{16
 export function decideScheduleProposal(store:PackStore,project:string,raw:unknown){
   const value=scheduleDecisionInput.parse(raw),found=proposal(store,project,value.id);
   requireCondition(found,'SCHEDULE_PROPOSAL_NOT_FOUND');requireCondition(found!.status==='pending','SCHEDULE_PROPOSAL_DECIDED');
-  if(value.decision==='apply'){const revision=store.intakeWork(project,found!.work_id).revision;new WorkSchedules(store,project).setByOwner(found!.work_id,revision,found!.definition);}
+  if(value.decision==='apply'){const revision=store.intakeWork(project,found!.work_id).revision;new WorkSchedules(store,project).setByOwner(found!.work_id,revision,found!.definition);try{removeOfficeSettingChecks(store,project,found!.work_id);}catch{/* the Control Center's sweep removes them later */}}
   store.hermesState.prepare('UPDATE office_schedule_proposal SET status=?,decided_at=? WHERE project_id=? AND id=?').run(value.decision==='apply'?'applied':'declined',new Date().toISOString(),project,value.id);
   return proposal(store,project,value.id);
 }
