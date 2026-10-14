@@ -11,9 +11,9 @@
 
 ### What's new
 
+- **[v0.8.13](docs/releases/v0.8.13.md)** · Old schedule conditions leave the Work
 - **[v0.8.12](docs/releases/v0.8.12.md)** · Schedule and delivery conditions are Office's
 - **[v0.8.11](docs/releases/v0.8.11.md)** · Short prompts for continued runs · new conversation past half the window
-- **[v0.8.10](docs/releases/v0.8.10.md)** · Memory stays small in the AI's context
 
 [All releases](CHANGELOG.md)
 
@@ -93,7 +93,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.12/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.13/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.

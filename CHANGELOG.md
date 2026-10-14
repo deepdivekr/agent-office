@@ -4,6 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v0.8.13](docs/releases/v0.8.13.md) | 2026-10-14 | Old completion conditions about the schedule or delivery target leave the Work and never reach a run |
 | [v0.8.12](docs/releases/v0.8.12.md) | 2026-10-14 | A Work's AI leaves schedule and delivery conditions to Office and does not propose a schedule to meet one |
 | [v0.8.11](docs/releases/v0.8.11.md) | 2026-10-14 | Continued runs get a short prompt while nothing changed; a conversation past half its window starts over |
 | [v0.8.10](docs/releases/v0.8.10.md) | 2026-10-14 | Memory stays small in a run's context: about 1,500 characters, once per conversation |
