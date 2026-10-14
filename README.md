@@ -11,9 +11,9 @@
 
 ### What's new
 
+- **[v0.8.8](docs/releases/v0.8.8.md)** · Memory: knowledge every AI app shares across Works
 - **[v0.8.7](docs/releases/v0.8.7.md)** · Grok handles X research only · measured search rules in the brief
 - **[v0.8.6](docs/releases/v0.8.6.md)** · Grok Build sign-in · X search, image and video tools for every Work
-- **[v0.8.5](docs/releases/v0.8.5.md)** · Nothing new, no message
 
 [All releases](CHANGELOG.md)
 
@@ -93,7 +93,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.7/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.8/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.

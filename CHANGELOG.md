@@ -4,6 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v0.8.8](docs/releases/v0.8.8.md) | 2026-10-14 | Memory: knowledge every AI app shares across Works, proposed by runs and approved by the owner |
 | [v0.8.7](docs/releases/v0.8.7.md) | 2026-10-14 | Grok Build is routed for X research only; the brief carries the search rules measured on day one |
 | [v0.8.6](docs/releases/v0.8.6.md) | 2026-10-14 | Grok Build joins the AI apps: sign in once, every Work's AI gets X search, image and video tools |
 | [v0.8.5](docs/releases/v0.8.5.md) | 2026-10-13 | A run with nothing new is not sent and not in the feed |
