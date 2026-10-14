@@ -34,6 +34,7 @@ import {assertWorkConnected,readWorkLifecycle} from './lifecycle.js';
 import {connectedSourceCatalog,observedWorkSourceSchemas} from '../packs/source-catalog.js';
 import {createNativeCompletionResolver} from './native-completion.js';
 import {ingestVaultProposals,workVaultBrief} from './vault-runs.js';
+import {ingestScheduleProposal} from './schedule-proposals.js';
 import {assertCustomPackInvocation,customPackWorkBinding} from './custom-pack-repeat.js';
 import {assertCustomPackScheduledRun} from './custom-pack-schedule.js';
 import {PACK_ENGINE_VERSION,type PackApprovalDispatcher} from '../packs/runtime.js';
@@ -587,7 +588,7 @@ export class WorkSupervisor {
           executeTool:async(name,args,context)=>{
             requireCondition(!verificationCutpoint,'WORK_VERIFICATION_ADMISSION_CLOSED');const step=spec.plan.steps.find(value=>value.id===context.stage_id);return withWorkActivityContext({project_id:project,work_id:row.work_id,run_id:row.run_id,stage_id:context.stage_id,operation_id:context.request_id,...(step?{stage_binding:stageBinding(step)}:{})},async()=>{const value=await toolkit!.execute(name,args,context.request_id);return toolkit!.receipt(name,value,context.request_id);});
           },verifyCompletion});
-      if(client)ingestVaultProposals(this.store,this.config,project,row.work_id,row.run_id,spec.title,join(workFolder(this.config,row.work_id),row.run_id));
+      if(client){const runFolder=join(workFolder(this.config,row.work_id),row.run_id);ingestVaultProposals(this.store,this.config,project,row.work_id,row.run_id,spec.title,runFolder);ingestScheduleProposal(this.store,project,row.work_id,row.run_id,runFolder);}
       const watchReadyAt=watchDueWait(this.store,row,result);
       const verificationRetry=result.reason==='WORK_CLIENT_VERIFICATION_TRANSIENT'&&result.checkpoint.verification_pending!==undefined&&result.checkpoint.verification_pending.transient_failures<3;
       // Attempts count only runs that made no progress. A run that obtained new

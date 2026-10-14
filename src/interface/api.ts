@@ -1,3 +1,4 @@
+import {Vault,vaultList} from '../work/vault.js';
 import {PackStore} from '../packs/store.js';
 import {FileExplorer} from '../files/explorer.js';
 import {FamilyRuntime,PACK_ENGINE_VERSION} from '../packs/runtime.js';
@@ -326,6 +327,7 @@ export class RuntimeApi{
         case 'runtime_work_status':{const result=this.work.status(args);return {...result,windows_runs:this.windows.forWork(z.object({work_id:z.string().uuid()}).passthrough().parse(args).work_id)};}
         case 'runtime_work_results':{const input=workResultsListSchema.parse(args);return {work_id:input.work_id,results:this.workResults.list(this.config.project.id,input.work_id,input.limit)};}
         case 'runtime_feed_post':return postToFeed(this.store,this.config.project.id,args,'AI app');
+        case 'runtime_vault_list':return vaultList(Vault.fromConfig(this.config),args);
         case 'runtime_work_result':{const input=workResultGetSchema.parse(args);return this.workResults.get(this.config.project.id,input.work_id,input.result_id);}
         case 'runtime_work_context':return this.packs.context(args);
         case 'runtime_work_list':return this.work.list(args);

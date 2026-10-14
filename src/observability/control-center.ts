@@ -17,6 +17,7 @@ import {applyAutoSources,readAutoSources,forgetAutoSource} from '../packs/auto-s
 import {readSwarmDashboard} from '../swarm/dashboard.js';
 import {BrowserConnections} from './browser-connections.js';
 import {VaultPage} from './vault-ui.js';
+import {decideScheduleProposal} from '../work/schedule-proposals.js';
 import {ControlSettings} from './control-settings.js';
 import {type ClientMaintenanceController} from '../onboarding/client-maintenance.js';
 import {authSites,blockedAuthSites} from '../swarm/browser-auth.js';
@@ -267,6 +268,13 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
         const value=changeWorkLifecycle(store,config.project.id,lifecycleActionSchema.parse(JSON.parse(body)));
         reply(response,200,JSON.stringify(value),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/u.test(error.message)?error.message:'WORK_LIFECYCLE_REQUEST_INVALID'}),'application/json; charset=utf-8');}return;
+    }
+    if(suffix==='work/schedule/proposal'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>2048)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
+        reply(response,200,JSON.stringify(decideScheduleProposal(store,config.project.id,JSON.parse(body))),'application/json; charset=utf-8');
+      }catch(error){reply(response,409,JSON.stringify({error:requestError(error,'SCHEDULE_PROPOSAL_FAILED')}),'application/json; charset=utf-8');}return;
     }
     if(suffix==='work/schedule'){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}

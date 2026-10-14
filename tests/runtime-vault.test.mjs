@@ -74,3 +74,15 @@ test('runtime contract the Vault page lists notes and changes them only from the
   const bad=await fetch(base+'vault/save',{method:'POST',headers:owner,body:JSON.stringify({layer:'quality',text:'token=ghp_abcdefghijklmnopqrstuvwxyz0123456789'})});assert.equal(bad.status,409);assert.equal((await bad.json()).error,'VAULT_SECRET_LIKE');
   assert.match(vaultHtml('n'),/href="vault"[^>]*aria-current="page"/u);
 });
+
+test('runtime unit any connected AI app reads the vault with runtime_vault_list; the owner can delete a note',async t=>{
+  const dir=await temp(t),vault=new Vault(join(dir,'vault'));vault.seed(DEFAULT_VAULT_NOTES);
+  const kept=vault.save({layer:'boundary',text:'게시는 소유자가 시킨 경우에만 한다.'});vault.propose([{layer:'operation',text:'제안 단계의 교훈 하나'}],'run');
+  const {vaultList}=await import('../dist/work/vault.js');
+  assert.equal(vaultList(vault,{}).total,3,'active notes only');assert.equal(vaultList(vault,{include_proposed:true}).total,4);
+  assert.deepEqual(vaultList(vault,{query:'게시 소유자'}).notes.map(n=>n.id),[kept.id]);assert.equal(vaultList(vault,{layer:'tool'}).total,2);
+  assert.throws(()=>vaultList(vault,{layer:'nope'}));
+  assert.deepEqual(vault.remove(kept.id),{id:kept.id,deleted:true});assert.equal(vault.get(kept.id),null);
+  const {tools}=await import('../dist/interface/catalog.js'),{COMPACT_MCP_TOOLS}=await import('../dist/interface/mcp-proxy.js');
+  assert.equal(tools.runtime_vault_list.readOnly,true);assert.ok(COMPACT_MCP_TOOLS.has('runtime_vault_list'));
+});

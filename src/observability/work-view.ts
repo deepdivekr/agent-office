@@ -29,6 +29,7 @@ import {workTimeline} from '../work/timeline.js';
 import {refinedLog} from '../work/thread.js';
 import {hiddenWorkIds} from '../work/hidden.js';
 import {listFeedPosts} from '../work/feed.js';
+import {proposal} from '../work/schedule-proposals.js';
 import {type WorkResults} from '../work/results.js';
 import {artifactKind,artifactPreview} from '../work/artifact-kind.js';
 import {appApproved,appCode,isAppFile,isCardFile,lastAppRun,readAppManifest,readCardFile} from '../work/feed-cards.js';
@@ -117,7 +118,8 @@ export function readFeed(store:PackStore,config:HostConfig,results:WorkResults,o
         deliveries:r.deliveries.filter(d=>d.channel!=='app').map(d=>({channel:d.channel,status:d.status}))});
     }
   for(const post of listFeedPosts(store,project,{before,limit}))if(!post.work_id||shown.has(post.work_id))
-    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label,card:post.card});
+    posts.push({id:'p:'+post.id,kind:'external',work_id:post.work_id,work_title:post.work_id?titles.get(post.work_id):null,at:post.at,title:post.title,text:clean(post.text,4000),source_label:post.source_label,card:post.card,
+      ...(post.source==='office:vault'?{office:{kind:'vault'}}:post.source==='office:schedule'?{office:{kind:'schedule',id:post.external_id,status:proposal(store,project,post.external_id)?.status??'pending'}}:{})});
   // A monitor's change: what it found, from the observation it recorded, with its source page when that is a web page.
   for(const row of store.hermesState.prepare("SELECT e.id,e.body,e.created_at,o.work_id FROM family_event e JOIN office_run o ON o.project_id=e.project_id AND o.source_kind='pack' AND o.source_id=e.run_id WHERE e.project_id=? AND e.kind='changed' AND e.created_at<? ORDER BY e.created_at DESC LIMIT ?").all(project,before,limit) as Array<{id:number;body:string;created_at:string;work_id:string}>){
     if(!shown.has(row.work_id))continue;let body:{before?:unknown;after?:unknown;evidence?:unknown};try{body=JSON.parse(row.body);}catch{continue;}
