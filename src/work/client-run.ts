@@ -323,7 +323,7 @@ const clientName=(client:RunClient)=>client==='codex'?'Codex':'Claude Code';
 // Live (2026-10-03): an imported Work whose own helper sends to Telegram was told not to send anything and kept the result in files.
 const officeOwns=(input:Pick<ClientRunInput,'external_effect'>)=>`${input.external_effect
   ?'The request itself includes sending or submitting something (its own scripts, helper or channel): do that part as the request says, with its own gates. Office may also deliver the saved result to the owner through its own settings and runs any schedule itself.'
-  :'Office delivers the result to the owner after checking it and runs any schedule itself. Do not send the result anywhere.'} Do not set up schedules yourself, and do not look into or change Agent Office, its data or its Work records. If the owner's directions ask for a different schedule, or the work clearly needs one, save SCHEDULE.json in the Work folder: {"definition":{"kind":"interval","seconds":3600} | {"kind":"daily","hour":9,"minute":0} | {"kind":"weekly","weekdays":[1,3,5],"hour":9,"minute":0} | null to stop repeating,"reason":"one line"}; Office asks the owner to apply it.`;
+  :'Office delivers the result to the owner after checking it and runs any schedule itself. Do not send the result anywhere.'} Do not set up schedules yourself, and do not look into or change Agent Office, its data or its Work records. If the owner's directions ask for a different schedule, or the work clearly needs one (never to meet a completion condition), save SCHEDULE.json in the Work folder: {"definition":{"kind":"interval","seconds":3600} | {"kind":"daily","hour":9,"minute":0} | {"kind":"weekly","weekdays":[1,3,5],"hour":9,"minute":0} | null to stop repeating,"reason":"one line"}; Office asks the owner to apply it.`;
 /** An imported plan is the owner's own automation: its steps, with the files, commands and tools they used, are the procedure. */
 const importedPlan=(input:Pick<ClientRunInput,'plan'>)=>input.plan&&input.plan.source!=='request'&&input.plan.steps.length
   ?[`The owner's own automation, as imported into Office. Follow its steps with the files, commands and tools they name (Windows paths are reachable from here under /mnt/<drive>/…):\n${input.plan.steps.map(step=>`- ${step.id} (${step.effect}): ${step.goal}${step.tool_hints.length?`\n  uses: ${step.tool_hints.join(' | ')}`:''}`).join('\n')}`]:[];
@@ -344,7 +344,7 @@ function initialPrompt(input:ClientRunInput){
     // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as
     // its task, found its own folder empty and reported nothing made. Directions are history for a new session.
     ...(input.directions.length?[`Directions the owner gave during earlier sessions of this Work (oldest first; a later one supersedes an earlier one where they differ). One that changes what every run should produce still applies. One about an earlier session's own folder, files, checks or a one-time cleanup is finished and does not apply to this run:\n${input.directions.map(item=>`- ${item.instruction}`).join('\n')}`]:[]),
-    `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}`,
+    `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}\n${OFFICE_CONDITIONS}`,
     ...(Object.keys(input.context).length?[`What Office already settled with the owner:\n${JSON.stringify(input.context,null,1)}`]:[]),
     ...windowsInstructions(input.client).map(item=>`The owner's standing instructions for ${clientName(input.client)} on the Windows side of this computer (${item.file}); this run does not load them by itself. Follow them where they apply:\n${item.text}`),
     // Clean-install check (2026-10-12): with no skill or MCP server, Codex installed pip and Playwright into /tmp on its
@@ -364,6 +364,9 @@ const turnFiles=(files:ProducedFile[],before:Set<string>)=>{const made=files.fil
 /** The client's own completion report (owner decision 2026-10-04: a client run is complete when its client says each
  * condition is met; Office verifies independently only Works that send or submit outside). Written in the turn it reports. */
 const COMPLETION_FILE='COMPLETION.json';
+// Live 2026-10-14: a new conversation read an old 'daily schedule is active' condition as its own task, marked it unmet and
+// proposed changing the owner's hourly schedule back to daily. Schedule and delivery are Office's to meet and check.
+const OFFICE_CONDITIONS=`A condition about this Work's schedule or where its result is delivered is Office's: Office runs both and checks such a condition with its own records. In ${COMPLETION_FILE} mark it met with the note "Office runs the schedule and delivery", and do not save SCHEDULE.json for it.`;
 export function clientCompletionReport(folder:string,checks:Check[]):{met:boolean;checks:Array<{id:string;met:boolean;note:string}>}|null{
   let raw:unknown;try{const path=join(folder,COMPLETION_FILE);if(!lstatSync(path).isFile()||lstatSync(path).size>65_536)return null;raw=JSON.parse(readFileSync(path,'utf8'));}catch{return null;}
   const listed=Array.isArray(object(raw).checks)?(object(raw).checks as unknown[]).map(object):[];
@@ -401,7 +404,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   const shortRun=()=>[`This is a new run of the same Work in this conversation. This run's folder is ${input.folder}: work there and leave this run's files there; earlier runs' folders are not this run's result.`,
     `The request, the owner's directions, the Office vault and tool notes, and how to write DELIVERY.md, CARD.json, RECORDS.json and ${COMPLETION_FILE} are unchanged since the full instruction earlier in this conversation: follow them as before.`,
     ...(Object.keys(input.context).length?[`What Office settled for this run:\n${JSON.stringify(input.context,null,1)}`]:[]),
-    `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}`].join('\n\n');
+    `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}\n${OFFICE_CONDITIONS}`].join('\n\n');
   const verifiedRun=<T,>(result:T)=>{try{mkdirSync(dirname(promptSent),{recursive:true});writeFileSync(promptSent,instructionDigest+'\n');}catch{/* the next run sends the full instruction */}return result;};
   let next:string|null=!session().confirmed?initialPrompt(input)
     :session().carried?(sameInstruction()?shortRun():newRun()+initialPrompt(input))
