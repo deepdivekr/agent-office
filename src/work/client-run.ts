@@ -294,6 +294,8 @@ export interface ClientRunInput {
   client:RunClient;model:string|null;effort:WorkClientChoice['effort'];work_id:string;run_id:string;folder:string;title:string;prompt:string;checks:Check[];
   /** What intake settled with the owner: answers, agreed scope, collection window, the host schedule. */
   context:Json;directions:Array<{instruction:string;created_at:string}>;
+  /** The Office vault notes that apply to this Work (the owner's standing knowledge across Works). */
+  vault?:string|null;
   /** The session the previous run of a recurring Work ended with; this run continues it instead of starting anew. */
   previous_session?:string|null;
   /** The Work's plan. An imported one is the owner's own automation (its steps, files, commands and tools), which the client follows. */
@@ -335,6 +337,7 @@ function initialPrompt(input:ClientRunInput){
     `Keep the Work folder lean: do not pack files that are already there into another archive, and keep page captures and raw collections only while the run needs them. Office clears older runs' working files and keeps delivered text, pictures, media, PDF, CARD.json, RECORDS.json and app files; state a later run must read belongs beside the run folders, not inside an old one.`,
     ...(mediaExecutorBrief()?[mediaExecutorBrief()!]:[]),
     ...(grokToolsBrief()?[grokToolsBrief()!]:[]),
+    ...(input.vault?[input.vault]:[]),
     `Request from the owner:\n${input.prompt}`,
     ...importedPlan(input),
     // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as

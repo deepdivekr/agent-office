@@ -130,7 +130,7 @@ test('runtime native on a phone Feed and Work are two tabs, the Work views are o
   assert.ok(await page.locator('#view-tabs [data-view="recurring"]').evaluate(a=>{const r=a.getBoundingClientRect(),box=a.parentElement.getBoundingClientRect();return a.classList.contains('on')&&r.left>=box.left-1&&r.right<=box.right+1}),'the open view is in sight');
   assert.equal(await page.locator('#side-menu').isVisible(),false);assert.equal(await page.locator('#lang-toggle').isVisible(),false);
   await page.locator('#menu-toggle').click();
-  assert.deepEqual(await page.locator('#side-menu a.nav:visible').allInnerTexts(),['Import','Sites','Settings']);
+  assert.deepEqual(await page.locator('#side-menu a.nav:visible').allInnerTexts(),['Import','Sites','Memory','Settings']);
   assert.equal(await page.locator('#side-menu #lang-toggle').isVisible(),true);assert.equal(await page.locator('#side-menu #theme-toggle').isVisible(),true);
   await page.locator('#theme-toggle').click();assert.equal(await page.locator('#side-menu').isVisible(),true,'switching the theme keeps the menu open');
   await page.locator('h1').click();assert.equal(await page.locator('#side-menu').isVisible(),false,'a tap elsewhere closes it');

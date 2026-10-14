@@ -65,7 +65,7 @@ dialog.help p{margin:0 0 14px;line-height:1.6;white-space:pre-line}dialog.help f
 /* Tools: behind the menu button, a panel under the top right. */
 .side-menu{display:none;position:absolute;top:58px;right:12px;z-index:30;min-width:150px;padding:4px;background:var(--panel);border:1px solid var(--line2);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.35)}.side.menu-open .side-menu{display:flex}.side-menu .nav{padding:7px 12px;font-size:13.5px}}@media(max-width:480px){.candidate-row{grid-template-columns:1fr}.candidate-row>button{min-height:36px}}`;
 
-export type ShellPage='work'|'settings'|'connections';
+export type ShellPage='work'|'settings'|'connections'|'vault';
 /** The Work page's own tabs, under its header: what used to be the sidebar's list of views. */
 export const workViewsHtml=`<div class="views" id="work-views"><button type="button" class="tabs-arrow" data-tabs-step="-1" aria-label="이전 보기" tabindex="-1">‹</button><nav class="tabs" id="view-tabs" aria-label="업무 보기">
 <a class="nav" href="./?view=all" data-view="all">전체<span class="n" data-count="all"></span></a>
@@ -91,6 +91,7 @@ export function sidebarHtml(page:ShellPage){
 <div class="side-menu" id="side-menu">
 <a class="nav" href="./?import=1" data-nav="import">가져오기</a>
 <a class="nav" href="connections" data-nav="connections"${current('connections')}>사이트</a>
+<a class="nav" href="vault" data-nav="vault"${current('vault')}>기억</a>
 <a class="nav" href="settings"${current('settings')}>설정</a>
 </div>
 <a class="nav" id="connections" href="connections" hidden>사이트 로그인</a>

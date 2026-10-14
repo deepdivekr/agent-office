@@ -33,6 +33,7 @@ import {workImportExecutionOwner} from './import-authority.js';
 import {assertWorkConnected,readWorkLifecycle} from './lifecycle.js';
 import {connectedSourceCatalog,observedWorkSourceSchemas} from '../packs/source-catalog.js';
 import {createNativeCompletionResolver} from './native-completion.js';
+import {ingestVaultProposals,workVaultBrief} from './vault-runs.js';
 import {assertCustomPackInvocation,customPackWorkBinding} from './custom-pack-repeat.js';
 import {assertCustomPackScheduledRun} from './custom-pack-schedule.js';
 import {PACK_ENGINE_VERSION,type PackApprovalDispatcher} from '../packs/runtime.js';
@@ -565,7 +566,7 @@ export class WorkSupervisor {
       templateRuns=offered?.template_runs??0;
       script=offered?.template&&reusable&&!checkpoint?new ProcedureScript(offered.template,fastJudgment,calls=>countPaidJudgment(this.store,project,calls),summary=>workActivity(this.store,project,row.work_id,'procedure.handed_over',summary,{run_id:row.run_id,stage_id:'execution',status:'running'}),templateRuns>=TRUSTED_TEMPLATE_RUNS):null;
             if(offered&&row.attempts<=1&&!checkpoint)workActivity(this.store,project,row.work_id,'procedure.offered',`A procedure verified ${offered.successes} time${offered.successes===1?'':'s'} for a similar request guides this run.`,{run_id:row.run_id,stage_id:'execution',status:'offered'});
-      const result=client?await executeClientRun({client,model:pin!.model,effort:pin!.effort,work_id:row.work_id,run_id:row.run_id,folder:join(workFolder(this.config,row.work_id),row.run_id),previous_session:hostSchedule?previousClientSession(this.store,project,row.work_id,row.run_id,client):null,title:spec.title,prompt:work.prompt,checks:spec.completion_checks,
+      const result=client?await executeClientRun({client,model:pin!.model,effort:pin!.effort,work_id:row.work_id,run_id:row.run_id,folder:join(workFolder(this.config,row.work_id),row.run_id),previous_session:hostSchedule?previousClientSession(this.store,project,row.work_id,row.run_id,client):null,vault:workVaultBrief(this.config,[spec.title,work.prompt,...directions.map(direction=>direction.instruction)]),title:spec.title,prompt:work.prompt,checks:spec.completion_checks,
           context:{...(userIntake.completion_condition?{completion_condition:userIntake.completion_condition}:{}),...(agreedScope?{agreed_scope:agreedScope}:{}),...(collectionWindow?{collection_window:collectionWindow}:{}),...(hostSchedule?{host_schedule:{definition:hostSchedule.definition,next_run_at:hostSchedule.next_run_at,meaning:'Office reruns this Work on this schedule; finish this run.'}}:{})},
           plan:{source:spec.plan.source,steps:spec.plan.steps.map(step=>({id:step.id,goal:step.goal,effect:step.effect,tool_hints:step.tool_hints}))},external_effect:spec.requested_effect==='external_effect_requested',
           directions,checkpoint:checkpoint as WorkClientCheckpoint|null,resumed:row.resume_wait===1,signal:controller.signal,guard,save:saveCheckpoint,
@@ -586,6 +587,7 @@ export class WorkSupervisor {
           executeTool:async(name,args,context)=>{
             requireCondition(!verificationCutpoint,'WORK_VERIFICATION_ADMISSION_CLOSED');const step=spec.plan.steps.find(value=>value.id===context.stage_id);return withWorkActivityContext({project_id:project,work_id:row.work_id,run_id:row.run_id,stage_id:context.stage_id,operation_id:context.request_id,...(step?{stage_binding:stageBinding(step)}:{})},async()=>{const value=await toolkit!.execute(name,args,context.request_id);return toolkit!.receipt(name,value,context.request_id);});
           },verifyCompletion});
+      if(client)ingestVaultProposals(this.store,this.config,project,row.work_id,row.run_id,spec.title,join(workFolder(this.config,row.work_id),row.run_id));
       const watchReadyAt=watchDueWait(this.store,row,result);
       const verificationRetry=result.reason==='WORK_CLIENT_VERIFICATION_TRANSIENT'&&result.checkpoint.verification_pending!==undefined&&result.checkpoint.verification_pending.transient_failures<3;
       // Attempts count only runs that made no progress. A run that obtained new

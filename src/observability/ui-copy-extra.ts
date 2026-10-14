@@ -307,5 +307,10 @@ export const extraSourceCopy: Record<string, string> = {
   'Jev 없이 기존 AI와 코드로 진행합니다.': 'Continues with the existing AI and code, without Jev.',
   'Codex 세션 연결': 'Connect Codex session',
   'Codex 대화': 'Codex chat',
+  '기억': 'Memory',
+  '기억 · Agent Office': 'Memory · Agent Office',
+  '모든 업무에도 적용 · 기억에 저장': 'Apply to every Work · keep in Memory',
+  '지침을 저장하고 기억에도 넣었어요. 다른 업무에는 다음 실행부터 적용돼요.': 'Direction saved and kept in Memory. Other Works get it from their next run.',
+  '지침은 저장했지만 기억에는 넣지 못했어요. 기억 화면에서 추가해 주세요.': 'Direction saved, but it could not be kept in Memory. Add it on the Memory page.',
   '업무를 맡는 앱이 아니라 도구예요. 로그인해 두면 모든 업무의 AI가 X 검색(게시물·작성자·스레드)에 씁니다.': 'Not an app that takes Works: a tool. Signed in, every Work’s AI uses it for X research (posts, authors, threads).',
 };
