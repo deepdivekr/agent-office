@@ -10,9 +10,11 @@ computer.
   never go into the repository.
 - **Layers**: boundary, quality, source, operation, tool, owner, environment.
 - **Which notes a run gets**: every active note without keywords, and those whose keywords the Work's title, request or
-  directions name (a keyword of up to three letters, such as `X`, matches as a whole word). They go into the run's first
-  prompt after the tool notes, boundaries first, within about 8,000 characters. The Work's own request and directions
-  win where they differ.
+  directions name (a keyword of up to three letters, such as `X`, matches as a whole word). Kept small so reading it does
+  not fill the AI's context: boundaries first, then the notes the Work names, then general ones, within about 1,500
+  characters; the rest is one line pointing at `runtime_vault_list`. A recurring Work that continues the same
+  conversation gets the vault once, and again only when the notes changed. The Work's own request and directions win
+  where they differ.
 - **Who writes**: the owner on the Memory page (add, edit, retire, restore, delete), or with **Apply to every Work · keep in
   Memory** when sending a direction to a Work. A run may save `VAULT.json` (up to five proposals); they appear on the
   Memory page and as one feed post (**Open in Memory** goes to them), and apply only after the owner approves them, as they are or edited. A run reads the web, so what it

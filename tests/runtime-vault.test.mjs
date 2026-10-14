@@ -45,7 +45,7 @@ test('runtime unit the brief gives every note without keywords and those a Work 
   assert.match(news,/at most 10 posts/u,'the shipped X note applies when X is named');assert.doesNotMatch(news,/인스타그램은 공식 API/u);
   const xbox=vaultBrief(vault.list(),'Xbox 소식 정리');assert.doesNotMatch(xbox,/at most 10 posts/u,'a short keyword is a whole word');
   assert.match(vaultBrief(vault.list(),'인스타 게시'),/인스타그램은 공식 API/u);
-  const small=vaultBrief(vault.list(),'X',120);assert.match(small,/Boundaries:/u);assert.doesNotMatch(small,/This computer:/u,'the budget drops the last layers');
+  const small=vaultBrief(vault.list(),'X',120);assert.match(small,/Boundaries:/u);assert.match(small,/more vault notes? \(.*\) are not shown here/u,'what does not fit is a pointer');
   assert.equal(vaultBrief([],'X'),null);
 });
 
@@ -85,4 +85,13 @@ test('runtime unit any connected AI app reads the vault with runtime_vault_list;
   assert.deepEqual(vault.remove(kept.id),{id:kept.id,deleted:true});assert.equal(vault.get(kept.id),null);
   const {tools}=await import('../dist/interface/catalog.js'),{COMPACT_MCP_TOOLS}=await import('../dist/interface/mcp-proxy.js');
   assert.equal(tools.runtime_vault_list.readOnly,true);assert.ok(COMPACT_MCP_TOOLS.has('runtime_vault_list'));
+});
+
+test('runtime unit the brief stays small: boundaries and the notes a Work names come first, the rest is a pointer to runtime_vault_list',async t=>{
+  const dir=await temp(t),vault=new Vault(join(dir,'vault'));
+  for(let i=0;i<60;i++)vault.save({layer:'quality',text:`일반 규칙 ${i}번: 결과를 쓸 때 지키는 일반적인 원칙 하나를 길게 적어 둔 문장이다. 이 문장은 일부러 길게 써서 예산을 넘기게 만든다.`});
+  vault.save({layer:'boundary',text:'게시는 소유자가 시킨 경우에만 한다.'});vault.save({layer:'tool',scope:'tool:instagram',match:['인스타'],text:'인스타그램은 공식 API로 올린다.'});
+  const brief=vaultBrief(vault.list(),'인스타 게시 업무');
+  assert.ok(brief.length<2400,String(brief.length));assert.match(brief,/게시는 소유자가 시킨 경우에만/u);assert.match(brief,/인스타그램은 공식 API/u,'a note this Work names comes before general ones');
+  assert.match(brief,/\d+ more vault notes \(How results are written\) are not shown here: .*runtime_vault_list/u);
 });

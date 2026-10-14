@@ -97,16 +97,21 @@ export class Vault {
 const matches=(keyword:string,haystack:string)=>/^[A-Za-z0-9]{1,3}$/u.test(keyword)?new RegExp(`(?<![A-Za-z0-9])${keyword}(?![A-Za-z0-9])`,'u').test(haystack):haystack.toLowerCase().includes(keyword.toLowerCase());
 /** The notes that apply to a Work: every note without keywords, and those whose keywords its request or directions name. */
 export function vaultNotesFor(notes:VaultNote[],haystack:string){return notes.filter(note=>note.status==='active'&&(!note.match.length||note.match.some(keyword=>matches(keyword,haystack))));}
-/** The vault part of a run's first prompt, within a size budget: boundaries first, this computer last. */
-export function vaultBrief(notes:VaultNote[],haystack:string,budget=8000){
+/**
+ * The vault part of a run's first prompt, kept small (owner 2026-10-14: reading the vault must not fill the AI's context).
+ * Within the budget: boundaries first, then the notes whose keywords this Work names, then general notes; the rest is one
+ * line pointing at runtime_vault_list, so the AI reads them only when it needs them.
+ */
+export function vaultBrief(notes:VaultNote[],haystack:string,budget=1500){
   const chosen=vaultNotesFor(notes,haystack);if(!chosen.length)return null;
-  const lines:string[]=[];let used=0;
-  for(const layer of VAULT_LAYERS){
-    const rows=chosen.filter(note=>note.layer===layer).map(note=>`- ${note.scope==='global'?'':`(${note.scope}) `}${note.text.replace(/\s*\n\s*/gu,' ')}`);
-    if(!rows.length)continue;const block=[`${LAYER_TITLE[layer]}:`,...rows].join('\n');
-    if(used+block.length>budget)break;lines.push(block);used+=block.length;
-  }
-  return [`The owner's Office vault: standing knowledge shared by every AI app that works for this owner. Follow it where it applies; this Work's own request and directions win where they differ. If this run teaches something that would hold for other Works too (a tool's limit, a source to avoid, a way of writing the owner corrected), you may save VAULT.json in the Work folder: up to five [{"layer":"boundary|quality|source|operation|tool|owner|environment","scope":"global|tool:<name>|topic:<name>","match":[keywords, optional],"text":"one fact","why":"what happened"}]. The owner approves each one before it applies; never put secrets, tokens or personal details in it.`,...lines].join('\n');
+  const rank=(note:VaultNote)=>note.layer==='boundary'?0:note.match.length?1:2;
+  const ordered=[...chosen].sort((a,b)=>rank(a)-rank(b)||VAULT_LAYERS.indexOf(a.layer)-VAULT_LAYERS.indexOf(b.layer));
+  const line=(note:VaultNote)=>`- ${note.scope==='global'?'':`(${note.scope}) `}${note.text.replace(/\s*\n\s*/gu,' ')}`;
+  const shown:VaultNote[]=[],left:VaultNote[]=[];let used=0;
+  for(const note of ordered){const size=line(note).length+1;if(used+size<=budget){shown.push(note);used+=size;}else left.push(note);}
+  const blocks=VAULT_LAYERS.flatMap(layer=>{const rows=shown.filter(note=>note.layer===layer);return rows.length?[[`${LAYER_TITLE[layer]}:`,...rows.map(line)].join('\n')]:[];});
+  const more=left.length?[`${left.length} more vault note${left.length===1?'':'s'} (${[...new Set(left.map(note=>LAYER_TITLE[note.layer]))].join(', ')}) are not shown here: when this run touches those topics, read them with runtime_vault_list (query: a few words).`]:[];
+  return [`The owner's Office vault (Memory): standing knowledge for every AI app working for this owner; this Work's own request and directions win where they differ. A lesson that holds beyond this Work may go in VAULT.json (up to five [{"layer","scope","match","text","why"}], layers ${VAULT_LAYERS.join('/')}); the owner approves each, so no secrets or personal details.`,...blocks,...more].join('\n');
 }
 
 export const vaultListInput=z.object({query:z.string().trim().max(200).optional(),layer:z.enum(VAULT_LAYERS).optional(),include_proposed:z.boolean().optional()}).strict();
