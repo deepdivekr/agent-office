@@ -500,3 +500,23 @@ test('runtime fixture the owner moves a Work to the other client between runs; t
   assert.deepEqual([last.args[last.args.indexOf('--model')+1],last.args[last.args.indexOf('--effort')+1]],['opus','high']);
   assert.ok(activity(x).some(row=>row.kind==='client_changed'&&row.summary==='client_changed · Claude Code · opus · high'));
 });
+
+// Owner 2026-10-14: reading the vault must not fill the AI's context. A continued conversation gets it once, then only on change.
+test('runtime fixture a recurring Work sends the Office vault once per conversation',async t=>{
+  const {Vault}=await import('../dist/work/vault.js');
+  const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)});Vault.fromConfig(x.config).save({layer:'boundary',text:'게시는 소유자가 시킨 경우에만 한다.'});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
+  assert.match(x.runs.at(-1).stdin,/The owner's Office vault[\s\S]*게시는 소유자가 시킨 경우에만 한다/u);
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
+  assert.match(x.runs.at(-1).stdin,/Office vault: unchanged since your earlier runs/u);assert.doesNotMatch(x.runs.at(-1).stdin,/게시는 소유자가 시킨 경우에만 한다/u);
+});
+test('runtime fixture a continued conversation gets the vault again when the notes changed',async t=>{
+  const {Vault}=await import('../dist/work/vault.js');
+  const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)}),vault=Vault.fromConfig(x.config);vault.save({layer:'boundary',text:'게시는 소유자가 시킨 경우에만 한다.'});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
+  vault.save({layer:'quality',text:'새로 보낼 것이 없으면 아무것도 보내지 않는다.'});
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
+  assert.match(x.runs.at(-1).stdin,/새로 보낼 것이 없으면 아무것도 보내지 않는다/u);assert.doesNotMatch(x.runs.at(-1).stdin,/unchanged since your earlier runs/u);
+});

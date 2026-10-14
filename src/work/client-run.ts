@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,rmSync} from 'node:fs';
+import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {basename,delimiter,dirname,extname,isAbsolute,join,relative} from 'node:path';
 import {type PackStore} from '../packs/store.js';
@@ -328,7 +328,7 @@ const importedPlan=(input:Pick<ClientRunInput,'plan'>)=>input.plan&&input.plan.s
   ?[`The owner's own automation, as imported into Office. Follow its steps with the files, commands and tools they name (Windows paths are reachable from here under /mnt/<drive>/…):\n${input.plan.steps.map(step=>`- ${step.id} (${step.effect}): ${step.goal}${step.tool_hints.length?`\n  uses: ${step.tool_hints.join(' | ')}`:''}`).join('\n')}`]:[];
 /** The owner's instruction file for this client on the Windows side; the local one the client loads itself. */
 const windowsInstructions=(client:RunClient)=>(ownerEnvironmentContext().owner_environment?.instructions??[]).filter(item=>item.app===client&&item.file.endsWith('(Windows)'));
-function initialPrompt(input:ClientRunInput){
+function initialPrompt(input:ClientRunInput,vault=input.vault){
   return [`Agent Office hands you this Work. Do it yourself, with your own tools, skills and settings, until the result is finished.`,
     `Work folder: ${input.folder}. It is your working directory for this run. Save every deliverable here as files (images, documents, data). Folders of this Work's earlier runs, if any, are next to it.`,
     `Also save DELIVERY.md in the Work folder: the message the owner receives (in the app, Telegram or chat), in the language of the request. Put only the content the request asks for, laid out for reading (for example each case's explanation under its heading); no file lists, no notes about conditions, process or checks. Office sends that text together with the pictures you made. When a repeated run has nothing new for the owner, leave DELIVERY.md empty: Office then sends nothing and keeps the run in the Work's history only.`,
@@ -337,7 +337,7 @@ function initialPrompt(input:ClientRunInput){
     `Keep the Work folder lean: do not pack files that are already there into another archive, and keep page captures and raw collections only while the run needs them. Office clears older runs' working files and keeps delivered text, pictures, media, PDF, CARD.json, RECORDS.json and app files; state a later run must read belongs beside the run folders, not inside an old one.`,
     ...(mediaExecutorBrief()?[mediaExecutorBrief()!]:[]),
     ...(grokToolsBrief()?[grokToolsBrief()!]:[]),
-    ...(input.vault?[input.vault]:[]),
+    ...(vault?[vault]:[]),
     `Request from the owner:\n${input.prompt}`,
     ...importedPlan(input),
     // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as
@@ -387,10 +387,16 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   // A new direction starts a new round of corrections, and so does the owner's resume or retry after they ran out.
   if(session().repairs&&(fresh.length||input.resumed&&session().repairs>=WORK_COMPLETION_REPAIR_BUDGET))update({repairs:0});
   const newRun=()=>`This is a new run of the same Work. This session did its earlier runs; continue from what you know, but this run's folder is ${input.folder}: work there and leave this run's files there. Files of earlier runs are in their own folders and are not this run's result. The full instruction for this run follows.\n\n`;
+  // The vault goes to a conversation once (owner 2026-10-14: reading it must not fill the context). A run that continues
+  // the previous run's session gets it again only when the notes changed since.
+  const vaultSent=join(dirname(input.folder),'.office-vault-sent'),vaultDigest=input.vault?hashJson(input.vault):null;
+  const vaultForRun=()=>{if(!input.vault||!session().carried)return input.vault;try{if(readFileSync(vaultSent,'utf8').trim()===vaultDigest)return 'Office vault: unchanged since your earlier runs in this conversation; follow it as before (runtime_vault_list reads it again if needed).';}catch{/* first time */}return input.vault;};
+  const noteVaultSent=()=>{if(vaultDigest)try{mkdirSync(dirname(vaultSent),{recursive:true});writeFileSync(vaultSent,vaultDigest+'\n');}catch{/* the next run sends it again */}};
   let next:string|null=!session().confirmed?initialPrompt(input)
-    :session().carried?newRun()+initialPrompt(input)
+    :session().carried?newRun()+initialPrompt(input,vaultForRun())
     :fresh.length?`The owner changed the instruction for this Work:\n${fresh.map(item=>`- ${item.instruction}`).join('\n')}\n\nContinue in the same folder with this change. Office passed it on as it is and did not change the Work. Where it changes what a completion condition asks, follow the direction and say so in that condition's note. Update DELIVERY.md, write ${COMPLETION_FILE} again, and finish with the same kind of short reply.`
     :!session().finished?'The run was interrupted. Continue the Work where you stopped, in the same folder, and finish with the short reply.':null;
+  if(next&&(!session().confirmed||session().carried))noteVaultSent();
   const meta=(extra:WorkActivityMetadata={}):WorkActivityMetadata=>({run_id,stage_id:'execution',model_provider:client,executor:client,...extra});
   // The owner's Windows-side servers are looked at only when the client actually runs.
   // A turn that left no completion report (one from before reports existed, or a resume with nothing new) is asked for it once.
