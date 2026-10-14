@@ -9,9 +9,9 @@
 
 ### 새로 나온 기능
 
+- **[v0.8.7](docs/releases/v0.8.7.md)** · Grok은 X 조사만 · 검색 운용 규칙을 안내문에
 - **[v0.8.6](docs/releases/v0.8.6.md)** · Grok Build 로그인 · 모든 업무에 X 검색·이미지·영상 도구
 - **[v0.8.5](docs/releases/v0.8.5.md)** · 새 소식 없으면 알림 없음
-- **[v0.8.4](docs/releases/v0.8.4.md)** · 텔레그램 글 단위 전송 · 글마다 그림 한 장
 
 [전체 변경 이력](CHANGELOG.md)
 
@@ -92,7 +92,7 @@ AI 앱에 일을 맡길수록 결과는 흩어집니다. 아침 브리핑은 텔
 직접 설치하려면 **Ubuntu 또는 WSL Ubuntu 터미널**에서 실행합니다. 어느 폴더에서 실행해도 됩니다.
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.6/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.7/install.sh | bash'
 ```
 
 설치 전에 [스크립트](install.sh)를 확인할 수 있습니다.

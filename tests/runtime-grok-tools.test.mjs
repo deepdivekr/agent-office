@@ -16,7 +16,7 @@ test('runtime unit a Work is told about Grok tools only when the CLI is installe
   const {mkdir}=await import('node:fs/promises');await mkdir(join(home,'.grok'));await writeFile(join(home,'.grok','auth.json'),'{"secret":"never read"}');
   assert.equal(grokSignedIn(installed),true);
   const brief=grokToolsBrief(installed);
-  assert.match(brief,/x_keyword_search/u);assert.match(brief,new RegExp('env HOME='+join(home,'office','grok-home')+' GROK_HOME='+join(home,'.grok')+' grok -p','u'));assert.ok((await import('node:fs')).existsSync(join(home,'office','grok-home')),'the empty HOME folder is created');assert.match(brief,/image_to_video/u);assert.match(brief,/Never pass --tools/u);
+  assert.match(brief,/x_keyword_search/u);assert.match(brief,new RegExp('env HOME='+join(home,'office','grok-home')+' GROK_HOME='+join(home,'.grok')+' grok -p','u'));assert.ok((await import('node:fs')).existsSync(join(home,'office','grok-home')),'the empty HOME folder is created');assert.doesNotMatch(brief,/image_gen|image_to_video|bypassPermissions/u,'pictures stay with the app');assert.match(brief,/--reasoning-effort low/u);assert.match(brief,/at most 10 posts/u);assert.match(brief,/Never pass --tools/u);
   assert.match(brief,new RegExp('--disallowed-tools '+GROK_RESEARCH_DISALLOWED.replace(/[.*+?^${}()|[\]\\]/gu,'\\$&'),'u'));
   assert.doesNotMatch(brief,/never read|secret/u,'nothing from the credential file');
 });

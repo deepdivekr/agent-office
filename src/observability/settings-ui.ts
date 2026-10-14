@@ -92,8 +92,8 @@ async function refreshMcp(){
     const registration=registrations.get(client.id),connection=connections.get(client.id),card=document.createElement('div');card.className='client';card.dataset.client=client.id;
     const stateLabel=!client.installed?'설치 필요':['signed_out','expired'].includes(connection?.status)?'로그인 필요':registration?.registration==='registered'?'MCP 등록됨':registration?.registration==='conflict'?'설정 검토 필요':'MCP 등록 필요',tone=!client.installed?'idle':registration?.registration==='registered'&&!['signed_out','expired'].includes(connection?.status)?'ok':registration?.registration==='conflict'?'err':'warn';
     const row=clientRow(client.label,stateLabel,tone,client.id),actions=row.querySelector('.cact');card.append(row);
-    // Grok Build does not take Works; signed in, it is a tool package every Work's AI may call (owner 2026-10-14).
-    if(client.id==='grok'){const tools=document.createElement('p');tools.className='tools';tools.textContent=localized('업무를 맡는 앱이 아니라 도구 패키지예요. 로그인해 두면 모든 업무의 AI가 X 검색, 이미지 생성, 영상 생성에 씁니다.','Not an app that takes Works: a tool package. Signed in, every Work’s AI uses it for X search, image generation and video.');card.append(tools);}
+    // Grok Build does not take Works; signed in, every Work's AI may call it for X research (owner 2026-10-14; pictures stay with the apps' own tools).
+    if(client.id==='grok'){const tools=document.createElement('p');tools.className='tools';tools.textContent=localized('업무를 맡는 앱이 아니라 도구예요. 로그인해 두면 모든 업무의 AI가 X 검색(게시물·작성자·스레드)에 씁니다.','Not an app that takes Works: a tool. Signed in, every Work’s AI uses it for X research (posts, authors, threads).');card.append(tools);}
     const flow=document.createElement('div');flow.className='device';flow.hidden=true;flow.id='agent-flow-'+client.id;card.append(flow);
     if(!client.installed){
       if(client.managed_install){const install=document.createElement('button');install.textContent='설치';install.setAttribute('aria-label',client.label+' 설치');install.onclick=()=>installAction(client.id,install);actions.append(install);}

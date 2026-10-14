@@ -39,7 +39,7 @@ Agent Driver는 로그인 child process의 bounded 상태만 추적한다. devic
 | OpenCode | `opencode auth list --format json` | `run --format json`, 임시 프로젝트의 모든 permission deny | OpenCode에 연결된 API/OAuth 공급자와 선택 모델 사용 |
 | Cursor Agent | 현재 검증된 명령 없음 | 미지원 | 설치된 공식 status/login 계약을 확인하기 전에는 추측 실행하지 않음 |
 | Hermes | `hermes proxy status` | Agent Driver MCP sampling | proxy OAuth 상태는 진단만 하며 auth store를 읽지 않음 |
-| Grok Build | `grok models` | 미지원 (판단 어댑터 아님) | Grok 구독 로그인. 업무 AI가 쓰는 도구 패키지: X 검색(x_keyword_search 등)·이미지·영상 생성. 로그인은 `grok login --device-auth` / `--oauth` |
+| Grok Build | `grok models` | 미지원 (판단 어댑터 아님) | Grok 구독 로그인. 업무 AI가 X 조사(x_keyword_search 등)에 쓰는 도구. 그림·영상은 각 앱의 도구가 맡는다. 로그인은 `grok login --device-auth` / `--oauth` |
 
 native CLI bridge는 Agent Driver가 실제로 실행되는 **같은 OS의 client**만 자동 감지한다.
 
