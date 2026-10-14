@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,rmSync,unlinkSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {basename,delimiter,dirname,extname,isAbsolute,join,relative} from 'node:path';
 import {type PackStore} from '../packs/store.js';
@@ -13,6 +13,7 @@ import {ownerMcpEnabled,windowsClientServers,mcpServerAnswers,type ClientRunMcpS
 import {ownerEnvironmentContext} from '../integrations/client-environment.js';
 import {mediaExecutorBrief} from './media-executor.js';
 import {grokToolsBrief} from './grok-tools.js';
+import {SESSION_ROTATE_AT,sessionContextUse} from './client-session-budget.js';
 import {executionRecord,workActivity,type WorkActivityMetadata} from './activity.js';
 import {workClientChoiceSchema,type WorkClientChoice} from './contracts.js';
 import {type ModelSettings} from '../onboarding/model-settings.js';
@@ -328,7 +329,7 @@ const importedPlan=(input:Pick<ClientRunInput,'plan'>)=>input.plan&&input.plan.s
   ?[`The owner's own automation, as imported into Office. Follow its steps with the files, commands and tools they name (Windows paths are reachable from here under /mnt/<drive>/…):\n${input.plan.steps.map(step=>`- ${step.id} (${step.effect}): ${step.goal}${step.tool_hints.length?`\n  uses: ${step.tool_hints.join(' | ')}`:''}`).join('\n')}`]:[];
 /** The owner's instruction file for this client on the Windows side; the local one the client loads itself. */
 const windowsInstructions=(client:RunClient)=>(ownerEnvironmentContext().owner_environment?.instructions??[]).filter(item=>item.app===client&&item.file.endsWith('(Windows)'));
-function initialPrompt(input:ClientRunInput,vault=input.vault){
+function initialPrompt(input:ClientRunInput){
   return [`Agent Office hands you this Work. Do it yourself, with your own tools, skills and settings, until the result is finished.`,
     `Work folder: ${input.folder}. It is your working directory for this run. Save every deliverable here as files (images, documents, data). Folders of this Work's earlier runs, if any, are next to it.`,
     `Also save DELIVERY.md in the Work folder: the message the owner receives (in the app, Telegram or chat), in the language of the request. Put only the content the request asks for, laid out for reading (for example each case's explanation under its heading); no file lists, no notes about conditions, process or checks. Office sends that text together with the pictures you made. When a repeated run has nothing new for the owner, leave DELIVERY.md empty: Office then sends nothing and keeps the run in the Work's history only.`,
@@ -337,7 +338,7 @@ function initialPrompt(input:ClientRunInput,vault=input.vault){
     `Keep the Work folder lean: do not pack files that are already there into another archive, and keep page captures and raw collections only while the run needs them. Office clears older runs' working files and keeps delivered text, pictures, media, PDF, CARD.json, RECORDS.json and app files; state a later run must read belongs beside the run folders, not inside an old one.`,
     ...(mediaExecutorBrief()?[mediaExecutorBrief()!]:[]),
     ...(grokToolsBrief()?[grokToolsBrief()!]:[]),
-    ...(vault?[vault]:[]),
+    ...(input.vault?[input.vault]:[]),
     `Request from the owner:\n${input.prompt}`,
     ...importedPlan(input),
     // Live (2026-10-06): a scheduled run read an earlier run's cleanup direction ("delete yesterday's set in this folder") as
@@ -377,7 +378,11 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   const {client,work_id,run_id}=input,latest=input.directions.at(-1)?.created_at??null;
   // Owner direction 2026-10-08: a recurring Work keeps one conversation. Its next run continues the session the previous
   // run ended with (Claude answers a resume from another folder under a new ID, which onSession then keeps).
-  const carried=input.previous_session??null;
+  let carried=input.previous_session??null;
+  // A conversation past half its window is not continued (owner 2026-10-14): the next run starts a new one with the full
+  // instruction, so nothing the Work depends on is lost to compaction. A run resuming its own checkpoint keeps its session.
+  if(carried&&input.checkpoint?.client_session?.client!==client){const use=sessionContextUse(client,carried);
+    if(use&&use.input_tokens>=use.window*SESSION_ROTATE_AT){input.activity('supervisor.client_run',`${clientName(client)} · 지난 대화가 컨텍스트 창의 ${Math.round(100*use.input_tokens/use.window)}%를 채워 새 대화로 시작합니다.`,{run_id,stage_id:'execution',model_provider:client,executor:client,status:'running'});carried=null;}}
   // A run saved on the other client before the owner changed it starts over on this one (its session is not this app's).
   let cp:WorkClientCheckpoint=input.checkpoint?.client_session?.client===client?input.checkpoint:{format:1,work_id,run_id,binding:hashJson({work_id,run_id,client}),turn:0,pending:null,observations:[],summary:'',
     client_session:{client,session_id:carried??(client==='claude'?randomUUID():null),confirmed:Boolean(carried),started_ms:Date.now(),finished:false,direction_at:latest,repairs:0,...(carried?{carried:true}:{})}};
@@ -387,16 +392,22 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
   // A new direction starts a new round of corrections, and so does the owner's resume or retry after they ran out.
   if(session().repairs&&(fresh.length||input.resumed&&session().repairs>=WORK_COMPLETION_REPAIR_BUDGET))update({repairs:0});
   const newRun=()=>`This is a new run of the same Work. This session did its earlier runs; continue from what you know, but this run's folder is ${input.folder}: work there and leave this run's files there. Files of earlier runs are in their own folders and are not this run's result. The full instruction for this run follows.\n\n`;
-  // The vault goes to a conversation once (owner 2026-10-14: reading it must not fill the context). A run that continues
-  // the previous run's session gets it again only when the notes changed since.
-  const vaultSent=join(dirname(input.folder),'.office-vault-sent'),vaultDigest=input.vault?hashJson(input.vault):null;
-  const vaultForRun=()=>{if(!input.vault||!session().carried)return input.vault;try{if(readFileSync(vaultSent,'utf8').trim()===vaultDigest)return 'Office vault: unchanged since your earlier runs in this conversation; follow it as before (runtime_vault_list reads it again if needed).';}catch{/* first time */}return input.vault;};
-  const noteVaultSent=()=>{if(vaultDigest)try{mkdirSync(dirname(vaultSent),{recursive:true});writeFileSync(vaultSent,vaultDigest+'\n');}catch{/* the next run sends it again */}};
+  // A run that continues the previous run's conversation gets a short prompt when the instruction it already holds is
+  // unchanged (owner 2026-10-14: the full instruction, 12K characters of directions for one Work, went in again every hour).
+  // Anything changed (request, directions, conditions, vault, tool notes), or a previous run that did not end verified,
+  // sends the full instruction again: the record of what was sent is removed when a run starts and written only on success.
+  const promptSent=join(dirname(input.folder),'.office-prompt-sent'),instructionDigest=hashJson(initialPrompt({...input,folder:'(run folder)',context:{}}));
+  const sameInstruction=()=>{try{return readFileSync(promptSent,'utf8').trim()===instructionDigest;}catch{return false;}};
+  const shortRun=()=>[`This is a new run of the same Work in this conversation. This run's folder is ${input.folder}: work there and leave this run's files there; earlier runs' folders are not this run's result.`,
+    `The request, the owner's directions, the Office vault and tool notes, and how to write DELIVERY.md, CARD.json, RECORDS.json and ${COMPLETION_FILE} are unchanged since the full instruction earlier in this conversation: follow them as before.`,
+    ...(Object.keys(input.context).length?[`What Office settled for this run:\n${JSON.stringify(input.context,null,1)}`]:[]),
+    `Completion conditions Office will check against the files you leave and your final reply:\n${input.checks.map(check=>`- ${check.id}: ${check.result}`).join('\n')}`].join('\n\n');
+  const verifiedRun=<T,>(result:T)=>{try{mkdirSync(dirname(promptSent),{recursive:true});writeFileSync(promptSent,instructionDigest+'\n');}catch{/* the next run sends the full instruction */}return result;};
   let next:string|null=!session().confirmed?initialPrompt(input)
-    :session().carried?newRun()+initialPrompt(input,vaultForRun())
+    :session().carried?(sameInstruction()?shortRun():newRun()+initialPrompt(input))
     :fresh.length?`The owner changed the instruction for this Work:\n${fresh.map(item=>`- ${item.instruction}`).join('\n')}\n\nContinue in the same folder with this change. Office passed it on as it is and did not change the Work. Where it changes what a completion condition asks, follow the direction and say so in that condition's note. Update DELIVERY.md, write ${COMPLETION_FILE} again, and finish with the same kind of short reply.`
     :!session().finished?'The run was interrupted. Continue the Work where you stopped, in the same folder, and finish with the short reply.':null;
-  if(next&&(!session().confirmed||session().carried))noteVaultSent();
+  if(next&&(!session().confirmed||session().carried))try{unlinkSync(promptSent);}catch{/* none yet */}
   const meta=(extra:WorkActivityMetadata={}):WorkActivityMetadata=>({run_id,stage_id:'execution',model_provider:client,executor:client,...extra});
   // The owner's Windows-side servers are looked at only when the client actually runs.
   // A turn that left no completion report (one from before reports existed, or a resume with nothing new) is asked for it once.
@@ -506,7 +517,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
         next=`Your ${COMPLETION_FILE} reports these conditions as not met: ${missing.map(item=>`${item.id}${item.note?` (${item.note})`:''}`).join('; ')}.\n\nDo not stop at a blocked means. If a tool, a browser or a connection failed, switch to the next one you have (the owner's browser, then a headless browser such as Playwright, then a plain HTTPS fetch of the page or feed) and finish the Work in the same folder. Do not repeat a send or submission that already happened. A condition only the owner can unblock (a sign-in, a payment, a decision) stays unmet: say in its note exactly what they need to do. Update DELIVERY.md, write ${COMPLETION_FILE} again and finish with the short reply.\n\n${officeOwns(input)}`;
         continue;
       }
-      return report.met?{status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})}
+      return report.met?verifiedRun({status:'succeeded' as const,summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})})
         :{status:'awaiting_review',summary:cp.summary,reason:'WORK_CLIENT_REPORTED_INCOMPLETE',completion_verified:false,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})};
     }
     let verified:Awaited<ReturnType<Verify>>;
@@ -517,7 +528,7 @@ export async function executeClientRun(input:ClientRunInput):Promise<WorkClientR
       // The client's result is saved: a verifier that is briefly unavailable is waited for (with backoff), never a failed run.
       return {status:reason==='CLIENT_AUTH_EXPIRED'?'waiting_auth':['CLIENT_QUOTA_EXHAUSTED','CLIENT_RATE_LIMITED','STRUCTURED_MODEL_UNAVAILABLE','STRUCTURED_MODEL_TIMEOUT','CLIENT_TIMEOUT','MODEL_PROVIDER_UNAVAILABLE'].includes(reason)?'waiting_model':'retryable_failure',summary:cp.summary,reason,completion_verified:false,checkpoint:cp,model_calls:[]};
     }
-    if(verified===true)return {status:'succeeded',summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})};
+    if(verified===true)return verifiedRun({status:'succeeded' as const,summary:cp.summary,reason:null,completion_verified:true,checkpoint:cp,model_calls:[],...(deliveryText?{delivery_text:deliveryText}:{}),...(quiet?{quiet:true}:{})});
     if(verified&&typeof verified==='object'&&session().repairs<WORK_COMPLETION_REPAIR_BUDGET){
       const check=input.checks.find(item=>item.id===verified.repair.check_id);
       update({repairs:session().repairs+1});
