@@ -378,3 +378,22 @@ test('runtime unit a run proposes a schedule with SCHEDULE.json; the feed shows 
  await writeFile(join(run2,'SCHEDULE.json'),'{"definition":{"kind":"interval","seconds":5},"reason":"너무 짧음"}');assert.equal(ingestScheduleProposal(x.store,project,x.work.work_id,'run-c',run2),null,'an invalid schedule is ignored');
  assert.equal(scheduleWords(null),'반복 끔');assert.equal(scheduleWords({kind:'weekly',timezone:'UTC',weekdays:[1,3],hour:8,minute:30,also_at:[{hour:21,minute:0}]}),'매주 월·수 08:30·21:00');
 });
+
+// Owner 2026-10-14: an old condition about Office's own settings leaves the Work and is never handed to a run.
+test('runtime unit stale schedule and delivery-target conditions are removed from a Work as a new revision',async t=>{
+  const {removeOfficeSettingChecks,isOfficeSettingCheck,workChecks}=await import('../dist/work/office-checks.js'),{WorkSchedules}=await import('../dist/work/schedule.js');
+  const x=await setup(t),project=x.config.project.id,db=x.store.hermesState;
+  const keep={id:'saved_result',result:'결과 파일이 저장되고 읽혀 확인된다.',evidence:'readback'};
+  const stale=[{id:'daily_schedule',result:'이 Work의 매일 한 번 반복 일정이 활성 상태로 설정되어 있다.',evidence:'schedule'},{id:'telegram_target',result:'사용자가 지정한 텔레그램 개인 채팅이 이 Work의 호스트 관리 결과 전달 대상으로 설정되어 있다.',evidence:'delivery'}];
+  for(const check of stale)assert.ok(isOfficeSettingCheck(check),check.id);
+  for(const check of [keep,{id:'daily_digest',result:'매일 새 글을 최대 6개 정리해 저장한다.'},{id:'window',result:'실행일의 게시물만 선정한다.'}])assert.equal(isOfficeSettingCheck(check),false,check.id);
+  const work=x.store.intakeWork(project,x.work.work_id),spec={...work.spec,completion_checks:[keep,...stale]};
+  db.prepare('UPDATE office_intake SET spec=? WHERE project_id=? AND work_id=?').run(JSON.stringify(spec),project,x.work.work_id);
+  new WorkSchedules(x.store,project).setByOwner(x.work.work_id,work.revision,{kind:'interval',timezone:'Asia/Seoul',seconds:3600});
+  assert.deepEqual(removeOfficeSettingChecks(x.store,project,x.work.work_id),['daily_schedule','telegram_target']);
+  const after=x.store.intakeWork(project,x.work.work_id);assert.equal(after.revision,work.revision+1);assert.deepEqual(after.spec.completion_checks.map(c=>c.id),['saved_result']);
+  assert.equal(db.prepare("SELECT kind FROM office_work_revision WHERE work_id=? AND revision=?").get(x.work.work_id,after.revision).kind,'conditions_updated');
+  assert.equal(new WorkSchedules(x.store,project).status(x.work.work_id).enabled,true,'the schedule keeps running at the new revision');
+  assert.equal(removeOfficeSettingChecks(x.store,project,x.work.work_id),null,'nothing left to remove');
+  assert.deepEqual(workChecks([keep,...stale]).map(c=>c.id),['saved_result'],'a run never receives them');
+});
