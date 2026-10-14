@@ -13,8 +13,9 @@ computer.
   directions name (a keyword of up to three letters, such as `X`, matches as a whole word). Kept small so reading it does
   not fill the AI's context: boundaries first, then the notes the Work names, then general ones, within about 1,500
   characters; the rest is one line pointing at `runtime_vault_list`. A recurring Work that continues the same
-  conversation gets the vault once, and again only when the notes changed. The Work's own request and directions win
-  where they differ.
+  conversation gets the full instruction (vault included) once; later runs get a short prompt while nothing changed
+  (see [Recurring conversations](#recurring-conversations)). The Work's own request and directions win where they
+  differ.
 - **Who writes**: the owner on the Memory page (add, edit, retire, restore, delete), or with **Apply to every Work · keep in
   Memory** when sending a direction to a Work. A run may save `VAULT.json` (up to five proposals); they appear on the
   Memory page and as one feed post (**Open in Memory** goes to them), and apply only after the owner approves them, as they are or edited. A run reads the web, so what it
@@ -31,3 +32,20 @@ needs one, the run saves `SCHEDULE.json` (`{"definition": {"kind":"interval","se
 Office posts it in the feed with **Apply schedule** and **Keep as is**; the Work's time zone is kept, a newer proposal
 replaces a pending one, and one equal to the current schedule is ignored. A cadence the owner writes in a direction
 ("1시간마다", "every 2 hours") is applied at once, as from the schedule editor.
+
+## Recurring conversations
+
+A recurring Work continues the conversation its previous run ended with, so the AI keeps what it learned. To keep that
+conversation small:
+
+- **Short prompt while nothing changed.** The first run of a conversation gets the full instruction (request,
+  directions, completion conditions, vault, tool notes). Later runs get a short prompt: this run's folder, what Office
+  settled for this run (collection window, schedule), the completion conditions, and "the rest is unchanged".
+- **Full instruction again when anything changed.** Office keeps a digest of the instruction it sent beside the run
+  folders. A new direction, a changed condition, vault note or tool note, or a previous run that did not end verified
+  (the digest is removed when a run starts and written only on a verified result) sends the full instruction again.
+- **A new conversation past half the window.** Before continuing, Office reads the client's own session file (Codex
+  `sessions/…/rollout-…-<id>.jsonl`, Claude Code `projects/<folder>/<id>.jsonl`). When the last turn used half the
+  context window or more, the run starts a new conversation with the full instruction, so nothing the Work depends on
+  is lost to compaction. An unreadable file keeps the conversation; a conversation the client cannot find or that ran
+  out of context starts over as before.

@@ -444,7 +444,9 @@ test('runtime fixture the next run of a recurring Codex Work resumes the thread 
   const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded',JSON.stringify(second));
   const run=x.runs.at(-1),folder=join(workFolder(x.config,x.work.work_id),second.run_id);
   assert.deepEqual([run.args[1],run.args.slice(-6)],[folder,['exec','resume','--json','--skip-git-repo-check',thread,'-']]);
-  assert.match(run.stdin,/^This is a new run of the same Work\. This session did its earlier runs/u);
+  // The instruction is unchanged since the verified first run, so the continued conversation gets the short prompt.
+  assert.match(run.stdin,/^This is a new run of the same Work in this conversation\./u);assert.doesNotMatch(run.stdin,/Agent Office hands you this Work/u);
+  assert.match(run.stdin,/Completion conditions Office will check/u,'the conditions are repeated');
   assert.ok(run.stdin.includes(folder));
   assert.ok(activity(x).some(row=>row.summary.includes('지난 회차의 세션을 이어서 실행합니다')&&row.metadata.run_id===second.run_id));
 });
@@ -501,22 +503,46 @@ test('runtime fixture the owner moves a Work to the other client between runs; t
   assert.ok(activity(x).some(row=>row.kind==='client_changed'&&row.summary==='client_changed · Claude Code · opus · high'));
 });
 
-// Owner 2026-10-14: reading the vault must not fill the AI's context. A continued conversation gets it once, then only on change.
-test('runtime fixture a recurring Work sends the Office vault once per conversation',async t=>{
+// Owner 2026-10-14: a continued conversation gets the full instruction once, then a short prompt while nothing changed.
+test('runtime fixture a recurring Work sends the full instruction once per conversation and a short prompt after',async t=>{
   const {Vault}=await import('../dist/work/vault.js');
   const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)});Vault.fromConfig(x.config).save({layer:'boundary',text:'게시는 소유자가 시킨 경우에만 한다.'});
   x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
   const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
-  assert.match(x.runs.at(-1).stdin,/The owner's Office vault[\s\S]*게시는 소유자가 시킨 경우에만 한다/u);
+  assert.match(x.runs.at(-1).stdin,/Agent Office hands you this Work[\s\S]*The owner's Office vault[\s\S]*게시는 소유자가 시킨 경우에만 한다/u);
   const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
-  assert.match(x.runs.at(-1).stdin,/Office vault: unchanged since your earlier runs/u);assert.doesNotMatch(x.runs.at(-1).stdin,/게시는 소유자가 시킨 경우에만 한다/u);
+  assert.match(x.runs.at(-1).stdin,/^This is a new run of the same Work in this conversation/u);assert.doesNotMatch(x.runs.at(-1).stdin,/게시는 소유자가 시킨 경우에만 한다/u);
+  assert.ok(x.runs.at(-1).stdin.length<3000,String(x.runs.at(-1).stdin.length));
 });
-test('runtime fixture a continued conversation gets the vault again when the notes changed',async t=>{
+test('runtime fixture a changed instruction sends the full instruction again',async t=>{
   const {Vault}=await import('../dist/work/vault.js');
   const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)}),vault=Vault.fromConfig(x.config);vault.save({layer:'boundary',text:'게시는 소유자가 시킨 경우에만 한다.'});
   x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
   const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
   vault.save({layer:'quality',text:'새로 보낼 것이 없으면 아무것도 보내지 않는다.'});
   const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
-  assert.match(x.runs.at(-1).stdin,/새로 보낼 것이 없으면 아무것도 보내지 않는다/u);assert.doesNotMatch(x.runs.at(-1).stdin,/unchanged since your earlier runs/u);
+  assert.match(x.runs.at(-1).stdin,/^This is a new run of the same Work\. This session did its earlier runs[\s\S]*새로 보낼 것이 없으면 아무것도 보내지 않는다/u,'a changed vault sends it all again');
+});
+test('runtime fixture without a verified record of what was sent, the next run gets the full instruction again',async t=>{
+  const {rm}=await import('node:fs/promises');
+  const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
+  await rm(join(workFolder(x.config,x.work.work_id),'.office-prompt-sent'));
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
+  assert.match(x.runs.at(-1).stdin,/Agent Office hands you this Work/u);
+});
+// A conversation past half its window starts over with the full instruction instead of being compacted.
+test('runtime fixture a conversation past half its context window is not continued',async t=>{
+  const {mkdir,writeFile}=await import('node:fs/promises');
+  const home=join(tmpdir(),'office-codex-home-'+Date.now()),before=process.env.CODEX_HOME;process.env.CODEX_HOME=home;
+  t.after(async()=>{if(before===undefined)delete process.env.CODEX_HOME;else process.env.CODEX_HOME=before;await rm(home,{recursive:true,force:true});});
+  const x=await setup(t,{proposal:recurring,client:request=>codexTurn(request)});
+  x.supervisor.start(x.work.work_id,x.work.revision,true,'Asia/Seoul',false);x.supervisor.activate();x.supervisor.tick();
+  const first=await settle(x);assert.equal(first.state,'succeeded',JSON.stringify(first));
+  const day=join(home,'sessions','2026','10','14');await mkdir(day,{recursive:true});
+  await writeFile(join(day,`rollout-2026-10-14T00-00-00-${thread}.jsonl`),JSON.stringify({type:'event_msg',payload:{type:'token_count',info:{last_token_usage:{input_tokens:300000},model_context_window:475000}}})+'\n');
+  const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
+  const run=x.runs.at(-1);assert.ok(!run.args.includes('resume'),JSON.stringify(run.args.slice(-6)));assert.match(run.stdin,/^Agent Office hands you this Work/u);
+  assert.ok(activity(x).some(row=>row.summary.includes('컨텍스트 창의 63%를 채워 새 대화로 시작합니다')));
 });
