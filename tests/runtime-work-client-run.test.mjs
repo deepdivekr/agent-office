@@ -513,6 +513,8 @@ test('runtime fixture a recurring Work sends the full instruction once per conve
   const second=await nextRun(x,first.run_id);assert.equal(second.state,'succeeded');
   assert.match(x.runs.at(-1).stdin,/^This is a new run of the same Work in this conversation/u);assert.doesNotMatch(x.runs.at(-1).stdin,/게시는 소유자가 시킨 경우에만 한다/u);
   assert.ok(x.runs.at(-1).stdin.length<3000,String(x.runs.at(-1).stdin.length));
+  // Live 2026-10-14: an old 'schedule is active' condition is Office's, in the full and the short prompt alike.
+  for(const run of x.runs.slice(-2))assert.match(run.stdin,/mark it met with the note "Office runs the schedule and delivery", and do not save SCHEDULE\.json for it/u);
 });
 test('runtime fixture a changed instruction sends the full instruction again',async t=>{
   const {Vault}=await import('../dist/work/vault.js');
