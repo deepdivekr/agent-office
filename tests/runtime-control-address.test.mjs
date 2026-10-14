@@ -55,6 +55,10 @@ test('runtime native the short host moves the capability into a host-only cookie
   assert.equal((await send(base+'settings/status',{host:short,headers:withCookie})).status,200);
   assert.equal((await send(base,{host:short,headers:{accept:'text/html',...withCookie}})).status,200,'the board is the root of the short address');
   assert.equal((await send(base+'settings/status',{host:short})).status,404,'no cookie, no capability path: nothing');
+  // Owner 2026-10-14: a browser that has not signed in gets a page that says why and how, without any token.
+  const help=await send(base,{host:short,headers:{accept:'text/html'}});assert.equal(help.status,404);
+  assert.match(help.text,/이 브라우저는 아직 Office에 로그인하지 않았어요[\s\S]*agent-office connect[\s\S]*This browser has not signed in to Office yet/u);assert.doesNotMatch(help.text,new RegExp(x.token,'u'));
+  assert.match((await send(base,{host:short})).text,/has not signed in to Office yet/u,'a script gets one plain line');
   assert.equal((await send(base+'settings/status',{host:short,headers:{cookie:`${x.cookieName}=${'0'.repeat(48)}`}})).status,404);
   assert.equal((await send(base+'settings/status',{headers:withCookie})).status,404,'the cookie is honoured on the short host only');
   const api=await send(x.server.url+'settings/status',{host:short,headers:{accept:'application/json'}});
@@ -110,7 +114,8 @@ test('runtime native the app icon is served behind the capability like the font,
 test('connect tells a person where to open Office: the short address here and, with Tailscale, a QR code and the phone address to scan or copy',async()=>{
   const {connectSummaryText}=await import('../dist/onboarding/cli.js');
   const phone='https://office-pc.tail0000.ts.net:4600/'+'a'.repeat(48)+'/';
-  const text=connectSummaryText({address:'http://office.localhost:4600/',tailnet_urls:[phone],connection:'connected',mcp_command:'agent-office mcp'});
+  const text=connectSummaryText({address:'http://office.localhost:4600/',sign_in_url:'http://office.localhost:4600/'+'a'.repeat(48)+'/',tailnet_urls:[phone],connection:'connected',mcp_command:'agent-office mcp'});
+  assert.ok(text.includes('http://office.localhost:4600/'+'a'.repeat(48)+'/'),'the sign-in address for another browser is printed');
   const lines=text.split('\n');
   assert.ok(lines.includes('  http://office.localhost:4600/'));assert.ok(lines.includes('  '+phone),'the phone address stands alone on its line, easy to select');
   assert.ok(lines.filter(line=>/[▀▄█]/u.test(line)).length>=10,'a QR code to scan with the phone camera');
