@@ -428,6 +428,18 @@ test('runtime fixture the result is what the latest turn made; older files in th
   assert.ok(labels.includes('today.png'),JSON.stringify(labels));assert.ok(!labels.includes('case-1.png'),'the first turn\'s picture is not part of this result');
 });
 
+test('runtime fixture a file DELIVERY.md links to is handed over even when an earlier turn made it',async t=>{
+  // Live 2026-10-15: asked to hand over a finished video, a turn wrote only DELIVERY.md and the unchanged video stayed out of the result.
+  const x=await setup(t,{client:(request,turn)=>{if(turn===2){writeFileSync(join(request.cwd,'DELIVERY.md'),'완성 영상입니다.\n\n![영상](case-1.png)\n');for(const event of [{type:'item.completed',item:{id:'i9',type:'agent_message',text:'DELIVERY.md 에 담았습니다.'}},{type:'turn.completed'}])request.onStdout(JSON.stringify(event)+'\n');return {code:0,stdout:'',stderr:''};}return codexTurn(request);}});
+  x.supervisor.start(x.work.work_id,x.work.revision,true);x.supervisor.activate();x.supervisor.tick();await settle(x);
+  await delay(1100);
+  x.supervisor.action({work_id:x.work.work_id,revision:x.store.intakeWork(x.config.project.id,x.work.work_id).revision,action:'edit',instruction:'만든 것을 그대로 넘겨 줘'});
+  x.supervisor.action({work_id:x.work.work_id,revision:x.store.intakeWork(x.config.project.id,x.work.work_id).revision,action:'resume'});x.supervisor.tick();
+  const end=await settle(x);assert.equal(end.state,'succeeded',JSON.stringify(end));
+  const results=await new WorkResults(x.store).capture(x.config.project.id,x.work.work_id),labels=results[0].artifacts.map(item=>item.label);
+  assert.ok(labels.includes('case-1.png'),JSON.stringify(labels));assert.ok(labels.includes('DELIVERY.md'),JSON.stringify(labels));
+});
+
 // Owner direction 2026-10-08: Claude or Codex, a recurring Work keeps one conversation across its runs.
 // The next run of a recurring Work comes from its schedule: make the slot due and let the supervisor start it.
 let slots=0;

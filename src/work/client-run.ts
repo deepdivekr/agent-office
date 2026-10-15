@@ -369,7 +369,12 @@ function initialPrompt(input:ClientRunInput){
  * of yesterday's cases gave the owner three of today's pictures). A file unpacked with an old timestamp is still new by
  * name. A turn that wrote nothing (a check) keeps every file. */
 const fileKey=(file:ProducedFile)=>`${file.name}\0${file.bytes}\0${file.modified_ms}`;
-const turnFiles=(files:ProducedFile[],before:Set<string>)=>{const made=files.filter(file=>!before.has(fileKey(file))&&file.name!=='COMPLETION.json');return made.length?made:files;};
+// A file DELIVERY.md links to is part of what this turn hands over even when an earlier turn made it (live 2026-10-15: a
+// turn asked to hand over a finished video wrote only DELIVERY.md, and the unchanged video was left out of the result).
+const deliveryLinks=(files:ProducedFile[])=>{const delivery=files.find(file=>file.name==='DELIVERY.md'&&file.bytes<=65_536);if(!delivery)return new Set<string>();
+  let text='';try{text=readFileSync(delivery.path,'utf8');}catch{return new Set<string>();}
+  return new Set([...text.matchAll(/\]\(<?([^)>]+?)>?\)/gu)].map(match=>{const target=match[1]!.trim();try{return decodeURI(target);}catch{return target;}}).map(target=>target.replace(/^\.\//u,'')));};
+const turnFiles=(files:ProducedFile[],before:Set<string>)=>{const linked=deliveryLinks(files),made=files.filter(file=>(!before.has(fileKey(file))||linked.has(file.name))&&file.name!=='COMPLETION.json');return made.length?made:files;};
 /** The client's own completion report (owner decision 2026-10-04: a client run is complete when its client says each
  * condition is met; Office verifies independently only Works that send or submit outside). Written in the turn it reports. */
 const COMPLETION_FILE='COMPLETION.json';
