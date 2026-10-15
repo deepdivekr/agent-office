@@ -11,9 +11,9 @@
 
 ### What's new
 
+- **[v0.8.17](docs/releases/v0.8.17.md)** · Files DELIVERY.md links to are handed over
 - **[v0.8.16](docs/releases/v0.8.16.md)** · Videos play in the feed
 - **[v0.8.15](docs/releases/v0.8.15.md)** · A wider collection period for one recurring Work · Aside stays reachable
-- **[v0.8.14](docs/releases/v0.8.14.md)** · A clear sign-in page for a new browser
 
 [All releases](CHANGELOG.md)
 
@@ -93,7 +93,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.16/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.17/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
