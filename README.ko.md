@@ -9,9 +9,9 @@
 
 ### 새로 나온 기능
 
+- **[v0.8.15](docs/releases/v0.8.15.md)** · 반복 수집 업무별 수집 범위 설정 · Aside 연결 끊김 수정
 - **[v0.8.14](docs/releases/v0.8.14.md)** · 새 브라우저 로그인 안내
 - **[v0.8.13](docs/releases/v0.8.13.md)** · 낡은 일정 조건은 업무에서 제거
-- **[v0.8.12](docs/releases/v0.8.12.md)** · 일정·전달 조건은 Office가 확인
 
 [전체 변경 이력](CHANGELOG.md)
 
@@ -92,7 +92,7 @@ AI 앱에 일을 맡길수록 결과는 흩어집니다. 아침 브리핑은 텔
 직접 설치하려면 **Ubuntu 또는 WSL Ubuntu 터미널**에서 실행합니다. 어느 폴더에서 실행해도 됩니다.
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.14/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.15/install.sh | bash'
 ```
 
 설치 전에 [스크립트](install.sh)를 확인할 수 있습니다.
