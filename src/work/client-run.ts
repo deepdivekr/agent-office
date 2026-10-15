@@ -1,8 +1,9 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,rmSync,unlinkSync,writeFileSync} from 'node:fs';
+import {closeSync,existsSync,lstatSync,mkdirSync,openSync,readSync,readdirSync,readFileSync,rmSync,unlinkSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {basename,delimiter,dirname,extname,isAbsolute,join,relative} from 'node:path';
 import {type PackStore} from '../packs/store.js';
+import {artifactKind} from './artifact-kind.js';
 import {type HostConfig} from '../interface/config.js';
 import {hashJson} from '../taskpack/adaptive-spec.js';
 import {isOfficeMcpName} from '../onboarding/profile.js';
@@ -224,7 +225,15 @@ export async function runClient(request:{client:RunClient;model:string|null;effo
 const mediaTypes:Record<string,string>={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.svg':'image/svg+xml','.pdf':'application/pdf','.md':'text/markdown','.txt':'text/plain','.csv':'text/csv','.json':'application/json','.html':'text/html','.mp4':'video/mp4','.mp3':'audio/mpeg','.zip':'application/zip','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation'};
 export interface ProducedFile {path:string;name:string;sha256:string|null;bytes:number;media_type:string;modified_ms:number;}
 // Office offers a result file for download up to 16 MB (WorkResults.readArtifact); a larger one stays in the run folder.
-const DOWNLOAD_BYTES=16*1024*1024;
+const DOWNLOAD_BYTES=16*1024*1024,MEDIA_BYTES=1024**3;
+// A video or sound the feed plays is often larger than other files (live 2026-10-15: a 35 MB Reel was left out of its
+// result, so the feed had nothing to play). It is hashed in pieces; the page streams it in ranges.
+const hashLimit=(name:string)=>['video','audio'].includes(artifactKind(name).kind)?MEDIA_BYTES:DOWNLOAD_BYTES;
+function sha256File(path:string){
+  const hash=createHash('sha256'),buffer=Buffer.alloc(8*1024*1024),fd=openSync(path,'r');
+  try{for(let read=readSync(fd,buffer,0,buffer.length,null);read>0;read=readSync(fd,buffer,0,buffer.length,null))hash.update(buffer.subarray(0,read));}finally{closeSync(fd);}
+  return hash.digest('hex');
+}
 /** The files in this run's own folder: what the run produced, whatever their timestamps (a downloaded or unpacked file
  * keeps its original one). Hidden folders are the client's own. */
 export function producedFiles(folder:string,hash=true):ProducedFile[]{
@@ -239,7 +248,7 @@ export function producedFiles(folder:string,hash=true):ProducedFile[]{
       if(entry.isDirectory()){if(depth<4)queue.push([path,depth+1]);continue;}
       if(!entry.isFile())continue;
       const stat=lstatSync(path);
-      found.push({path,name:relative(folder,path),modified_ms:stat.mtimeMs,sha256:hash&&stat.size<=DOWNLOAD_BYTES?createHash('sha256').update(readFileSync(path)).digest('hex'):null,bytes:stat.size,media_type:mediaTypes[extname(entry.name).toLowerCase()]??'application/octet-stream'});
+      found.push({path,name:relative(folder,path),modified_ms:stat.mtimeMs,sha256:hash&&stat.size<=hashLimit(entry.name)?sha256File(path):null,bytes:stat.size,media_type:mediaTypes[extname(entry.name).toLowerCase()]??'application/octet-stream'});
     }
   }
   return found;
