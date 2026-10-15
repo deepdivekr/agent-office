@@ -11,9 +11,9 @@
 
 ### What's new
 
+- **[v0.8.15](docs/releases/v0.8.15.md)** · A wider collection period for one recurring Work
 - **[v0.8.14](docs/releases/v0.8.14.md)** · A clear sign-in page for a new browser
 - **[v0.8.13](docs/releases/v0.8.13.md)** · Old schedule conditions leave the Work
-- **[v0.8.12](docs/releases/v0.8.12.md)** · Schedule and delivery conditions are Office's
 
 [All releases](CHANGELOG.md)
 
@@ -93,7 +93,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.14/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.15/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
