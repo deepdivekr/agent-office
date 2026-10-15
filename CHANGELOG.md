@@ -4,7 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
-| [v0.8.15](docs/releases/v0.8.15.md) | 2026-10-15 | The owner can widen one recurring collection from two days to 3, 7, 14 or 30 |
+| [v0.8.15](docs/releases/v0.8.15.md) | 2026-10-15 | The owner can widen one recurring collection from two days to 3, 7, 14 or 30; Aside stays reachable after the starting shell closes |
 | [v0.8.14](docs/releases/v0.8.14.md) | 2026-10-14 | The short address explains signing in a new browser; connect prints the sign-in address |
 | [v0.8.13](docs/releases/v0.8.13.md) | 2026-10-14 | Old completion conditions about the schedule or delivery target leave the Work and never reach a run |
 | [v0.8.12](docs/releases/v0.8.12.md) | 2026-10-14 | A Work's AI leaves schedule and delivery conditions to Office and does not propose a schedule to meet one |

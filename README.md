@@ -11,7 +11,7 @@
 
 ### What's new
 
-- **[v0.8.15](docs/releases/v0.8.15.md)** · A wider collection period for one recurring Work
+- **[v0.8.15](docs/releases/v0.8.15.md)** · A wider collection period for one recurring Work · Aside stays reachable
 - **[v0.8.14](docs/releases/v0.8.14.md)** · A clear sign-in page for a new browser
 - **[v0.8.13](docs/releases/v0.8.13.md)** · Old schedule conditions leave the Work
 

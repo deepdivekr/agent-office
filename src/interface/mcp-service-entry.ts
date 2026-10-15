@@ -5,6 +5,9 @@ import {fileURLToPath} from 'node:url';
 import {acquireMcpProcess,mcpOwner} from './mcp-process.js';
 import {startMcpService} from './mcp-service.js';
 import {mcpServiceVersion} from './mcp-service-manager.js';
+import {useDistroInterop} from '../onboarding/wsl-interop.js';
+// Windows programs start through the distro's interop socket, not the one of the shell that started this service.
+useDistroInterop();
 // A service process works for the owner of this computer: their standing AI instructions and skills come along.
 enableOwnerEnvironment();
 // The owner's own MCP servers may be used; they are first looked at when a delegated Work needs them.
