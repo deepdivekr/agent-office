@@ -235,15 +235,17 @@ test('runtime fixture a briefly unavailable verifier makes a finished client run
 test('runtime fixture every file of the run folder is its result: old timestamps count, large files are listed but not offered',async t=>{
   const x=await setup(t,{proposal:{...proposal,title:'가'.repeat(150)},client:request=>{
     writeFileSync(join(request.cwd,'unpacked.csv'),'a,b\n1,2\n');utimesSync(join(request.cwd,'unpacked.csv'),new Date('2020-01-01'),new Date('2020-01-01'));
-    writeFileSync(join(request.cwd,'video.mp4'),Buffer.alloc(17*1024*1024));
+    writeFileSync(join(request.cwd,'video.mp4'),Buffer.alloc(17*1024*1024));writeFileSync(join(request.cwd,'backup.zip'),Buffer.alloc(17*1024*1024));
     mkdirSync(join(request.cwd,'data'));for(let i=0;i<210;i++)writeFileSync(join(request.cwd,'data',`row-${String(i).padStart(3,'0')}.txt`),'x');writeFileSync(join(request.cwd,'report.pdf'),'%PDF-1.4');
     return codexTurn(request,{reply:'case-1.png 완료. token=abcdefghijklmnopqrstuvwxyz0123456789ABCDEF 사용'});
   }});
   x.supervisor.start(x.work.work_id,x.work.revision,true);x.supervisor.activate();x.supervisor.tick();
   const end=await settle(x);assert.equal(end.state,'succeeded',JSON.stringify(end));
   const [result]=await new WorkResults(x.store).capture(x.config.project.id,x.work.work_id);
-  const labels=result.artifacts.map(item=>item.label);assert.ok(labels.includes('unpacked.csv'));assert.ok(labels.includes('report.pdf'),'top-level files come before an unpacked folder');assert.equal(labels.includes('video.mp4'),false);
-  assert.match(result.text,/video\.mp4 \(video\/mp4, 17825792 bytes, too large to download from Office/u);
+  const labels=result.artifacts.map(item=>item.label);assert.ok(labels.includes('unpacked.csv'));assert.ok(labels.includes('report.pdf'),'top-level files come before an unpacked folder');assert.equal(labels.includes('backup.zip'),false);
+  // A video plays in the feed, so a large one is offered (owner 2026-10-15); another large file is only listed.
+  assert.ok(labels.includes('video.mp4'));
+  assert.match(result.text,/backup\.zip \(application\/zip, 17825792 bytes, too large to download from Office/u);
   assert.doesNotMatch(JSON.stringify([end.result.summary,result.summary,result.text]),/abcdefghijklmnopqrstuvwxyz0123456789ABCDEF/u);
 });
 
