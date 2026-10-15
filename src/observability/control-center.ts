@@ -19,6 +19,7 @@ import {BrowserConnections} from './browser-connections.js';
 import {VaultPage} from './vault-ui.js';
 import {decideScheduleProposal} from '../work/schedule-proposals.js';
 import {removeOfficeSettingChecks,removeOfficeSettingChecksEverywhere} from '../work/office-checks.js';
+import {setCollectionWindowDays} from '../work/collection-window.js';
 import {ControlSettings} from './control-settings.js';
 import {type ClientMaintenanceController} from '../onboarding/client-maintenance.js';
 import {authSites,blockedAuthSites} from '../swarm/browser-auth.js';
@@ -278,6 +279,14 @@ export async function startControlCenter(config:HostConfig,options:{port?:number
       try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>2048)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
         reply(response,200,JSON.stringify(decideScheduleProposal(store,config.project.id,JSON.parse(body))),'application/json; charset=utf-8');
       }catch(error){reply(response,409,JSON.stringify({error:requestError(error,'SCHEDULE_PROPOSAL_FAILED')}),'application/json; charset=utf-8');}return;
+    }
+    if(suffix==='work/collection-window'){
+      if(request.method!=='POST'){reply(response,405,'method not allowed');return;}
+      if(request.headers.origin!==`http://${requestHost}`||request.headers['x-agent-driver']!=='human-office'||request.headers['sec-fetch-site']==='cross-site'||!String(request.headers['content-type']??'').startsWith('application/json')){reply(response,403,'forbidden');return;}
+      try{let body='';for await(const chunk of request){body+=String(chunk);if(Buffer.byteLength(body)>8192)throw Error('WORK_REQUEST_TOO_LARGE');}if(rejectStopped())return;
+        const input=z.object({work_id:z.string().uuid(),days:z.number().int()}).strict().parse(JSON.parse(body));
+        reply(response,200,JSON.stringify({work_id:input.work_id,days:setCollectionWindowDays(store,config.project.id,input.work_id,input.days)}),'application/json; charset=utf-8');
+      }catch(error){reply(response,409,JSON.stringify({error:requestError(error,'WORK_COLLECTION_WINDOW_FAILED')}),'application/json; charset=utf-8');}return;
     }
     if(suffix==='work/schedule'){
       if(request.method!=='POST'){reply(response,405,'method not allowed');return;}

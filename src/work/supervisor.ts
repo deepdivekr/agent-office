@@ -40,6 +40,7 @@ import {assertCustomPackInvocation,customPackWorkBinding} from './custom-pack-re
 import {assertCustomPackScheduledRun} from './custom-pack-schedule.js';
 import {PACK_ENGINE_VERSION,type PackApprovalDispatcher} from '../packs/runtime.js';
 import {sealCollectionContract,readSealedCollectionContract,createCollectionCompletionResolver} from './collection-contract.js';
+import {collectionWindowDays} from './collection-window.js';
 
 const now=()=>new Date().toISOString();
 const activeStates=['queued','running','retry_wait'];
@@ -387,8 +388,10 @@ export class WorkSupervisor {
       // wider wording in the prompt (live: a result within the agreed two-day window was rejected for not covering
       // the seven days the prompt had named).
       const agreedAnswers=Object.entries(work.answers??{}).slice(0,4).map(([id,answer])=>{const question=(work.questions as Array<{id?:string;prompt?:string;options?:Array<{id?:string;label?:string;meaning?:string}>}>|null)?.find(item=>item.id===id),option=question?.options?.find(item=>item.id===answer);return safeControlText(`${question?.prompt??id} -> ${option?`${option.label}: ${option.meaning??''}`:String(answer)}`,500);});
-      const agreedScope=[...(spec.recurrence.kind==='recurring'?['Host rule the owner was told at intake: every run of this recurring collection covers only items published on the run date or the day before it. A longer period named in the prompt does not apply.']:[]),...agreedAnswers.map(item=>`Owner's answer at intake: ${item}`)].join(' ').slice(0,1900);
-      // A recurring collection takes the latest items only: published on the run date or the day before it.
+      const windowDays=collectionWindowDays(this.store,project,row.work_id);
+      const agreedScope=[...(spec.recurrence.kind==='recurring'?[windowDays===2?'Host rule the owner was told at intake: every run of this recurring collection covers only items published on the run date or the day before it. A longer period named in the prompt does not apply.':`Host rule the owner set for this recurring collection: every run covers only items published on the run date or the ${windowDays-1} days before it. A longer period named in the prompt does not apply.`]:[]),...agreedAnswers.map(item=>`Owner's answer at intake: ${item}`)].join(' ').slice(0,1900);
+      // A recurring collection takes the latest items only: published on the run date or the day before it, or within
+      // the wider window the owner set for this Work.
       const zone=row.timezone??Intl.DateTimeFormat().resolvedOptions().timeZone,day=(offset:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()-offset*86_400_000));
       // The owner pressed retry after this Work stopped for a sign-in: the earlier "not signed in" receipts in this run
       // are from before that, and only opening the pages again can tell (live: a retried Work answered from the old
@@ -396,7 +399,7 @@ export class WorkSupervisor {
       const lastAuthStop=this.store.hermesState.prepare("SELECT created_at FROM office_activity WHERE project_id=? AND work_id=? AND kind='supervisor.result' AND json_extract(metadata,'$.reason')='WORK_CLIENT_WAIT_AUTHENTICATION' ORDER BY id DESC LIMIT 1").get(project,row.work_id) as {created_at:string}|undefined;
       const lastRetry=lastAuthStop?this.store.hermesState.prepare("SELECT created_at FROM office_activity WHERE project_id=? AND work_id=? AND kind IN ('supervisor.retry','supervisor.resume') AND created_at>? ORDER BY id DESC LIMIT 1").get(project,row.work_id,lastAuthStop.created_at) as {created_at:string}|undefined:undefined;
       const signInRetry=lastRetry?{retried_at:lastRetry.created_at,instruction:'The owner retried this Work after it stopped for a sign-in. Receipts in this run that say a site was not signed in are from before the retry. Open those pages again before deciding; wait for a sign-in only if the page now shows a sign-in wall.'}:null;
-      const collectionWindow=spec.recurrence.kind==='recurring'?{run_date:day(0),earliest_published_date:day(1),timezone:zone,rule:'Include only items published on run_date or earliest_published_date. The date is the one the feed or list shows for the entry; an item whose own page shows no date keeps the entry\'s date. Leave an item out only when its entry or its own page shows an older date. Take the newest first.'}:null;
+      const collectionWindow=spec.recurrence.kind==='recurring'?{run_date:day(0),earliest_published_date:day(windowDays-1),timezone:zone,rule:(windowDays===2?'Include only items published on run_date or earliest_published_date.':'Include only items published from earliest_published_date through run_date.')+' The date is the one the feed or list shows for the entry; an item whose own page shows no date keeps the entry\'s date. Leave an item out only when its entry or its own page shows an older date. Take the newest first.'}:null;
       // The verifier judges dates by the same window the run was given (live: it refused entry dates the rule allows).
       const originalUserRequest={prompt:work.prompt,...userIntake,user_directions:directions,...(agreedScope?{agreed_scope:agreedScope}:{}),...(collectionWindow?{host_rule:`Collection window: run_date ${collectionWindow.run_date}, earliest_published_date ${collectionWindow.earliest_published_date}, timezone ${collectionWindow.timezone}. ${collectionWindow.rule}`}:{})};
       const saveCheckpoint=(cp:WorkClientCheckpoint|SupervisedSwarmCheckpoint)=>{checkpoint=cp;const encoded=JSON.stringify(cp);requireCondition(Buffer.byteLength(encoded)<=1_000_000,'WORK_CHECKPOINT_TOO_LARGE');db.prepare('UPDATE office_supervisor SET checkpoint=?,updated_at=? WHERE project_id=? AND run_id=? AND owner=?').run(encoded,now(),project,row.run_id,row.owner);};
