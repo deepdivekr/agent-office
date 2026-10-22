@@ -63,7 +63,7 @@ export async function verifyFiles(store: TerminalStore, config: HostConfig, sess
     // No fallback to the host: even the preflight runs under the exact namespace policy.
     requireCondition(!cancelled(), 'VERIFICATION_CANCELLED');
     const preflight = await runSandbox(snapshot, ['--eval', "process.stdout.write('apd-isolated:'+process.version)"], '', 5000, cancelled,config.resources);
-    if (preflight.reason || preflight.exit !== 0 || preflight.stdout !== 'apd-isolated:v22.22.0' || preflight.stderr !== '') observation = {status: 'BLOCKED_ENV', reason: preflight.reason ?? 'SANDBOX_PREFLIGHT_FAILED', checks: [], preflight, project_completed: false};
+    if (preflight.reason || preflight.exit !== 0 || preflight.stdout !== 'apd-isolated:'+process.version || preflight.stderr !== '') observation = {status: 'BLOCKED_ENV', reason: preflight.reason ?? 'SANDBOX_PREFLIGHT_FAILED', checks: [], preflight, project_completed: false};
     else {
       const checks = [];
       for (const item of verifier.cases) {

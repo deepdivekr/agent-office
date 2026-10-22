@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-readonly AGENT_DRIVER_NODE_VERSION="22.22.0"
+readonly AGENT_DRIVER_NODE_VERSION="22.23.4"
 readonly AGENT_DRIVER_NPM_VERSION="11.11.0"
 readonly DEFAULT_REPOSITORY="https://github.com/deepdivekr/agent-office.git"
 
@@ -17,7 +17,7 @@ need() { command -v "$1" >/dev/null 2>&1 || fail "$1 명령이 필요합니다."
 [[ -n "${HOME:-}" && "$HOME" == /* && "$HOME" != "/" ]] || fail "안전한 HOME 경로를 확인할 수 없습니다." "HOME is not a safe path."
 
 readonly REPOSITORY_URL="${AGENT_OFFICE_REPOSITORY_URL:-${AGENT_DRIVER_REPOSITORY_URL:-$DEFAULT_REPOSITORY}}"
-readonly REPOSITORY_REF="${AGENT_OFFICE_VERSION:-${AGENT_DRIVER_VERSION:-v0.8.17}}"
+readonly REPOSITORY_REF="${AGENT_OFFICE_VERSION:-${AGENT_DRIVER_VERSION:-v0.8.18}}"
 readonly INSTALL_DIR="${AGENT_OFFICE_INSTALL_DIR:-${AGENT_DRIVER_INSTALL_DIR:-$HOME/.local/share/agent-office}}"
 readonly BIN_DIR="${AGENT_OFFICE_BIN_DIR:-${AGENT_DRIVER_BIN_DIR:-$HOME/.local/bin}}"
 readonly RUNTIME_DIR="${AGENT_OFFICE_RUNTIME_DIR:-${AGENT_DRIVER_RUNTIME_DIR:-$HOME/.local/share/agent-office-runtime}}"
@@ -177,8 +177,11 @@ launcher="$BIN_DIR/agent-office"
 temporary_launcher="$BIN_DIR/.agent-office.$$.tmp"
 [[ ! -L "$launcher" ]] || fail "기존 agent-office 심볼릭 링크를 덮어쓰지 않습니다." "Will not overwrite an agent-office symbolic link."
 printf -v expected_launcher '#!/usr/bin/env bash\nexec %q %q "$@"' "$node_bin" "$INSTALL_DIR/dist/cli.js"
+printf -v launcher_tail ' %q "$@"' "$INSTALL_DIR/dist/cli.js"
 if [[ -e "$launcher" ]]; then
-  [[ -f "$launcher" && "$(cat -- "$launcher")" == "$expected_launcher" ]] || fail "다른 agent-office 실행 파일을 덮어쓰지 않습니다." "Will not overwrite another agent-office command."
+  current_launcher="$(cat -- "$launcher")"
+  # An earlier install's launcher runs this same CLI with the Node.js that install pinned; a Node.js update changes only that path.
+  [[ -f "$launcher" && ( "$current_launcher" == "$expected_launcher" || ( "$current_launcher" == $'#!/usr/bin/env bash\nexec /'* && "$current_launcher" == *"$launcher_tail" && "$current_launcher" != *$'\n'*$'\n'* ) ) ]] || fail "다른 agent-office 실행 파일을 덮어쓰지 않습니다." "Will not overwrite another agent-office command."
 fi
 printf '#!/usr/bin/env bash\nexec %q %q "$@"\n' "$node_bin" "$INSTALL_DIR/dist/cli.js" > "$temporary_launcher"
 chmod 0700 "$temporary_launcher"
