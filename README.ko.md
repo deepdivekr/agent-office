@@ -9,9 +9,9 @@
 
 ### 새로 나온 기능
 
+- **[v0.8.18](docs/releases/v0.8.18.md)** · Node.js 22.23.4 보안 업데이트
 - **[v0.8.17](docs/releases/v0.8.17.md)** · DELIVERY.md가 가리키는 파일은 결과에 포함
 - **[v0.8.16](docs/releases/v0.8.16.md)** · 피드에서 영상 재생
-- **[v0.8.15](docs/releases/v0.8.15.md)** · 반복 수집 업무별 수집 범위 설정 · Aside 연결 끊김 수정
 
 [전체 변경 이력](CHANGELOG.md)
 
@@ -92,7 +92,7 @@ AI 앱에 일을 맡길수록 결과는 흩어집니다. 아침 브리핑은 텔
 직접 설치하려면 **Ubuntu 또는 WSL Ubuntu 터미널**에서 실행합니다. 어느 폴더에서 실행해도 됩니다.
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.17/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.18/install.sh | bash'
 ```
 
 설치 전에 [스크립트](install.sh)를 확인할 수 있습니다.
@@ -229,7 +229,7 @@ npm ci
 npm test
 ```
 
-Node.js **22.22.0**, npm **11.11.0**을 사용합니다. 기본 검사는 장시간 soak를 제외합니다.
+Node.js **22.23.4**, npm **11.11.0**을 사용합니다. 기본 검사는 장시간 soak를 제외합니다.
 
 README 화면은 `node scripts/docs/capture-readme-feed.mjs ko|en`(보드·타임라인·피드, 예시 데이터)으로 다시 만듭니다. 업무 상세는 새로 설치한 상태(`agent-office connect --state-root <새 폴더>`)에서 예시 판매 기록 업무를 실제로 돌린 화면입니다.
 

@@ -128,7 +128,7 @@ test('runtime native bootstrap rejects paths outside HOME before creating their 
 
 test('runtime contract bootstrap pins official source and toolchain, verifies Node checksum and runs sudo only after asking at a terminal, and never evaluates text',async()=>{
   const text=await readFile(installer,'utf8'),pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
-  assert.match(text,/https:\/\/github\.com\/deepdivekr\/agent-office\.git/u);assert.ok(text.includes('AGENT_DRIVER_VERSION:-v'+pkg.version));assert.match(text,/22\.22\.0/u);assert.match(text,/11\.11\.0/u);assert.match(text,/SHASUMS256\.txt/u);assert.match(text,/sha256sum --check/u);assert.match(text,/playwright install chromium/u);
+  assert.match(text,/https:\/\/github\.com\/deepdivekr\/agent-office\.git/u);assert.ok(text.includes('AGENT_DRIVER_VERSION:-v'+pkg.version));assert.ok(text.includes('AGENT_DRIVER_NODE_VERSION="'+pkg.engines.node+'"'),'the installer pins the Node version the package names');assert.match(text,/11\.11\.0/u);assert.match(text,/SHASUMS256\.txt/u);assert.match(text,/sha256sum --check/u);assert.match(text,/playwright install chromium/u);
   // The one privileged step is Chromium's system libraries: asked at the terminal first, then sudo for that command only.
   assert.match(text,/read -r answer <\/dev\/tty[\s\S]*deps_runner=\("\$sudo_bin" --\)[\s\S]*"\$\{deps_runner\[@\]\}" env PATH="\$AGENT_DRIVER_TOOL_PATH" "\$node_bin" "\$deps_cli" install-deps chromium/u);
   assert.deepEqual(text.split('\n').filter(line=>/^\s*sudo\b|[;&|]\s*sudo\b/u.test(line)),[]);assert.equal((text.match(/\("\$sudo_bin"/gu)??[]).length,1,'sudo runs in one place');

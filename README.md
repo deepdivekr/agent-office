@@ -11,9 +11,9 @@
 
 ### What's new
 
+- **[v0.8.18](docs/releases/v0.8.18.md)** · Node.js 22.23.4 security update
 - **[v0.8.17](docs/releases/v0.8.17.md)** · Files DELIVERY.md links to are handed over
 - **[v0.8.16](docs/releases/v0.8.16.md)** · Videos play in the feed
-- **[v0.8.15](docs/releases/v0.8.15.md)** · A wider collection period for one recurring Work · Aside stays reachable
 
 [All releases](CHANGELOG.md)
 
@@ -93,7 +93,7 @@ Ask your agent:
 Or run this from **Ubuntu or WSL Ubuntu**, in any directory:
 
 ```bash
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.17/install.sh | bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/deepdivekr/agent-office/v0.8.18/install.sh | bash'
 ```
 
 You can [review the installer](install.sh) first.
@@ -230,7 +230,7 @@ npm ci
 npm test
 ```
 
-Use Node.js **22.22.0** and npm **11.11.0**. The default test suite excludes long soak tests.
+Use Node.js **22.23.4** and npm **11.11.0**. The default test suite excludes long soak tests.
 
 README pictures are made with `node scripts/docs/capture-readme-feed.mjs en|ko` (board, timeline and feed with sample data). The Work detail is a real run of the sample sales-log task on a fresh install (`agent-office connect --state-root <new folder>`).
 
