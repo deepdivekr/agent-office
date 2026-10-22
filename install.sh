@@ -177,8 +177,11 @@ launcher="$BIN_DIR/agent-office"
 temporary_launcher="$BIN_DIR/.agent-office.$$.tmp"
 [[ ! -L "$launcher" ]] || fail "기존 agent-office 심볼릭 링크를 덮어쓰지 않습니다." "Will not overwrite an agent-office symbolic link."
 printf -v expected_launcher '#!/usr/bin/env bash\nexec %q %q "$@"' "$node_bin" "$INSTALL_DIR/dist/cli.js"
+printf -v launcher_tail ' %q "$@"' "$INSTALL_DIR/dist/cli.js"
 if [[ -e "$launcher" ]]; then
-  [[ -f "$launcher" && "$(cat -- "$launcher")" == "$expected_launcher" ]] || fail "다른 agent-office 실행 파일을 덮어쓰지 않습니다." "Will not overwrite another agent-office command."
+  current_launcher="$(cat -- "$launcher")"
+  # An earlier install's launcher runs this same CLI with the Node.js that install pinned; a Node.js update changes only that path.
+  [[ -f "$launcher" && ( "$current_launcher" == "$expected_launcher" || ( "$current_launcher" == $'#!/usr/bin/env bash\nexec /'* && "$current_launcher" == *"$launcher_tail" && "$current_launcher" != *$'\n'*$'\n'* ) ) ]] || fail "다른 agent-office 실행 파일을 덮어쓰지 않습니다." "Will not overwrite another agent-office command."
 fi
 printf '#!/usr/bin/env bash\nexec %q %q "$@"\n' "$node_bin" "$INSTALL_DIR/dist/cli.js" > "$temporary_launcher"
 chmod 0700 "$temporary_launcher"
