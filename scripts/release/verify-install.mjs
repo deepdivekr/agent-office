@@ -40,7 +40,7 @@ try{
   for(const baseline of ['v0.1.0','v0.1.1','v0.2.0','v0.3.0'])await run('git',['-C',baselineSource,'fetch','--quiet','--no-tags','origin',`refs/tags/${baseline}:refs/tags/${baseline}`]);
   // The public versions under the agent-office name may not have been fetched into
   // this development checkout. Keep that tag in the disposable clone only.
-  for(const baseline of ['v0.3.1','v0.4.0','v0.5.0','v0.6.0','v0.7.0','v0.7.1','v0.7.2','v0.7.3','v0.7.4','v0.7.5','v0.7.6','v0.8.0','v0.8.1','v0.8.2','v0.8.3','v0.8.4','v0.8.5','v0.8.6','v0.8.7','v0.8.8','v0.8.9','v0.8.10','v0.8.11','v0.8.12','v0.8.13','v0.8.14','v0.8.15','v0.8.16'])await run('git',['-C',baselineSource,'fetch','--quiet','--no-tags','https://github.com/deepdivekr/agent-office.git',`refs/tags/${baseline}:refs/tags/${baseline}`]);
+  for(const baseline of ['v0.3.1','v0.4.0','v0.5.0','v0.6.0','v0.7.0','v0.7.1','v0.7.2','v0.7.3','v0.7.4','v0.7.5','v0.7.6','v0.8.0','v0.8.1','v0.8.2','v0.8.3','v0.8.4','v0.8.5','v0.8.6','v0.8.7','v0.8.8','v0.8.9','v0.8.10','v0.8.11','v0.8.12','v0.8.13','v0.8.14','v0.8.15','v0.8.16','v0.8.17'])await run('git',['-C',baselineSource,'fetch','--quiet','--no-tags','https://github.com/deepdivekr/agent-office.git',`refs/tags/${baseline}:refs/tags/${baseline}`]);
   if(!published){
     source=baselineSource;
     // Public release tags may already exist on later CI runs. Do not import

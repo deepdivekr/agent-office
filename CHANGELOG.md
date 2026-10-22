@@ -4,6 +4,7 @@ One line per release, newest first. Each version links to its full notes; the sa
 
 | Version | Date | Highlights |
 |---|---|---|
+| [v0.8.18](docs/releases/v0.8.18.md) | 2026-10-22 | Runs on Node.js 22.23.4, the October 2026 security release |
 | [v0.8.17](docs/releases/v0.8.17.md) | 2026-10-16 | A file DELIVERY.md links to is part of the turn's result even when an earlier turn made it |
 | [v0.8.16](docs/releases/v0.8.16.md) | 2026-10-15 | A video or sound file over 16 MB enters its result, so the feed plays it |
 | [v0.8.15](docs/releases/v0.8.15.md) | 2026-10-15 | The owner can widen one recurring collection from two days to 3, 7, 14 or 30; Aside stays reachable after the starting shell closes |
