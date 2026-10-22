@@ -1,5 +1,25 @@
 # Work 완료 경로 복구 — 진행 기록
 
+## Node 버전 설정 정합성 회귀 방지 (2026-10-22)
+
+- 기준 revision: main `6ec65d2f32fdb9aed98f30886b3f42843eca16cf` (PR #187, v0.8.18).
+  브랜치: `fix/node-version-consistency`. 사용자 요청에 따른 현재 도구 체인 설정 수정이다.
+- `.nvmrc`를 `22.22.0`에서 `22.23.4`로 맞췄다. 설치·업그레이드 로직과 과거 검증 기록은 유지한다.
+- `runtime-node-version` 테스트는 package engines의 정확한 버전을 기준으로 `.nvmrc`,
+  lockfile root engines, 독립 설치 스크립트, 모든 workflow의 setup-node 단계를 검사한다.
+  기존 quick suite 자동 탐색에 포함되므로 CI의 `npm test`에서도 실행된다.
+- Node 22.23.4 / npm 11.11.0에서 빌드 PASS, 새 회귀·release metadata 5/5 PASS.
+  수정 전 `.nvmrc` 실패를 확인했고, 별도 임시 fixture에서 네 설정 각각의 버전 불일치를
+  주입했을 때 모두 거부하고 원복 후 통과함을 확인했다.
+- 설치·버전·release 관련 테스트 13개 중 12 PASS, 1 FAIL: sudo 터미널 테스트의
+  `sudo.txt` ENOENT. 변경 없는 원본 main worktree에서도 같은 실패를 재현했다.
+  설치·재실행, 선택 Node 사용, 레거시 명령 보존 등 나머지 설치 테스트는 PASS.
+- ledger 199개 PASS, 공개 경계 952개 PASS. frozen quick suite는 16 PASS / 4 FAIL 후
+  adaptive 브라우저 테스트에서 진행이 멈춰 중단했다. 원본 main을 별도 빌드해 해당 사례의
+  Chromium headless shell v1243 실행 파일 누락도 재현했다. 전체 suite 통과는 주장하지 않는다.
+- 다음: PR 표준 CI에서 전체 quick suite와 실제 fresh-install/upgrade gate 확인.
+  사용자 설치와 릴리스는 변경하지 않는다.
+
 ## 같은 브라우저의 프로필 관제센터 쿠키 충돌 수정 (2026-10-13)
 
 - 기준 revision: main `d64fb7885a564b502258a59d15a588f258c92dfb` (v0.8.5, PR #166·#168 포함).
